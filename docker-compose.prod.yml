@@ -1,0 +1,22 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            args:
+                DATABASE_URL: ${DATABASE_URL}
+                DIRECT_URL: ${DIRECT_URL}
+                SUPABASE_URL: ${SUPABASE_URL}
+                SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+                SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+                NUXT_PUBLIC_APP_NAME: ${NUXT_PUBLIC_APP_NAME}
+                NUXT_PUBLIC_APP_URL: ${NUXT_PUBLIC_APP_URL}
+                NODE_ENV: production
+        container_name: nuxt-enterprise-template-prod
+        ports:
+            - '${PORT:-3000}:${PORT:-3000}'
+        env_file:
+            - .env
+        environment:
+            NODE_ENV: production
+        restart: unless-stopped

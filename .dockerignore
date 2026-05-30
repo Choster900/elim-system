@@ -1,0 +1,16 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.nuxt
+.output
+dist
+.data
+.cache
+.idea
+.DS_Store
+coverage
+*.local
+.env
+.env.*
+!.env.example
