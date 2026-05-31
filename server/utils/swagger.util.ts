@@ -1,62 +1,207 @@
-interface SwaggerOptions {
+interface OpenApiOptions {
     appName: string
     appUrl: string
 }
 
-export function createOpenApiSpec({ appName, appUrl }: SwaggerOptions) {
+export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
     return {
         openapi: '3.0.3',
         info: {
             title: `${appName} API`,
             version: '1.0.0',
-            description: 'API documentation generated for Nuxt/Nitro server routes.',
+            description: 'REST API documentation.',
         },
-        servers: [
-            {
-                url: appUrl,
-            },
-        ],
+        servers: [{ url: appUrl }],
         tags: [
-            {
-                name: 'Health',
-                description: 'Health check endpoints',
-            },
-            {
-                name: 'Documentation',
-                description: 'OpenAPI and Swagger UI endpoints',
-            },
+            { name: 'Health', description: 'Health check' },
+            { name: 'Permissions', description: 'Permission management' },
         ],
         paths: {
             '/api/healthcheck': {
                 get: {
                     tags: ['Health'],
-                    summary: 'Service health endpoint',
+                    summary: 'Service health',
                     responses: {
-                        200: {
-                            description: 'Service is healthy',
-                        },
+                        200: { description: 'Service is healthy' },
                     },
                 },
             },
-            '/api/openapi.json': {
+            '/api/permissions': {
                 get: {
-                    tags: ['Documentation'],
-                    summary: 'OpenAPI JSON specification',
+                    tags: ['Permissions'],
+                    summary: 'List all permissions',
                     responses: {
                         200: {
-                            description: 'OpenAPI specification payload',
+                            description: 'List of permissions',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            data: {
+                                                type: 'array',
+                                                items: { $ref: '#/components/schemas/Permission' },
+                                            },
+                                            message: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
                         },
                     },
                 },
+                post: {
+                    tags: ['Permissions'],
+                    summary: 'Create a permission',
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/CreatePermissionDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        201: {
+                            description: 'Permission created',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            data: { $ref: '#/components/schemas/Permission' },
+                                            message: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        400: { description: 'Validation error' },
+                        409: { description: 'Code or resource+action already exists' },
+                    },
+                },
             },
-            '/api/docs': {
+            '/api/permissions/{id}': {
                 get: {
-                    tags: ['Documentation'],
-                    summary: 'Swagger UI',
+                    tags: ['Permissions'],
+                    summary: 'Get permission by ID',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'string', format: 'uuid' },
+                        },
+                    ],
                     responses: {
                         200: {
-                            description: 'Swagger UI HTML',
+                            description: 'Permission found',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            data: { $ref: '#/components/schemas/Permission' },
+                                            message: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
                         },
+                        404: { description: 'Permission not found' },
+                    },
+                },
+                put: {
+                    tags: ['Permissions'],
+                    summary: 'Update a permission',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'string', format: 'uuid' },
+                        },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/UpdatePermissionDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: {
+                            description: 'Permission updated',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            data: { $ref: '#/components/schemas/Permission' },
+                                            message: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        400: { description: 'Validation error' },
+                        404: { description: 'Permission not found' },
+                        409: { description: 'Code or resource+action already exists' },
+                    },
+                },
+                delete: {
+                    tags: ['Permissions'],
+                    summary: 'Delete a permission',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'string', format: 'uuid' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'Permission deleted' },
+                        404: { description: 'Permission not found' },
+                    },
+                },
+            },
+        },
+        components: {
+            schemas: {
+                Permission: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        name: { type: 'string' },
+                        code: { type: 'string' },
+                        resource: { type: 'string' },
+                        action: { type: 'string' },
+                        description: { type: 'string', nullable: true },
+                        createdAt: { type: 'string', format: 'date-time' },
+                        updatedAt: { type: 'string', format: 'date-time' },
+                    },
+                },
+                CreatePermissionDto: {
+                    type: 'object',
+                    required: ['name', 'code', 'resource', 'action'],
+                    properties: {
+                        name: { type: 'string' },
+                        code: { type: 'string', example: 'users:read' },
+                        resource: { type: 'string', example: 'users' },
+                        action: { type: 'string', example: 'read' },
+                        description: { type: 'string' },
+                    },
+                },
+                UpdatePermissionDto: {
+                    type: 'object',
+                    properties: {
+                        name: { type: 'string' },
+                        code: { type: 'string' },
+                        resource: { type: 'string' },
+                        action: { type: 'string' },
+                        description: { type: 'string' },
                     },
                 },
             },
@@ -64,28 +209,18 @@ export function createOpenApiSpec({ appName, appUrl }: SwaggerOptions) {
     }
 }
 
-export function createSwaggerHtml() {
-    return `<!DOCTYPE html>
-<html lang="en">
+export function createScalarHtml() {
+    return `<!doctype html>
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Swagger UI</title>
-    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-    <style>
-      html, body { margin: 0; padding: 0; }
-      #swagger-ui { min-height: 100vh; }
-    </style>
+    <title>API Reference</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>body { margin: 0 }</style>
   </head>
   <body>
-    <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-    <script>
-      window.ui = SwaggerUIBundle({
-        url: "/api/openapi.json",
-        dom_id: "#swagger-ui",
-      });
-    </script>
+    <script id="api-reference" data-url="/api/openapi.json"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@latest/dist/browser/standalone.js"></script>
   </body>
 </html>`
 }
