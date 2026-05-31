@@ -14,6 +14,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
         servers: [{ url: appUrl }],
         tags: [
             { name: 'Health', description: 'Health check' },
+            { name: 'Auth', description: 'Authentication and token lifecycle' },
             { name: 'Permissions', description: 'Permission management' },
         ],
         paths: {
@@ -30,6 +31,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 get: {
                     tags: ['Permissions'],
                     summary: 'List all permissions',
+                    security: [{ BearerAuth: [] }],
                     responses: {
                         200: {
                             description: 'List of permissions',
@@ -53,6 +55,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 post: {
                     tags: ['Permissions'],
                     summary: 'Create a permission',
+                    security: [{ BearerAuth: [] }],
                     requestBody: {
                         required: true,
                         content: {
@@ -85,6 +88,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 get: {
                     tags: ['Permissions'],
                     summary: 'Get permission by ID',
+                    security: [{ BearerAuth: [] }],
                     parameters: [
                         {
                             name: 'id',
@@ -114,6 +118,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 put: {
                     tags: ['Permissions'],
                     summary: 'Update a permission',
+                    security: [{ BearerAuth: [] }],
                     parameters: [
                         {
                             name: 'id',
@@ -153,6 +158,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 delete: {
                     tags: ['Permissions'],
                     summary: 'Delete a permission',
+                    security: [{ BearerAuth: [] }],
                     parameters: [
                         {
                             name: 'id',
@@ -167,8 +173,94 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     },
                 },
             },
+            '/api/auth/login': {
+                post: {
+                    tags: ['Auth'],
+                    summary: 'Login with email and password',
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/LoginDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: {
+                            description: 'Login successful',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            data: { $ref: '#/components/schemas/AuthResponse' },
+                                            message: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        401: { description: 'Invalid credentials' },
+                    },
+                },
+            },
+            '/api/auth/refresh': {
+                post: {
+                    tags: ['Auth'],
+                    summary: 'Refresh access token',
+                    requestBody: {
+                        required: false,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/RefreshDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: {
+                            description: 'Token refreshed successfully',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            data: { $ref: '#/components/schemas/AuthResponse' },
+                                            message: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        401: { description: 'Invalid refresh token' },
+                    },
+                },
+            },
+            '/api/auth/logout': {
+                post: {
+                    tags: ['Auth'],
+                    summary: 'Logout and revoke refresh token',
+                    requestBody: {
+                        required: false,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/RefreshDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Logged out' },
+                    },
+                },
+            },
         },
         components: {
+            securitySchemes: {
+                BearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                    bearerFormat: 'JWT',
+                },
+            },
             schemas: {
                 Permission: {
                     type: 'object',
@@ -202,6 +294,76 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         resource: { type: 'string' },
                         action: { type: 'string' },
                         description: { type: 'string' },
+                    },
+                },
+                LoginDto: {
+                    type: 'object',
+                    required: ['email', 'password'],
+                    properties: {
+                        email: { type: 'string', format: 'email' },
+                        password: { type: 'string', format: 'password' },
+                    },
+                },
+                RefreshDto: {
+                    type: 'object',
+                    properties: {
+                        refreshToken: { type: 'string' },
+                    },
+                },
+                AuthPermission: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        name: { type: 'string' },
+                        code: { type: 'string' },
+                        resource: { type: 'string' },
+                        action: { type: 'string' },
+                        description: { type: 'string', nullable: true },
+                    },
+                },
+                AuthRole: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        name: { type: 'string' },
+                        code: { type: 'string' },
+                        description: { type: 'string', nullable: true },
+                        permissions: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/AuthPermission' },
+                        },
+                    },
+                },
+                AuthUser: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        email: { type: 'string', format: 'email' },
+                        username: { type: 'string', nullable: true },
+                        roles: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/AuthRole' },
+                        },
+                        permissions: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/AuthPermission' },
+                        },
+                    },
+                },
+                AuthTokens: {
+                    type: 'object',
+                    properties: {
+                        tokenType: { type: 'string', example: 'Bearer' },
+                        accessToken: { type: 'string' },
+                        accessTokenExpiresIn: { type: 'number', example: 900 },
+                        refreshTokenExpiresIn: { type: 'number', example: 604800 },
+                    },
+                },
+                AuthResponse: {
+                    type: 'object',
+                    properties: {
+                        user: { $ref: '#/components/schemas/AuthUser' },
+                        tokens: { $ref: '#/components/schemas/AuthTokens' },
                     },
                 },
             },

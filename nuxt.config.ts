@@ -32,6 +32,7 @@ export default defineNuxtConfig({
     ],
     runtimeConfig: {
         databaseUrl: env.DATABASE_URL,
+        jwtSecret: env.JWT_SECRET,
         public: {
             appName: env.NUXT_PUBLIC_APP_NAME,
         },

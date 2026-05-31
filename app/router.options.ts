@@ -12,5 +12,10 @@ export default <RouterConfig>{
             path: '/login',
             component: () => import('~/presentation/auth/view/index.vue'),
         },
+        {
+            name: 'dashboard',
+            path: '/dashboard',
+            component: () => import('~/presentation/dashboard/view/DashboardView.vue'),
+        },
     ],
 }

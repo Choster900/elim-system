@@ -1,0 +1,10 @@
+import bcrypt from 'bcryptjs'
+import { BCRYPT_SALT_ROUNDS } from '../../constants/auth.constants'
+
+export function hashPassword(password: string) {
+    return bcrypt.hash(password, BCRYPT_SALT_ROUNDS)
+}
+
+export function verifyPassword(password: string, passwordHash: string) {
+    return bcrypt.compare(password, passwordHash)
+}
