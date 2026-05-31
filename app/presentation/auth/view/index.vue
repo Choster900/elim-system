@@ -38,714 +38,277 @@ const features = [
 </script>
 
 <template>
-    <div class="auth-layout">
-        <!-- ════════════════════════════════ LEFT BRAND PANEL ════════════════════════════════ -->
-        <aside class="brand-panel">
-            <!-- Ambient glow orbs -->
-            <div class="orb orb-1" />
-            <div class="orb orb-2" />
-            <div class="orb orb-3" />
-            <!-- Dot grid texture -->
-            <div class="dot-overlay" />
+    <div class="flex min-h-screen">
 
-            <div class="brand-content">
+        <!-- ══════════════════════════ LEFT BRAND PANEL ══════════════════════════ -->
+        <aside
+            class="relative hidden lg:flex lg:w-[56%] flex-col overflow-hidden
+                   bg-[linear-gradient(150deg,oklch(0.12_0.026_228)_0%,oklch(0.17_0.055_225)_45%,oklch(0.13_0.038_220)_100%)]"
+        >
+            <!-- Ambient orbs -->
+            <div class="absolute rounded-full w-[520px] h-[520px] top-[-130px] left-[-110px]
+                        bg-[oklch(0.52_0.105_223.128_/_0.18)] blur-[90px] pointer-events-none
+                        animate-float" />
+            <div class="absolute rounded-full w-[400px] h-[400px] bottom-[-90px] right-[-70px]
+                        bg-[oklch(0.609_0.126_221.723_/_0.16)] blur-[90px] pointer-events-none
+                        animate-float-rev" />
+            <div class="absolute rounded-full w-[240px] h-[240px] top-[48%] right-[12%]
+                        bg-[oklch(0.715_0.143_215.221_/_0.12)] blur-[90px] pointer-events-none
+                        animate-float-slow" />
+
+            <!-- Dot texture overlay -->
+            <div class="absolute inset-0 pointer-events-none
+                        [background-image:radial-gradient(circle,rgba(255,255,255,0.06)_1px,transparent_1px)]
+                        [background-size:28px_28px]" />
+
+            <!-- Content -->
+            <div class="relative z-10 flex flex-col justify-between h-full p-12 xl:p-16">
+
                 <!-- Logo -->
-                <header class="brand-header">
+                <header class="flex items-center gap-3">
                     <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true">
                         <rect width="44" height="44" rx="12" fill="rgba(255,255,255,0.1)" />
-                        <rect x="0.5" y="0.5" width="43" height="43" rx="11.5" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
-                        <path d="M13 15h18M13 22h14M13 29h18" stroke="white" stroke-width="2.5" stroke-linecap="round" />
+                        <rect x="0.5" y="0.5" width="43" height="43" rx="11.5"
+                              stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+                        <path d="M13 15h18M13 22h14M13 29h18"
+                              stroke="white" stroke-width="2.5" stroke-linecap="round" />
                     </svg>
-                    <span class="brand-name">Elim</span>
+                    <span class="text-white text-[1.375rem] font-bold tracking-tight">Elim</span>
                 </header>
 
                 <!-- Hero -->
-                <div class="brand-hero">
-                    <h1 class="brand-heading">
+                <div class="flex flex-col">
+                    <h1 class="text-white text-[clamp(2rem,3.2vw,3.1rem)] font-extrabold
+                               leading-[1.1] tracking-[-0.035em] mb-4">
                         Enterprise-grade,<br />
-                        <span class="heading-gradient">ready today.</span>
+                        <span class="bg-[linear-gradient(135deg,oklch(0.715_0.143_215.221),oklch(0.87_0.08_195))]
+                                     bg-clip-text text-transparent">
+                            ready today.
+                        </span>
                     </h1>
-                    <p class="brand-subtext">
-                        Ship your next product faster with a production-ready
-                        full-stack template built to scale from day one.
+
+                    <p class="text-white/50 text-base leading-[1.65] max-w-[32ch] mb-8">
+                        Ship your next product faster with a production-ready full-stack template
+                        built to scale from day one.
                     </p>
 
-                    <!-- Feature list -->
-                    <ul class="features-list" role="list">
+                    <!-- Feature cards -->
+                    <ul class="flex flex-col gap-3 list-none p-0 m-0" role="list">
                         <li
                             v-for="feat in features"
                             :key="feat.title"
-                            class="feature-item"
+                            class="flex items-start gap-[0.875rem] p-[0.875rem_1rem]
+                                   bg-white/[0.04] border border-white/[0.07] rounded-xl
+                                   backdrop-blur-[8px]
+                                   transition-colors duration-200
+                                   hover:bg-white/[0.07] hover:border-white/[0.12]"
                         >
-                            <div class="feature-icon-wrap" aria-hidden="true">
+                            <div class="flex items-center justify-center w-[34px] h-[34px]
+                                        rounded-lg shrink-0
+                                        bg-[oklch(0.52_0.105_223.128_/_0.22)]
+                                        border border-[oklch(0.52_0.105_223.128_/_0.3)]
+                                        text-[oklch(0.87_0.08_195)]"
+                                 aria-hidden="true">
                                 <component :is="feat.icon" :size="16" />
                             </div>
                             <div>
-                                <p class="feature-title">{{ feat.title }}</p>
-                                <p class="feature-desc">{{ feat.description }}</p>
+                                <p class="text-white/[0.92] text-sm font-semibold mb-[0.2rem]">
+                                    {{ feat.title }}
+                                </p>
+                                <p class="text-white/[0.42] text-[0.8125rem] leading-snug m-0">
+                                    {{ feat.description }}
+                                </p>
                             </div>
                         </li>
                     </ul>
                 </div>
 
                 <!-- Testimonial -->
-                <blockquote class="testimonial">
-                    <p class="testimonial-text">
+                <blockquote class="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-6 m-0">
+                    <p class="text-white/[0.68] text-[0.9375rem] leading-[1.7] italic mb-4">
                         "This template cut our setup time from weeks to hours.
                         The architecture is exactly what we needed for a production app."
                     </p>
-                    <footer class="testimonial-footer">
-                        <div class="testimonial-avatar" aria-hidden="true" />
+                    <footer class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full shrink-0
+                                    bg-[linear-gradient(135deg,oklch(0.52_0.105_223.128),oklch(0.715_0.143_215.221))]"
+                             aria-hidden="true" />
                         <div>
-                            <p class="testimonial-name">Alex Rivera</p>
-                            <p class="testimonial-role">Lead Engineer, Acme Corp</p>
+                            <p class="text-white/90 text-sm font-semibold m-0">Alex Rivera</p>
+                            <p class="text-white/[0.42] text-xs m-0">Lead Engineer, Acme Corp</p>
                         </div>
                     </footer>
                 </blockquote>
             </div>
         </aside>
 
-        <!-- ════════════════════════════════ RIGHT FORM PANEL ════════════════════════════════ -->
-        <main class="form-panel">
-            <div class="form-dot-bg" aria-hidden="true" />
+        <!-- ══════════════════════════ RIGHT FORM PANEL ══════════════════════════ -->
+        <main class="flex flex-1 flex-col items-center justify-center relative
+                     px-6 py-10 bg-background overflow-hidden">
 
-            <div class="form-card">
-                <!-- Mobile logo (visible only on small screens) -->
-                <div class="mobile-logo" aria-hidden="true">
-                    <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
-                        <rect width="30" height="30" rx="8" fill="var(--primary)" />
-                        <path d="M8 10h14M8 15h11M8 20h14" stroke="white" stroke-width="2.2" stroke-linecap="round" />
-                    </svg>
-                    <span class="mobile-brand-name">Elim</span>
-                </div>
+            <!-- Dot bg -->
+            <div class="absolute inset-0 pointer-events-none opacity-45
+                        [background-image:radial-gradient(circle,var(--border)_1px,transparent_1px)]
+                        [background-size:24px_24px]"
+                 aria-hidden="true" />
 
-                <!-- Heading -->
-                <div class="form-header">
-                    <h2 class="form-title">Welcome back</h2>
-                    <p class="form-subtitle">Sign in to your account to continue</p>
-                </div>
+            <!-- Form card -->
+            <div class="relative w-full max-w-[400px] bg-card border border-border
+                        rounded-[1.25rem] overflow-hidden animate-fade-slide-up
+                        shadow-[0_0_0_1px_rgba(0,0,0,0.03),0_4px_8px_rgba(0,0,0,0.04),0_20px_40px_rgba(0,0,0,0.07)]">
 
-                <!-- Form -->
-                <form class="form-body" @submit.prevent="handleSubmit" novalidate>
-                    <!-- Email -->
-                    <div class="field">
-                        <UiLabel for="email">Email address</UiLabel>
-                        <div class="input-wrap">
-                            <Mail class="field-icon" :size="15" aria-hidden="true" />
-                            <UiInput
-                                id="email"
-                                type="email"
-                                placeholder="you@company.com"
-                                v-model="form.email"
-                                class="pl-9"
-                                autocomplete="email"
-                                required
-                            />
-                        </div>
+                <!-- Gradient accent bar (replaces ::before) -->
+                <div class="h-[3px] bg-[linear-gradient(90deg,oklch(0.52_0.105_223.128),oklch(0.609_0.126_221.723),oklch(0.715_0.143_215.221))]" />
+
+                <div class="px-8 pb-8 pt-6">
+
+                    <!-- Mobile logo (hidden on lg+) -->
+                    <div class="flex lg:hidden items-center gap-2 justify-center mb-7" aria-hidden="true">
+                        <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+                            <rect width="30" height="30" rx="8" fill="var(--primary)" />
+                            <path d="M8 10h14M8 15h11M8 20h14"
+                                  stroke="white" stroke-width="2.2" stroke-linecap="round" />
+                        </svg>
+                        <span class="font-bold text-[1.125rem] text-foreground tracking-tight">
+                            Elim
+                        </span>
                     </div>
 
-                    <!-- Password -->
-                    <div class="field">
-                        <div class="field-row-header">
-                            <UiLabel for="password">Password</UiLabel>
-                            <a href="#" class="forgot-link">Forgot password?</a>
-                        </div>
-                        <div class="input-wrap">
-                            <Lock class="field-icon" :size="15" aria-hidden="true" />
-                            <UiInput
-                                id="password"
-                                :type="showPassword ? 'text' : 'password'"
-                                placeholder="••••••••"
-                                v-model="form.password"
-                                class="pl-9 pr-10"
-                                autocomplete="current-password"
-                                required
-                            />
-                            <button
-                                type="button"
-                                class="eye-btn"
-                                :aria-label="showPassword ? 'Hide password' : 'Show password'"
-                                @click="showPassword = !showPassword"
-                            >
-                                <Eye v-if="!showPassword" :size="15" />
-                                <EyeOff v-else :size="15" />
-                            </button>
-                        </div>
+                    <!-- Heading -->
+                    <div class="mb-7">
+                        <h2 class="text-[1.75rem] font-extrabold tracking-[-0.035em] text-foreground mb-[0.375rem]">
+                            Welcome back
+                        </h2>
+                        <p class="text-[0.9375rem] text-muted-foreground">
+                            Sign in to your account to continue
+                        </p>
                     </div>
 
-                    <!-- Remember me -->
-                    <label class="remember-row">
-                        <input
-                            type="checkbox"
-                            v-model="form.remember"
-                            class="remember-check"
-                        />
-                        <span class="remember-text">Remember me for 30 days</span>
-                    </label>
+                    <!-- Form -->
+                    <form class="flex flex-col gap-[1.125rem]" @submit.prevent="handleSubmit" novalidate>
 
-                    <!-- Submit -->
-                    <button
-                        type="submit"
-                        class="submit-btn"
-                        :disabled="isLoading"
-                    >
-                        <Loader2 v-if="isLoading" :size="17" class="spin" aria-hidden="true" />
-                        <template v-else>
-                            <span>Sign in</span>
-                            <ArrowRight :size="15" aria-hidden="true" />
-                        </template>
-                    </button>
-                </form>
+                        <!-- Email -->
+                        <div class="flex flex-col gap-[0.375rem]">
+                            <UiLabel for="email">Email address</UiLabel>
+                            <div class="relative flex items-center">
+                                <Mail class="absolute left-3 text-muted-foreground pointer-events-none z-10"
+                                      :size="15" aria-hidden="true" />
+                                <UiInput
+                                    id="email"
+                                    type="email"
+                                    placeholder="you@company.com"
+                                    v-model="form.email"
+                                    class="pl-9"
+                                    autocomplete="email"
+                                    required
+                                />
+                            </div>
+                        </div>
 
-                <!-- OR divider -->
-                <div class="or-divider" aria-hidden="true">
-                    <UiSeparator decorative />
-                    <span class="or-label">or continue with</span>
-                    <UiSeparator decorative />
+                        <!-- Password -->
+                        <div class="flex flex-col gap-[0.375rem]">
+                            <div class="flex items-center justify-between">
+                                <UiLabel for="password">Password</UiLabel>
+                                <a href="#"
+                                   class="text-[0.8125rem] text-primary font-medium
+                                          transition-opacity hover:opacity-75
+                                          hover:underline underline-offset-[3px]">
+                                    Forgot password?
+                                </a>
+                            </div>
+                            <div class="relative flex items-center">
+                                <Lock class="absolute left-3 text-muted-foreground pointer-events-none z-10"
+                                      :size="15" aria-hidden="true" />
+                                <UiInput
+                                    id="password"
+                                    :type="showPassword ? 'text' : 'password'"
+                                    placeholder="••••••••"
+                                    v-model="form.password"
+                                    class="pl-9 pr-10"
+                                    autocomplete="current-password"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    class="absolute right-3 flex items-center justify-center
+                                           p-0 bg-transparent border-0 cursor-pointer
+                                           text-muted-foreground hover:text-foreground
+                                           transition-colors"
+                                    :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                                    @click="showPassword = !showPassword"
+                                >
+                                    <Eye v-if="!showPassword" :size="15" />
+                                    <EyeOff v-else :size="15" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Remember me -->
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                v-model="form.remember"
+                                class="w-4 h-4 rounded shrink-0 cursor-pointer
+                                       accent-[var(--primary)]"
+                            />
+                            <span class="text-sm text-muted-foreground">
+                                Remember me for 30 days
+                            </span>
+                        </label>
+
+                        <!-- Submit -->
+                        <button
+                            type="submit"
+                            :disabled="isLoading"
+                            class="mt-1 w-full h-11 flex items-center justify-center gap-2
+                                   rounded-[var(--radius)] border-0 cursor-pointer
+                                   text-[0.9375rem] font-semibold tracking-[-0.01em]
+                                   text-[oklch(0.984_0.019_200.873)]
+                                   bg-[linear-gradient(135deg,oklch(0.52_0.105_223.128),oklch(0.609_0.126_221.723))]
+                                   shadow-[0_4px_14px_oklch(0.52_0.105_223.128_/_0.35)]
+                                   transition-[opacity,transform,box-shadow] duration-200
+                                   hover:enabled:opacity-90
+                                   hover:enabled:shadow-[0_6px_20px_oklch(0.52_0.105_223.128_/_0.45)]
+                                   active:enabled:scale-[0.99]
+                                   disabled:opacity-65 disabled:cursor-not-allowed"
+                        >
+                            <Loader2 v-if="isLoading" :size="17" class="animate-spin" aria-hidden="true" />
+                            <template v-else>
+                                <span>Sign in</span>
+                                <ArrowRight :size="15" aria-hidden="true" />
+                            </template>
+                        </button>
+                    </form>
+
+                    <!-- OR divider -->
+                    <div class="flex items-center gap-3 my-6" aria-hidden="true">
+                        <UiSeparator decorative />
+                        <span class="text-[0.7rem] font-medium text-muted-foreground
+                                     uppercase tracking-[0.09em] whitespace-nowrap">
+                            or continue with
+                        </span>
+                        <UiSeparator decorative />
+                    </div>
+
+                    <!-- GitHub -->
+                    <UiButton variant="outline" type="button" class="w-full">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="size-4 shrink-0" aria-hidden="true">
+                            <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
+                        </svg>
+                        GitHub
+                    </UiButton>
+
+                    <!-- Sign up -->
+                    <p class="text-center text-sm text-muted-foreground mt-5 mb-0">
+                        Don't have an account?
+                        <a href="#"
+                           class="text-primary font-semibold transition-opacity
+                                  hover:opacity-75 hover:underline underline-offset-[3px]">
+                            Create one free
+                        </a>
+                    </p>
                 </div>
-
-                <!-- GitHub -->
-                <UiButton variant="outline" type="button" class="w-full gap-2">
-                    <svg viewBox="0 0 24 24" fill="currentColor" class="size-4 shrink-0" aria-hidden="true">
-                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
-                    </svg>
-                    GitHub
-                </UiButton>
-
-                <!-- Sign up -->
-                <p class="signup-prompt">
-                    Don't have an account?
-                    <a href="#" class="signup-link">Create one free</a>
-                </p>
             </div>
         </main>
     </div>
 </template>
-
-<style scoped>
-/* ── Layout ─────────────────────────────────────────────────────────────── */
-.auth-layout {
-    display: flex;
-    min-height: 100vh;
-}
-
-/* ── Left: Brand Panel ───────────────────────────────────────────────────── */
-.brand-panel {
-    position: relative;
-    display: none;
-    overflow: hidden;
-    background: linear-gradient(
-        150deg,
-        oklch(0.12 0.026 228) 0%,
-        oklch(0.17 0.055 225) 45%,
-        oklch(0.13 0.038 220) 100%
-    );
-}
-
-@media (min-width: 1024px) {
-    .brand-panel {
-        display: flex;
-        flex-direction: column;
-        width: 56%;
-    }
-}
-
-/* Orbs */
-.orb {
-    position: absolute;
-    border-radius: 50%;
-    pointer-events: none;
-    filter: blur(90px);
-}
-
-.orb-1 {
-    width: 520px;
-    height: 520px;
-    top: -130px;
-    left: -110px;
-    background: oklch(0.52 0.105 223.128 / 0.18);
-    animation: float 7s ease-in-out infinite;
-}
-
-.orb-2 {
-    width: 400px;
-    height: 400px;
-    bottom: -90px;
-    right: -70px;
-    background: oklch(0.609 0.126 221.723 / 0.16);
-    animation: float-rev 9s ease-in-out infinite;
-}
-
-.orb-3 {
-    width: 240px;
-    height: 240px;
-    top: 48%;
-    right: 12%;
-    background: oklch(0.715 0.143 215.221 / 0.12);
-    animation: float 11s ease-in-out infinite 2s;
-}
-
-/* Dot overlay */
-.dot-overlay {
-    position: absolute;
-    inset: 0;
-    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-    background-size: 28px 28px;
-    pointer-events: none;
-}
-
-/* Brand content */
-.brand-content {
-    position: relative;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-    padding: 3rem 3.5rem;
-}
-
-/* Logo */
-.brand-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.brand-name {
-    color: white;
-    font-size: 1.375rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
-}
-
-/* Hero */
-.brand-hero {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-.brand-heading {
-    color: white;
-    font-size: clamp(2rem, 3.2vw, 3.1rem);
-    font-weight: 800;
-    line-height: 1.1;
-    letter-spacing: -0.035em;
-    margin: 0 0 1rem;
-}
-
-.heading-gradient {
-    background: linear-gradient(135deg, oklch(0.715 0.143 215.221) 0%, oklch(0.87 0.08 195) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.brand-subtext {
-    color: rgba(255, 255, 255, 0.52);
-    font-size: 1rem;
-    line-height: 1.65;
-    max-width: 32ch;
-    margin: 0 0 2rem;
-}
-
-/* Features */
-.features-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.feature-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.875rem;
-    padding: 0.875rem 1rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 0.75rem;
-    backdrop-filter: blur(8px);
-    transition: background 0.2s, border-color 0.2s;
-}
-
-.feature-item:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(255, 255, 255, 0.12);
-}
-
-.feature-icon-wrap {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    flex-shrink: 0;
-    border-radius: 8px;
-    background: oklch(0.52 0.105 223.128 / 0.22);
-    border: 1px solid oklch(0.52 0.105 223.128 / 0.3);
-    color: oklch(0.87 0.08 195);
-}
-
-.feature-title {
-    color: rgba(255, 255, 255, 0.92);
-    font-size: 0.875rem;
-    font-weight: 600;
-    margin: 0 0 0.2rem;
-}
-
-.feature-desc {
-    color: rgba(255, 255, 255, 0.42);
-    font-size: 0.8125rem;
-    line-height: 1.5;
-    margin: 0;
-}
-
-/* Testimonial */
-.testimonial {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    margin: 0;
-}
-
-.testimonial-text {
-    color: rgba(255, 255, 255, 0.68);
-    font-size: 0.9375rem;
-    line-height: 1.7;
-    font-style: italic;
-    margin: 0 0 1rem;
-}
-
-.testimonial-footer {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.testimonial-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, oklch(0.52 0.105 223.128), oklch(0.715 0.143 215.221));
-    flex-shrink: 0;
-}
-
-.testimonial-name {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 0.875rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.testimonial-role {
-    color: rgba(255, 255, 255, 0.42);
-    font-size: 0.75rem;
-    margin: 0;
-}
-
-/* ── Right: Form Panel ───────────────────────────────────────────────────── */
-.form-panel {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    padding: 2.5rem 1.5rem;
-    background: var(--background);
-    overflow: hidden;
-}
-
-.form-dot-bg {
-    position: absolute;
-    inset: 0;
-    background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
-    background-size: 24px 24px;
-    opacity: 0.45;
-    pointer-events: none;
-}
-
-/* Form card */
-.form-card {
-    position: relative;
-    width: 100%;
-    max-width: 400px;
-    background: var(--card);
-    border-radius: 1.25rem;
-    border: 1px solid var(--border);
-    padding: 2.5rem 2rem 2rem;
-    overflow: hidden;
-    box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.03),
-        0 4px 8px rgba(0, 0, 0, 0.04),
-        0 20px 40px rgba(0, 0, 0, 0.07);
-    animation: fade-slide-up 0.45s ease-out;
-}
-
-/* Gradient accent bar */
-.form-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg,
-        oklch(0.52 0.105 223.128),
-        oklch(0.609 0.126 221.723),
-        oklch(0.715 0.143 215.221)
-    );
-}
-
-/* Mobile logo */
-.mobile-logo {
-    display: none;
-    align-items: center;
-    gap: 0.5rem;
-    justify-content: center;
-    margin-bottom: 1.75rem;
-}
-
-@media (max-width: 1023px) {
-    .mobile-logo {
-        display: flex;
-    }
-}
-
-.mobile-brand-name {
-    font-weight: 700;
-    font-size: 1.125rem;
-    color: var(--foreground);
-    letter-spacing: -0.02em;
-}
-
-/* Form header */
-.form-header {
-    margin-bottom: 1.75rem;
-}
-
-.form-title {
-    font-size: 1.75rem;
-    font-weight: 800;
-    letter-spacing: -0.035em;
-    color: var(--foreground);
-    margin: 0 0 0.375rem;
-}
-
-.form-subtitle {
-    font-size: 0.9375rem;
-    color: var(--muted-foreground);
-    margin: 0;
-}
-
-/* Fields */
-.form-body {
-    display: flex;
-    flex-direction: column;
-    gap: 1.125rem;
-}
-
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-}
-
-.field-row-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.input-wrap {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.field-icon {
-    position: absolute;
-    left: 0.75rem;
-    color: var(--muted-foreground);
-    pointer-events: none;
-    z-index: 1;
-}
-
-.eye-btn {
-    position: absolute;
-    right: 0.75rem;
-    color: var(--muted-foreground);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.15s;
-    z-index: 1;
-}
-
-.eye-btn:hover {
-    color: var(--foreground);
-}
-
-.forgot-link {
-    font-size: 0.8125rem;
-    color: var(--primary);
-    text-decoration: none;
-    font-weight: 500;
-    transition: opacity 0.15s;
-}
-
-.forgot-link:hover {
-    opacity: 0.75;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
-/* Remember me */
-.remember-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    user-select: none;
-}
-
-.remember-check {
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    accent-color: var(--primary);
-    cursor: pointer;
-    flex-shrink: 0;
-}
-
-.remember-text {
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
-}
-
-/* Submit button */
-.submit-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    width: 100%;
-    height: 2.75rem;
-    border-radius: var(--radius);
-    border: none;
-    font-size: 0.9375rem;
-    font-weight: 600;
-    cursor: pointer;
-    letter-spacing: -0.01em;
-    color: oklch(0.984 0.019 200.873);
-    background: linear-gradient(135deg, oklch(0.52 0.105 223.128), oklch(0.609 0.126 221.723));
-    box-shadow: 0 4px 14px oklch(0.52 0.105 223.128 / 0.35);
-    transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
-    margin-top: 0.25rem;
-}
-
-.submit-btn:hover:not(:disabled) {
-    opacity: 0.9;
-    box-shadow: 0 6px 20px oklch(0.52 0.105 223.128 / 0.45);
-}
-
-.submit-btn:active:not(:disabled) {
-    transform: scale(0.99);
-}
-
-.submit-btn:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
-}
-
-/* OR divider */
-.or-divider {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin: 1.5rem 0;
-}
-
-.or-label {
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: var(--muted-foreground);
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    white-space: nowrap;
-}
-
-/* Sign up */
-.signup-prompt {
-    text-align: center;
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
-    margin-top: 1.25rem;
-    margin-bottom: 0;
-}
-
-.signup-link {
-    color: var(--primary);
-    font-weight: 600;
-    text-decoration: none;
-    transition: opacity 0.15s;
-}
-
-.signup-link:hover {
-    opacity: 0.75;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
-/* Spinner */
-.spin {
-    animation: spin 0.75s linear infinite;
-}
-
-/* Animations */
-@keyframes float {
-    0%,
-    100% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(-22px);
-    }
-}
-
-@keyframes float-rev {
-    0%,
-    100% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(22px);
-    }
-}
-
-@keyframes fade-slide-up {
-    from {
-        opacity: 0;
-        transform: translateY(18px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-</style>
