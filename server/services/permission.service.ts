@@ -4,8 +4,8 @@ import { ApiErrorCode } from '../types/api-response.types'
 import type { CreatePermissionDto } from '../dto/permission/create-permission.dto'
 import type { UpdatePermissionDto } from '../dto/permission/update-permission.dto'
 
-export function getAllPermissions() {
-    return repo.findAllPermissions()
+export function getAllPermissions(skip: number, take: number) {
+    return repo.findAllPermissions(skip, take)
 }
 
 export async function getPermissionById(id: string) {

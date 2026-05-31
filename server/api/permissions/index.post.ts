@@ -8,7 +8,6 @@ export default defineEventHandler(async (event) => {
     try {
         const dto = validateDto(createPermissionSchema, await readBody(event))
         const data = await createPermission(dto)
-        setResponseStatus(event, 201)
         return ApiResponseFactory.success(data, 'Permiso creado correctamente')
     } catch (error) {
         return handleApiError(event, error)
