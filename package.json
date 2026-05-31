@@ -4,7 +4,7 @@
     "private": true,
     "scripts": {
         "build": "nuxt build",
-        "dev": "nuxt dev",
+        "dev": "prisma generate && node scripts/setup-db.mjs && nuxt dev",
         "generate": "nuxt generate",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
@@ -22,12 +22,14 @@
     },
     "dependencies": {
         "@pinia/nuxt": "^0.11.3",
+        "@prisma/adapter-pg": "^7.8.0",
         "@prisma/client": "^7.8.0",
         "@supabase/supabase-js": "^2.106.1",
         "@tanstack/vue-query": "^5.100.11",
         "axios": "^1.16.1",
         "joi": "^18.2.1",
         "nuxt": "^4.4.6",
+        "pg": "^8.21.0",
         "pinia": "^3.0.4",
         "vue": "^3.5.34",
         "vue-router": "^5.0.7",
