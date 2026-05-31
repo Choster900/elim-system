@@ -1,4 +1,9 @@
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 import { validateEnv } from './config/env'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 const env = validateEnv()
 
@@ -23,7 +28,7 @@ export default defineNuxtConfig({
         '~/assets/styles/themes/light/theme.css',
         '~/assets/styles/themes/dark/theme.css',
         'vue-sonner/style.css',
-        '~/assets/styles/tailwind/main.css',
+        // main.css is injected by @nuxtjs/tailwindcss via cssPath above
     ],
     runtimeConfig: {
         databaseUrl: env.DATABASE_URL,
@@ -39,6 +44,7 @@ export default defineNuxtConfig({
         '@utils': '/app/utils',
         '@constants': '/app/constants',
         '@services': '/app/services',
+        '@lib': resolve(__dirname, 'app/lib'),
     },
     devServer: {
         host: '0.0.0.0',
@@ -47,5 +53,6 @@ export default defineNuxtConfig({
     compatibilityDate: '2025-07-15',
     tailwindcss: {
         configPath: 'tailwind.config.ts',
+        cssPath: '~/assets/styles/tailwind/main.css',
     },
 })
