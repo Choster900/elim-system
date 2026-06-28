@@ -1,33 +1,24 @@
 <script setup lang="ts">
-import { GalleryVerticalEnd } from '@lucide/vue'
+import { Church } from '@lucide/vue'
 import AuthLoginForm from '../components/LoginForm.vue'
 
 defineOptions({ name: 'LoginPage' })
+
+useHead({
+    title: 'Iniciar Sesión - Sistema',
+})
 </script>
 
 <template>
-    <div class="grid min-h-svh lg:grid-cols-2">
-        <div class="flex flex-col gap-4 p-6 md:p-10">
-            <div class="flex justify-center gap-2 md:justify-start">
-                <a href="#" class="flex items-center gap-2 font-medium">
-                    <div class="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                        <GalleryVerticalEnd class="size-4" />
-                    </div>
-                    Elim Inc.
-                </a>
-            </div>
-            <div class="flex flex-1 items-center justify-center">
-                <div class="w-full max-w-xs">
-                    <AuthLoginForm />
-                </div>
-            </div>
+    <section class="relative z-10 w-full max-w-[480px]">
+        <div class="system-glass-panel rounded-lg p-8 md:p-12">
+            <AuthLoginForm />
         </div>
-        <div class="relative hidden bg-muted lg:block">
-            <img
-                src="/placeholder.svg"
-                alt="Login image"
-                class="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-            />
+
+        <div class="mt-8 flex justify-center gap-6 text-primary opacity-60">
+            <div class="mt-2 h-px w-12 bg-outline" />
+            <Church class="size-5" />
+            <div class="mt-2 h-px w-12 bg-outline" />
         </div>
-    </div>
+    </section>
 </template>

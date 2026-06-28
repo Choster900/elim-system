@@ -7,3 +7,34 @@
         @apply border-border;
     }
 }
+
+@layer utilities {
+    .system-nav-blur {
+        background: linear-gradient(180deg, rgb(18 20 20 / 92%) 0%, rgb(18 20 20 / 70%) 100%);
+        backdrop-filter: blur(18px);
+    }
+
+    .system-hero-overlay {
+        background:
+            linear-gradient(180deg, rgb(12 15 15 / 34%) 0%, rgb(12 15 15 / 92%) 100%),
+            linear-gradient(90deg, rgb(12 15 15 / 60%) 0%, rgb(12 15 15 / 8%) 52%, rgb(12 15 15 / 62%) 100%);
+    }
+
+    .system-glass-panel {
+        background: rgb(30 32 32 / 76%);
+        border: 1px solid rgb(154 143 128 / 28%);
+        backdrop-filter: blur(24px);
+    }
+
+    .hide-scrollbar {
+        scrollbar-width: none;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .fade-in {
+        animation: fade-slide-up 0.5s ease-out both;
+    }
+}

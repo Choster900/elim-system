@@ -1,21 +1,14 @@
 import type { RouterConfig } from '@nuxt/schema'
+import authRoutes from '~/presentation/auth/router.index'
+import dashboardRoutes from '~/presentation/dashboard/router.index'
+import landingRoutes from '~/presentation/landing/router.index'
+import registerRoutes from '~/presentation/register/router.index'
 
 export default <RouterConfig>{
     routes: () => [
-        {
-            name: 'index',
-            path: '/',
-            component: () => import('~/presentation/landing/view/index.vue'),
-        },
-        {
-            name: 'login',
-            path: '/login',
-            component: () => import('~/presentation/auth/view/index.vue'),
-        },
-        {
-            name: 'dashboard',
-            path: '/dashboard',
-            component: () => import('~/presentation/dashboard/view/DashboardView.vue'),
-        },
+        ...landingRoutes,
+        ...authRoutes,
+        ...registerRoutes,
+        ...dashboardRoutes,
     ],
 }

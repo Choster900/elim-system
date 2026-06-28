@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { HttpClientError } from '~/presentation/shared/interfaces/http/http-client-error.interface'
+import { Eye, EyeOff, Lock, Mail } from '@lucide/vue'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
-import { useLoginMutation } from '../composables/useLoginMutation'
+import type { HttpClientError } from '~/presentation/shared/interfaces/http/http-client-error.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { useLoginMutation } from '../composables/useLoginMutation'
 
 defineOptions({ name: 'AuthLoginForm' })
 
@@ -11,6 +12,7 @@ const form = reactive({
     password: '',
 })
 
+const showPassword = ref(false)
 const toast = useAppToast()
 const loginMutation = useLoginMutation()
 
@@ -39,71 +41,80 @@ async function onSubmit() {
 </script>
 
 <template>
-    <form class="flex flex-col gap-6" novalidate @submit.prevent="onSubmit">
-        <div class="flex flex-col items-center gap-2 text-center">
-            <h1 class="text-2xl font-bold">Login to your account</h1>
-            <p class="text-sm text-balance text-muted-foreground">
-                Enter your email below to login to your account
-            </p>
+    <form class="space-y-6" novalidate @submit.prevent="onSubmit">
+        <div class="mb-10 text-center">
+            <h1 class="font-display text-4xl font-semibold text-on-surface">Bienvenido</h1>
+            <p class="mt-2 text-on-surface-variant">Ingresa a tu comunidad espiritual</p>
         </div>
 
-        <div class="grid gap-6">
-            <div class="grid gap-2">
-                <UiLabel for="email">Email</UiLabel>
+        <div class="space-y-2">
+            <UiLabel for="email" class="text-xs uppercase text-on-surface-variant">
+                Correo electrónico
+            </UiLabel>
+            <div class="relative">
+                <Mail class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant" />
                 <UiInput
                     id="email"
                     v-model="form.email"
                     type="email"
-                    placeholder="m@example.com"
+                    placeholder="tu@ejemplo.com"
                     required
                     autocomplete="email"
+                    class="h-12 rounded-none border-x-0 border-t-0 bg-transparent pl-8 text-on-surface placeholder:text-[#d1c5b4]/40 focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
             </div>
+        </div>
 
-            <div class="grid gap-2">
-                <div class="flex items-center">
-                    <UiLabel for="password">Password</UiLabel>
-                    <a href="#" class="ml-auto text-sm underline-offset-4 hover:underline">
-                        Forgot your password?
-                    </a>
-                </div>
+        <div class="space-y-2">
+            <div class="flex items-center justify-between gap-4">
+                <UiLabel for="password" class="text-xs uppercase text-on-surface-variant">
+                    Contraseña
+                </UiLabel>
+                <NuxtLink to="#" class="text-xs font-semibold uppercase text-primary underline-offset-4 hover:underline">
+                    ¿Olvidaste tu contraseña?
+                </NuxtLink>
+            </div>
+            <div class="relative">
+                <Lock class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant" />
                 <UiInput
                     id="password"
                     v-model="form.password"
-                    type="password"
+                    :type="showPassword ? 'text' : 'password'"
+                    placeholder="••••••••"
                     required
                     autocomplete="current-password"
+                    class="h-12 rounded-none border-x-0 border-t-0 bg-transparent px-8 text-on-surface placeholder:text-[#d1c5b4]/40 focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
-            </div>
-
-            <UiButton type="submit" class="w-full" :loading="isLoading">
-                Login
-            </UiButton>
-        </div>
-
-        <div class="relative text-center text-sm">
-            <span class="relative z-10 bg-background px-2 text-muted-foreground">
-                Or continue with
-            </span>
-            <div class="absolute inset-0 top-1/2 -z-0">
-                <UiSeparator decorative />
+                <button
+                    type="button"
+                    class="absolute right-0 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors hover:text-primary"
+                    :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                    @click="showPassword = !showPassword"
+                >
+                    <EyeOff v-if="showPassword" class="size-5" />
+                    <Eye v-else class="size-5" />
+                </button>
             </div>
         </div>
 
-        <div class="grid gap-4">
-            <UiButton variant="outline" type="button" class="w-full">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                    <path
-                        d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
-                        fill="currentColor"
-                    />
-                </svg>
-                Login with GitHub
+        <div class="pt-4">
+            <UiButton type="submit" class="h-12 w-full rounded text-xs uppercase" :loading="isLoading">
+                Iniciar sesión
             </UiButton>
-            <p class="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?
-                <a href="#" class="underline underline-offset-4"> Sign up </a>
+        </div>
+
+        <div class="border-t border-outline-variant pt-8 text-center">
+            <p class="mb-4 text-sm text-on-surface-variant">
+                ¿Aún no eres parte de nuestra comunidad?
             </p>
+            <UiButton
+                variant="outline"
+                type="button"
+                class="h-11 rounded border-primary px-8 text-xs uppercase text-primary"
+                @click="navigateTo('/register')"
+            >
+                Crear cuenta
+            </UiButton>
         </div>
     </form>
 </template>

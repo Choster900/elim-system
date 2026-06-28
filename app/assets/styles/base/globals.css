@@ -1,7 +1,9 @@
-@import '@fontsource/poppins/400.css';
-@import '@fontsource/poppins/500.css';
-@import '@fontsource/poppins/600.css';
-@import '@fontsource/poppins/700.css';
+@import '@fontsource/hanken-grotesk/400.css';
+@import '@fontsource/hanken-grotesk/500.css';
+@import '@fontsource/hanken-grotesk/600.css';
+@import '@fontsource/hanken-grotesk/700.css';
+@import '@fontsource/playfair-display/600.css';
+@import '@fontsource/playfair-display/700.css';
 
 *,
 *::before,
@@ -20,7 +22,7 @@ body {
     background-color: var(--background);
     color: var(--foreground);
     font-family:
-        Poppins,
+        'Hanken Grotesk',
         ui-sans-serif,
         system-ui,
         -apple-system,
@@ -31,4 +33,14 @@ body {
         sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+body::selection {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
 }

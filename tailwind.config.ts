@@ -15,7 +15,9 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                sans: ['Hanken Grotesk', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                body: ['Hanken Grotesk', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                display: ['Playfair Display', 'ui-serif', 'Georgia', 'serif'],
             },
             colors: {
                 background: 'var(--background)',
@@ -50,6 +52,31 @@ export default {
                 border: 'var(--border)',
                 input: 'var(--input)',
                 ring: 'var(--ring)',
+                surface: {
+                    DEFAULT: 'var(--surface)',
+                    dim: 'var(--surface-dim)',
+                    bright: 'var(--surface-bright)',
+                    tint: 'var(--surface-tint)',
+                    container: {
+                        DEFAULT: 'var(--surface-container)',
+                        lowest: 'var(--surface-container-lowest)',
+                        low: 'var(--surface-container-low)',
+                        high: 'var(--surface-container-high)',
+                        highest: 'var(--surface-container-highest)',
+                    },
+                },
+                on: {
+                    surface: {
+                        DEFAULT: 'var(--on-surface)',
+                        variant: 'var(--on-surface-variant)',
+                    },
+                    background: 'var(--on-background)',
+                    primary: 'var(--on-primary)',
+                },
+                outline: {
+                    DEFAULT: 'var(--outline)',
+                    variant: 'var(--outline-variant)',
+                },
                 sidebar: {
                     DEFAULT: 'var(--sidebar)',
                     foreground: 'var(--sidebar-foreground)',
@@ -65,6 +92,15 @@ export default {
                 lg: 'var(--radius)',
                 md: 'calc(var(--radius) - 2px)',
                 sm: 'calc(var(--radius) - 4px)',
+            },
+            maxWidth: {
+                system: '1200px',
+            },
+            spacing: {
+                'system-gutter': '32px',
+                'system-section': '120px',
+                'system-mobile': '24px',
+                'system-desktop': '80px',
             },
             keyframes: {
                 'accordion-down': {
