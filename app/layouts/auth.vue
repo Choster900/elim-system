@@ -7,7 +7,7 @@ import AppBrand from '~/presentation/shared/components/AppBrand.vue'
 <template>
   <div class="relative flex min-h-screen flex-col overflow-hidden bg-background text-on-surface">
     <header
-      class="fixed inset-x-0 top-0 z-30 mx-auto flex max-w-system items-center justify-between px-6 py-7 lg:px-10"
+      class="fixed inset-x-0 top-0 z-30 mx-auto flex max-w-system items-center justify-between px-6 py-4 lg:px-10"
     >
       <AppBrand />
       <NuxtLink
@@ -19,7 +19,7 @@ import AppBrand from '~/presentation/shared/components/AppBrand.vue'
       </NuxtLink>
     </header>
 
-    <main class="relative flex flex-1 items-center justify-center px-6 py-32">
+    <main class="relative flex flex-1 items-center justify-center px-6 py-12">
       <div class="absolute inset-0">
         <img
           :src="loginMainImage"
@@ -32,7 +32,7 @@ import AppBrand from '~/presentation/shared/components/AppBrand.vue'
       <slot />
     </main>
 
-    <footer class="relative z-10 px-6 py-8 text-center">
+    <footer class="relative z-10 px-6 py-4 text-center">
       <p class="text-xs font-medium uppercase text-on-surface-variant">
         © 2024 Sistema Moderno. Un espacio de paz y conexión.
       </p>

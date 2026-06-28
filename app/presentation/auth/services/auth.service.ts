@@ -12,3 +12,7 @@ export async function loginRequest(client: AxiosInstance, payload: LoginRequest)
 
     return response.data.data
 }
+
+export async function logoutRequest(client: AxiosInstance): Promise<void> {
+    await client.post<ApiResponse<null>>('/auth/logout')
+}

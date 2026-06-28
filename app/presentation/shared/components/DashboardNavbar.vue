@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { Bell, ChevronDown, ChevronRight, Menu, Settings, X } from '@lucide/vue'
-import adminAvatarImage from '~/assets/images/system/admin-avatar.png'
+import { Bell, ChevronDown, ChevronRight, LogOut, Menu, Settings, X } from '@lucide/vue'
+import {
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuPortal,
+    DropdownMenuRoot,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from 'radix-vue'
+import { useLogoutMutation } from '~/presentation/auth/composables/useLogoutMutation'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import AppBrand from './AppBrand.vue'
 
 type DashboardMenuItem = {
@@ -10,6 +20,26 @@ type DashboardMenuItem = {
 }
 
 const isOpen = ref(false)
+const toast = useAppToast()
+const logoutMutation = useLogoutMutation()
+const authStore = useAuthStore()
+
+const isLoggingOut = computed(() => logoutMutation.isPending.value)
+const userInitials = computed(() => authStore.initials)
+const userDisplayName = computed(() => authStore.displayName)
+const userEmail = computed(() => authStore.user?.email ?? '')
+
+async function handleLogout() {
+    try {
+        await logoutMutation.mutateAsync()
+        toast.success('Sesión cerrada')
+    } catch {
+        toast.error('No fue posible cerrar la sesión, pero serás redirigido')
+    } finally {
+        isOpen.value = false
+        await navigateTo('/login')
+    }
+}
 
 const navItems: DashboardMenuItem[] = [
     { label: 'Panel', href: '/dashboard' },
@@ -52,6 +82,12 @@ const navItems: DashboardMenuItem[] = [
                 ],
             },
             { label: 'Presupuesto', href: '#' },
+        ],
+    },
+    {
+        label: 'Catálogos',
+        children: [
+            { label: 'Reuniones', href: '/catalogos/reuniones' },
         ],
     },
 ]
@@ -124,20 +160,55 @@ const navItems: DashboardMenuItem[] = [
                 </div>
             </div>
 
-            <div class="hidden items-center gap-4 sm:flex">
+            <div class="hidden items-center gap-3 sm:flex">
                 <UiButton variant="ghost" size="icon" type="button" aria-label="Notificaciones">
                     <Bell class="size-5" />
                 </UiButton>
-                <UiButton variant="ghost" size="icon" type="button" aria-label="Configuración">
-                    <Settings class="size-5" />
-                </UiButton>
-                <div class="size-10 overflow-hidden rounded-full border border-outline-variant">
-                    <img
-                        :src="adminAvatarImage"
-                        alt="Avatar del administrador"
-                        class="size-full object-cover"
-                    />
-                </div>
+
+                <DropdownMenuRoot>
+                    <DropdownMenuTrigger
+                        class="flex size-10 items-center justify-center rounded-full border border-outline-variant bg-surface-container text-sm font-semibold uppercase text-on-surface transition-colors hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        :aria-label="`Menú de ${userDisplayName}`"
+                    >
+                        {{ userInitials }}
+                    </DropdownMenuTrigger>
+
+                    <DropdownMenuPortal>
+                        <DropdownMenuContent
+                            :side-offset="8"
+                            align="end"
+                            class="z-50 w-60 overflow-hidden border border-outline-variant bg-surface-container py-2 shadow-lg focus:outline-none"
+                        >
+                            <div class="border-b border-outline-variant px-4 py-3">
+                                <p class="text-sm font-semibold text-on-surface">
+                                    {{ userDisplayName }}
+                                </p>
+                                <p v-if="userEmail" class="mt-0.5 truncate text-xs text-on-surface-variant">
+                                    {{ userEmail }}
+                                </p>
+                            </div>
+
+                            <DropdownMenuItem
+                                class="flex cursor-pointer items-center gap-3 px-4 py-3 text-xs font-semibold uppercase text-on-surface-variant outline-none transition-colors data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
+                                @select="navigateTo('/settings')"
+                            >
+                                <Settings class="size-4" />
+                                Configuración
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator class="my-1 h-px bg-outline-variant" />
+
+                            <DropdownMenuItem
+                                :disabled="isLoggingOut"
+                                class="flex cursor-pointer items-center gap-3 px-4 py-3 text-xs font-semibold uppercase text-destructive outline-none transition-colors data-[highlighted]:bg-destructive/10 data-[disabled]:opacity-50"
+                                @select="handleLogout"
+                            >
+                                <LogOut class="size-4" />
+                                {{ isLoggingOut ? 'Cerrando…' : 'Cerrar sesión' }}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenuPortal>
+                </DropdownMenuRoot>
             </div>
 
             <UiButton
@@ -155,6 +226,16 @@ const navItems: DashboardMenuItem[] = [
 
         <div v-if="isOpen" class="border-t border-outline-variant bg-surface-container-low px-6 py-5 lg:hidden">
             <div class="grid gap-4">
+                <div class="flex items-center gap-3 border-b border-outline-variant pb-4 sm:hidden">
+                    <div class="flex size-10 items-center justify-center rounded-full border border-outline-variant bg-surface-container text-sm font-semibold uppercase text-on-surface">
+                        {{ userInitials }}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold text-on-surface">{{ userDisplayName }}</p>
+                        <p v-if="userEmail" class="truncate text-xs text-on-surface-variant">{{ userEmail }}</p>
+                    </div>
+                </div>
+
                 <template v-for="item in navItems" :key="item.label">
                     <NuxtLink
                         v-if="item.href"
@@ -179,6 +260,26 @@ const navItems: DashboardMenuItem[] = [
                         </div>
                     </div>
                 </template>
+
+                <div class="mt-2 grid gap-3 border-t border-outline-variant pt-4 sm:hidden">
+                    <NuxtLink
+                        to="/settings"
+                        class="flex items-center gap-2 text-sm font-semibold uppercase text-on-surface-variant"
+                        @click="isOpen = false"
+                    >
+                        <Settings class="size-4" />
+                        Configuración
+                    </NuxtLink>
+                    <button
+                        type="button"
+                        class="flex items-center gap-2 text-left text-sm font-semibold uppercase text-destructive disabled:opacity-60"
+                        :disabled="isLoggingOut"
+                        @click="handleLogout"
+                    >
+                        <LogOut class="size-4" />
+                        {{ isLoggingOut ? 'Cerrando…' : 'Cerrar sesión' }}
+                    </button>
+                </div>
             </div>
         </div>
     </nav>
