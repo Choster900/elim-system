@@ -88,6 +88,7 @@ const navItems: DashboardMenuItem[] = [
         label: 'Catálogos',
         children: [
             { label: 'Reuniones', href: '/catalogos/reuniones' },
+            { label: 'Distritos', href: '/catalogos/distritos' },
         ],
     },
 ]

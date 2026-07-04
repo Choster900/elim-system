@@ -4,6 +4,7 @@ import dashboardRoutes from '~/presentation/dashboard/router.index'
 import landingRoutes from '~/presentation/landing/router.index'
 import meetingsRoutes from '~/presentation/meetings/router.index'
 import registerRoutes from '~/presentation/register/router.index'
+import territoriesRoutes from '~/presentation/territories/router.index'
 
 export default <RouterConfig>{
     routes: () => [
@@ -12,5 +13,6 @@ export default <RouterConfig>{
         ...registerRoutes,
         ...dashboardRoutes,
         ...meetingsRoutes,
+        ...territoriesRoutes,
     ],
 }

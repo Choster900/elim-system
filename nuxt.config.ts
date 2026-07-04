@@ -28,6 +28,7 @@ export default defineNuxtConfig({
         '~/assets/styles/themes/light/theme.css',
         '~/assets/styles/themes/dark/theme.css',
         'vue-sonner/style.css',
+        'leaflet/dist/leaflet.css',
         // main.css is injected by @nuxtjs/tailwindcss via cssPath above
     ],
     runtimeConfig: {
