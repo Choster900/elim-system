@@ -1,3 +1,5 @@
+/// <reference types="node" />
+import process from 'node:process'
 import Joi from 'joi'
 
 export interface AppEnv {
