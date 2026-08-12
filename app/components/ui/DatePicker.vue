@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { CalendarDate, type DateValue, getLocalTimeZone, parseDate, today } from '@internationalized/date'
+import { CalendarDate, type DateValue, getLocalTimeZone, today } from '@internationalized/date'
 import { Calendar, ChevronLeft, ChevronRight, X } from '@lucide/vue'
+import { formatShortIsoDate, parseLocalIsoDate } from '~/utils/date/date-format.util'
+import { fromDateValue, toDateValue } from '~/utils/date/date-value.util'
 import {
     CalendarCell,
     CalendarCellTrigger,
@@ -65,20 +67,6 @@ const emit = defineEmits<{
 
 const open = ref(false)
 
-function toDateValue(iso: string | null | undefined): DateValue | undefined {
-    if (!iso) return undefined
-    try {
-        return parseDate(iso)
-    } catch {
-        return undefined
-    }
-}
-
-function fromDateValue(dv: DateValue | null | undefined): string | null {
-    if (!dv) return null
-    return dv.toString()
-}
-
 function isRange(v: DatePickerValue): v is DatePickerRange {
     return typeof v === 'object' && v !== null && 'start' in v
 }
@@ -105,33 +93,23 @@ const hasValue = computed(() => {
     return !!(v?.start || v?.end)
 })
 
-function formatDate(iso: string | null): string {
-    if (!iso) return ''
-    try {
-        return new Date(iso + 'T00:00:00').toLocaleDateString(props.locale, {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-        })
-    } catch {
-        return iso
-    }
-}
-
 const displayText = computed(() => {
     if (!hasValue.value) return props.placeholder
 
     if (props.mode === 'single') {
-        return formatDate(typeof props.modelValue === 'string' ? props.modelValue : null)
+        return formatShortIsoDate(
+            typeof props.modelValue === 'string' ? props.modelValue : null,
+            props.locale,
+        )
     }
 
     const v = isRange(props.modelValue) ? props.modelValue : null
     if (!v) return props.placeholder
     if (v.start && v.end) {
-        return `${formatDate(v.start)} → ${formatDate(v.end)}`
+        return `${formatShortIsoDate(v.start, props.locale)} → ${formatShortIsoDate(v.end, props.locale)}`
     }
-    if (v.start) return `Desde ${formatDate(v.start)}`
-    if (v.end) return `Hasta ${formatDate(v.end)}`
+    if (v.start) return `Desde ${formatShortIsoDate(v.start, props.locale)}`
+    if (v.end) return `Hasta ${formatShortIsoDate(v.end, props.locale)}`
     return props.placeholder
 })
 
@@ -171,10 +149,14 @@ function setToday() {
 
 function setThisWeek() {
     const t = today(getLocalTimeZone())
-    const day = new Date(t.toString() + 'T00:00:00').getDay()
+    const day = parseLocalIsoDate(t.toString())?.getDay() ?? 0
     const diffToMonday = (day + 6) % 7
-    const startIso = new CalendarDate(t.year, t.month, t.day).subtract({ days: diffToMonday }).toString()
-    const endIso = new CalendarDate(t.year, t.month, t.day).add({ days: 6 - diffToMonday }).toString()
+    const startIso = new CalendarDate(t.year, t.month, t.day)
+        .subtract({ days: diffToMonday })
+        .toString()
+    const endIso = new CalendarDate(t.year, t.month, t.day)
+        .add({ days: 6 - diffToMonday })
+        .toString()
     emit('update:modelValue', { start: startIso, end: endIso })
 }
 
@@ -197,7 +179,8 @@ const cellTriggerClass = [
 
 const navBtnClass =
     'flex size-7 items-center justify-center rounded text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
-const headCellClass = 'h-8 w-9 text-center text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
+const headCellClass =
+    'h-8 w-9 text-center text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
 </script>
 
 <template>
@@ -212,7 +195,9 @@ const headCellClass = 'h-8 w-9 text-center text-[10px] font-semibold uppercase t
                 invalid
                     ? 'border-destructive focus:border-destructive focus:ring-1 focus:ring-destructive'
                     : 'border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary',
-                disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-primary/60',
+                disabled
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'cursor-pointer hover:border-primary/60',
             ]"
         >
             <div class="flex min-w-0 flex-1 items-center gap-2">
@@ -241,7 +226,10 @@ const headCellClass = 'h-8 w-9 text-center text-[10px] font-semibold uppercase t
                 align="start"
                 class="z-50 rounded-lg border border-outline-variant bg-surface-container p-3 shadow-xl focus:outline-none"
             >
-                <div v-if="mode === 'range'" class="mb-2 flex items-center gap-1.5 border-b border-outline-variant pb-2">
+                <div
+                    v-if="mode === 'range'"
+                    class="mb-2 flex items-center gap-1.5 border-b border-outline-variant pb-2"
+                >
                     <button
                         type="button"
                         class="rounded border border-outline-variant px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary"
@@ -288,7 +276,11 @@ const headCellClass = 'h-8 w-9 text-center text-[10px] font-semibold uppercase t
                     <CalendarGrid v-for="month in grid" :key="month.value.toString()">
                         <CalendarGridHead>
                             <CalendarGridRow class="grid grid-cols-7">
-                                <CalendarHeadCell v-for="day in weekDays" :key="day" :class="headCellClass">
+                                <CalendarHeadCell
+                                    v-for="day in weekDays"
+                                    :key="day"
+                                    :class="headCellClass"
+                                >
                                     {{ day.slice(0, 1).toUpperCase() }}
                                 </CalendarHeadCell>
                             </CalendarGridRow>
@@ -330,7 +322,9 @@ const headCellClass = 'h-8 w-9 text-center text-[10px] font-semibold uppercase t
                         <RangeCalendarPrev :class="navBtnClass" aria-label="Mes anterior">
                             <ChevronLeft class="size-4" />
                         </RangeCalendarPrev>
-                        <RangeCalendarHeading class="text-sm font-semibold capitalize text-on-surface" />
+                        <RangeCalendarHeading
+                            class="text-sm font-semibold capitalize text-on-surface"
+                        />
                         <RangeCalendarNext :class="navBtnClass" aria-label="Mes siguiente">
                             <ChevronRight class="size-4" />
                         </RangeCalendarNext>
@@ -338,7 +332,11 @@ const headCellClass = 'h-8 w-9 text-center text-[10px] font-semibold uppercase t
                     <RangeCalendarGrid v-for="month in grid" :key="month.value.toString()">
                         <RangeCalendarGridHead>
                             <RangeCalendarGridRow class="grid grid-cols-7">
-                                <RangeCalendarHeadCell v-for="day in weekDays" :key="day" :class="headCellClass">
+                                <RangeCalendarHeadCell
+                                    v-for="day in weekDays"
+                                    :key="day"
+                                    :class="headCellClass"
+                                >
                                     {{ day.slice(0, 1).toUpperCase() }}
                                 </RangeCalendarHeadCell>
                             </RangeCalendarGridRow>
