@@ -24,6 +24,7 @@ import {
     DialogTitle,
 } from 'radix-vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { readJsonStorage, writeJsonStorage } from '~/utils/storage/json-storage.util'
 import {
     DEFAULT_MAP_ZOOM,
     ELSALVADOR_CENTER,
@@ -48,6 +49,12 @@ useHead({
 
 type Kind = 'district' | 'zone' | 'sector'
 type AnyTerritory = MockDistrict | MockZone | MockTerritorySector
+
+interface StoredTerritories {
+    districts?: MockDistrict[]
+    zones?: MockZone[]
+    sectors?: MockTerritorySector[]
+}
 
 const STORAGE_KEY = 'territories-catalog-v1'
 
@@ -83,25 +90,19 @@ const deleteTarget = ref<{ kind: Kind; id: string } | null>(null)
 const toast = useAppToast()
 
 function loadFromStorage() {
-    if (!import.meta.client) return
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (!raw) return
-        const parsed = JSON.parse(raw)
-        if (parsed.districts) districts.value = parsed.districts
-        if (parsed.zones) zones.value = parsed.zones
-        if (parsed.sectors) sectors.value = parsed.sectors
-    } catch {
-        // ignore
-    }
+    const storedTerritories = readJsonStorage<StoredTerritories | null>(STORAGE_KEY, null)
+    if (!storedTerritories) return
+    if (storedTerritories.districts) districts.value = storedTerritories.districts
+    if (storedTerritories.zones) zones.value = storedTerritories.zones
+    if (storedTerritories.sectors) sectors.value = storedTerritories.sectors
 }
 
 function persist() {
-    if (!import.meta.client) return
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ districts: districts.value, zones: zones.value, sectors: sectors.value }),
-    )
+    writeJsonStorage(STORAGE_KEY, {
+        districts: districts.value,
+        zones: zones.value,
+        sectors: sectors.value,
+    })
 }
 
 function zonesOf(districtId: string) {
@@ -135,7 +136,9 @@ const selectedParentInfo = computed(() => {
         return d ? { label: 'Distrito', name: d.name } : null
     }
     if (selectedKind.value === 'sector') {
-        const z = zones.value.find((x) => x.id === (selectedItem.value as MockTerritorySector).zoneId)
+        const z = zones.value.find(
+            (x) => x.id === (selectedItem.value as MockTerritorySector).zoneId,
+        )
         if (!z) return null
         const d = districts.value.find((x) => x.id === z.districtId)
         return { label: 'Zona', name: `${z.name}${d ? ` · ${d.name}` : ''}` }
@@ -180,6 +183,11 @@ function selectItem(kind: Kind, id: string) {
     centerOnPolygon((findById(kind, id) as AnyTerritory).polygon)
 }
 
+function clearSelection() {
+    selectedId.value = null
+    selectedKind.value = null
+}
+
 function paletteFor(kind: Kind): string[] {
     if (kind === 'district') return districtPalette
     if (kind === 'zone') return zonePalette
@@ -206,7 +214,11 @@ function openEdit(kind: Kind, id: string) {
     formMode.value = 'edit'
     formKind.value = kind
     formParentId.value =
-        kind === 'zone' ? (item as MockZone).districtId : kind === 'sector' ? (item as MockTerritorySector).zoneId : null
+        kind === 'zone'
+            ? (item as MockZone).districtId
+            : kind === 'sector'
+              ? (item as MockTerritorySector).zoneId
+              : null
     formData.id = item.id
     formData.name = item.name
     formData.code = item.code
@@ -421,11 +433,14 @@ function renderPolygons() {
                     dashArray: kind === 'district' ? undefined : kind === 'zone' ? '6,4' : '2,3',
                 })
                 .addTo(map!)
-            polygon.bindTooltip(`<strong>${item.name}</strong><br><span style="font-size:10px;opacity:0.7">${selectedKindLabelFor(kind).toUpperCase()} · ${item.code}</span>`, {
-                sticky: true,
-                direction: 'top',
-                className: 'territory-tooltip',
-            })
+            polygon.bindTooltip(
+                `<strong>${item.name}</strong><br><span style="font-size:10px;opacity:0.7">${selectedKindLabelFor(kind).toUpperCase()} · ${item.code}</span>`,
+                {
+                    sticky: true,
+                    direction: 'top',
+                    className: 'territory-tooltip',
+                },
+            )
             polygon.on('click', (e: any) => {
                 e.originalEvent.stopPropagation()
                 if (editingPolygon.value) return
@@ -468,7 +483,11 @@ function renderTempPolygon() {
                 fillOpacity: 1,
             })
             .addTo(map!)
-        marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'territory-vertex' })
+        marker.bindTooltip(String(i + 1), {
+            permanent: true,
+            direction: 'center',
+            className: 'territory-vertex',
+        })
         tempMarkers.push(marker)
     })
 }
@@ -493,7 +512,16 @@ onBeforeUnmount(() => {
 })
 
 watch(
-    () => [layers.districts, layers.zones, layers.sectors, selectedId.value, selectedKind.value, districts.value.length, zones.value.length, sectors.value.length],
+    () => [
+        layers.districts,
+        layers.zones,
+        layers.sectors,
+        selectedId.value,
+        selectedKind.value,
+        districts.value.length,
+        zones.value.length,
+        sectors.value.length,
+    ],
     () => renderPolygons(),
     { deep: true },
 )
@@ -509,10 +537,14 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
         <header class="border-b border-outline-variant bg-surface px-6 py-4 lg:px-10">
             <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <p class="text-[11px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
+                    <p
+                        class="text-[11px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant"
+                    >
                         Catálogos · Geografía Ministerial
                     </p>
-                    <h1 class="mt-2 font-display text-2xl font-semibold text-on-surface md:text-3xl">
+                    <h1
+                        class="mt-2 font-display text-2xl font-semibold text-on-surface md:text-3xl"
+                    >
                         Distritos, Zonas y Sectores
                     </h1>
                 </div>
@@ -534,9 +566,17 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
         </header>
 
         <div class="flex flex-1 overflow-hidden">
-            <aside class="hidden w-80 shrink-0 flex-col border-r border-outline-variant bg-surface-container md:flex">
-                <div class="flex items-center justify-between border-b border-outline-variant px-4 py-3">
-                    <h2 class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Jerarquía</h2>
+            <aside
+                class="hidden w-80 shrink-0 flex-col border-r border-outline-variant bg-surface-container md:flex"
+            >
+                <div
+                    class="flex items-center justify-between border-b border-outline-variant px-4 py-3"
+                >
+                    <h2
+                        class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
+                    >
+                        Jerarquía
+                    </h2>
                     <button
                         type="button"
                         class="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90"
@@ -546,98 +586,213 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
                     </button>
                 </div>
 
-                <div class="flex items-center gap-3 border-b border-outline-variant px-4 py-2.5 text-[11px]">
+                <div
+                    class="flex items-center gap-3 border-b border-outline-variant px-4 py-2.5 text-[11px]"
+                >
                     <Layers class="size-3.5 text-on-surface-variant" />
                     <label class="flex items-center gap-1.5 text-on-surface-variant">
-                        <input v-model="layers.districts" type="checkbox" class="size-3 accent-primary" />
+                        <input
+                            v-model="layers.districts"
+                            type="checkbox"
+                            class="size-3 accent-primary"
+                        />
                         Distritos
                     </label>
                     <label class="flex items-center gap-1.5 text-on-surface-variant">
-                        <input v-model="layers.zones" type="checkbox" class="size-3 accent-primary" />
+                        <input
+                            v-model="layers.zones"
+                            type="checkbox"
+                            class="size-3 accent-primary"
+                        />
                         Zonas
                     </label>
                     <label class="flex items-center gap-1.5 text-on-surface-variant">
-                        <input v-model="layers.sectors" type="checkbox" class="size-3 accent-primary" />
+                        <input
+                            v-model="layers.sectors"
+                            type="checkbox"
+                            class="size-3 accent-primary"
+                        />
                         Sectores
                     </label>
                 </div>
 
                 <div class="flex-1 overflow-y-auto px-2 py-2">
-                    <div v-if="districts.length === 0" class="px-3 py-8 text-center text-xs text-on-surface-variant">
+                    <div
+                        v-if="districts.length === 0"
+                        class="px-3 py-8 text-center text-xs text-on-surface-variant"
+                    >
                         Aún no hay distritos. Crea el primero arriba.
                     </div>
                     <ul class="space-y-0.5">
                         <li v-for="d in districts" :key="d.id">
                             <div
                                 class="group flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-surface-container-high"
-                                :class="selectedKind === 'district' && selectedId === d.id ? 'bg-primary/10' : ''"
+                                :class="
+                                    selectedKind === 'district' && selectedId === d.id
+                                        ? 'bg-primary/10'
+                                        : ''
+                                "
                             >
-                                <button type="button" class="text-on-surface-variant" @click="toggleDistrict(d.id)">
-                                    <ChevronDown v-if="expandedDistricts.has(d.id)" class="size-3.5" />
+                                <button
+                                    type="button"
+                                    class="text-on-surface-variant"
+                                    @click="toggleDistrict(d.id)"
+                                >
+                                    <ChevronDown
+                                        v-if="expandedDistricts.has(d.id)"
+                                        class="size-3.5"
+                                    />
                                     <ChevronRight v-else class="size-3.5" />
                                 </button>
-                                <button type="button" class="flex flex-1 items-center gap-2 truncate text-left" @click="selectItem('district', d.id)">
-                                    <span class="size-3 shrink-0 rounded" :style="{ backgroundColor: d.color }" />
-                                    <span class="truncate text-xs font-semibold text-on-surface">{{ d.name }}</span>
-                                    <span class="text-[10px] text-on-surface-variant">{{ zonesOf(d.id).length }}</span>
+                                <button
+                                    type="button"
+                                    class="flex flex-1 items-center gap-2 truncate text-left"
+                                    @click="selectItem('district', d.id)"
+                                >
+                                    <span
+                                        class="size-3 shrink-0 rounded"
+                                        :style="{ backgroundColor: d.color }"
+                                    />
+                                    <span class="truncate text-xs font-semibold text-on-surface">{{
+                                        d.name
+                                    }}</span>
+                                    <span class="text-[10px] text-on-surface-variant">{{
+                                        zonesOf(d.id).length
+                                    }}</span>
                                 </button>
                                 <div class="hidden gap-0.5 group-hover:flex">
-                                    <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" :aria-label="`Editar ${d.name}`" @click="openEdit('district', d.id)">
+                                    <button
+                                        type="button"
+                                        class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary"
+                                        :aria-label="`Editar ${d.name}`"
+                                        @click="openEdit('district', d.id)"
+                                    >
                                         <Pencil class="size-3" />
                                     </button>
-                                    <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" :aria-label="`Añadir zona en ${d.name}`" @click="openCreate('zone', d.id)">
+                                    <button
+                                        type="button"
+                                        class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary"
+                                        :aria-label="`Añadir zona en ${d.name}`"
+                                        @click="openCreate('zone', d.id)"
+                                    >
                                         <Plus class="size-3" />
                                     </button>
-                                    <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive" :aria-label="`Eliminar ${d.name}`" @click="askDelete('district', d.id)">
+                                    <button
+                                        type="button"
+                                        class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive"
+                                        :aria-label="`Eliminar ${d.name}`"
+                                        @click="askDelete('district', d.id)"
+                                    >
                                         <Trash2 class="size-3" />
                                     </button>
                                 </div>
                             </div>
 
-                            <ul v-if="expandedDistricts.has(d.id)" class="ml-5 space-y-0.5 border-l border-outline-variant pl-2">
+                            <ul
+                                v-if="expandedDistricts.has(d.id)"
+                                class="ml-5 space-y-0.5 border-l border-outline-variant pl-2"
+                            >
                                 <li v-for="z in zonesOf(d.id)" :key="z.id">
                                     <div
                                         class="group flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-surface-container-high"
-                                        :class="selectedKind === 'zone' && selectedId === z.id ? 'bg-primary/10' : ''"
+                                        :class="
+                                            selectedKind === 'zone' && selectedId === z.id
+                                                ? 'bg-primary/10'
+                                                : ''
+                                        "
                                     >
-                                        <button type="button" class="text-on-surface-variant" @click="toggleZone(z.id)">
-                                            <ChevronDown v-if="expandedZones.has(z.id)" class="size-3.5" />
+                                        <button
+                                            type="button"
+                                            class="text-on-surface-variant"
+                                            @click="toggleZone(z.id)"
+                                        >
+                                            <ChevronDown
+                                                v-if="expandedZones.has(z.id)"
+                                                class="size-3.5"
+                                            />
                                             <ChevronRight v-else class="size-3.5" />
                                         </button>
-                                        <button type="button" class="flex flex-1 items-center gap-2 truncate text-left" @click="selectItem('zone', z.id)">
-                                            <span class="size-2.5 shrink-0 rounded" :style="{ backgroundColor: z.color }" />
-                                            <span class="truncate text-xs text-on-surface">{{ z.name }}</span>
-                                            <span class="text-[10px] text-on-surface-variant">{{ sectorsOf(z.id).length }}</span>
+                                        <button
+                                            type="button"
+                                            class="flex flex-1 items-center gap-2 truncate text-left"
+                                            @click="selectItem('zone', z.id)"
+                                        >
+                                            <span
+                                                class="size-2.5 shrink-0 rounded"
+                                                :style="{ backgroundColor: z.color }"
+                                            />
+                                            <span class="truncate text-xs text-on-surface">{{
+                                                z.name
+                                            }}</span>
+                                            <span class="text-[10px] text-on-surface-variant">{{
+                                                sectorsOf(z.id).length
+                                            }}</span>
                                         </button>
                                         <div class="hidden gap-0.5 group-hover:flex">
-                                            <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" @click="openEdit('zone', z.id)">
+                                            <button
+                                                type="button"
+                                                class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary"
+                                                @click="openEdit('zone', z.id)"
+                                            >
                                                 <Pencil class="size-3" />
                                             </button>
-                                            <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" @click="openCreate('sector', z.id)">
+                                            <button
+                                                type="button"
+                                                class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary"
+                                                @click="openCreate('sector', z.id)"
+                                            >
                                                 <Plus class="size-3" />
                                             </button>
-                                            <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive" @click="askDelete('zone', z.id)">
+                                            <button
+                                                type="button"
+                                                class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive"
+                                                @click="askDelete('zone', z.id)"
+                                            >
                                                 <Trash2 class="size-3" />
                                             </button>
                                         </div>
                                     </div>
 
-                                    <ul v-if="expandedZones.has(z.id)" class="ml-5 space-y-0.5 border-l border-outline-variant pl-2">
+                                    <ul
+                                        v-if="expandedZones.has(z.id)"
+                                        class="ml-5 space-y-0.5 border-l border-outline-variant pl-2"
+                                    >
                                         <li
                                             v-for="s in sectorsOf(z.id)"
                                             :key="s.id"
                                             class="group flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-surface-container-high"
-                                            :class="selectedKind === 'sector' && selectedId === s.id ? 'bg-primary/10' : ''"
+                                            :class="
+                                                selectedKind === 'sector' && selectedId === s.id
+                                                    ? 'bg-primary/10'
+                                                    : ''
+                                            "
                                         >
-                                            <button type="button" class="flex flex-1 items-center gap-2 truncate text-left" @click="selectItem('sector', s.id)">
-                                                <span class="size-2 shrink-0 rounded-full" :style="{ backgroundColor: s.color }" />
-                                                <span class="truncate text-xs text-on-surface">{{ s.name }}</span>
+                                            <button
+                                                type="button"
+                                                class="flex flex-1 items-center gap-2 truncate text-left"
+                                                @click="selectItem('sector', s.id)"
+                                            >
+                                                <span
+                                                    class="size-2 shrink-0 rounded-full"
+                                                    :style="{ backgroundColor: s.color }"
+                                                />
+                                                <span class="truncate text-xs text-on-surface">{{
+                                                    s.name
+                                                }}</span>
                                             </button>
                                             <div class="hidden gap-0.5 group-hover:flex">
-                                                <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" @click="openEdit('sector', s.id)">
+                                                <button
+                                                    type="button"
+                                                    class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary"
+                                                    @click="openEdit('sector', s.id)"
+                                                >
                                                     <Pencil class="size-3" />
                                                 </button>
-                                                <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive" @click="askDelete('sector', s.id)">
+                                                <button
+                                                    type="button"
+                                                    class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive"
+                                                    @click="askDelete('sector', s.id)"
+                                                >
                                                     <Trash2 class="size-3" />
                                                 </button>
                                             </div>
@@ -660,15 +815,30 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
                     <Sparkles class="size-4 text-primary" />
                     <div class="text-xs text-on-surface">
                         <p class="font-semibold">Editando polígono</p>
-                        <p class="text-on-surface-variant">{{ tempPolygon.length }} puntos · click para añadir, doble click para guardar</p>
+                        <p class="text-on-surface-variant">
+                            {{ tempPolygon.length }} puntos · click para añadir, doble click para
+                            guardar
+                        </p>
                     </div>
-                    <button type="button" class="rounded border border-outline-variant px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary" @click="undoTempPoint">
+                    <button
+                        type="button"
+                        class="rounded border border-outline-variant px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary"
+                        @click="undoTempPoint"
+                    >
                         <Undo2 class="inline size-3" /> Deshacer
                     </button>
-                    <button type="button" class="rounded bg-primary px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90" @click="savePolygonEdit">
+                    <button
+                        type="button"
+                        class="rounded bg-primary px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90"
+                        @click="savePolygonEdit"
+                    >
                         Guardar
                     </button>
-                    <button type="button" class="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-destructive hover:bg-destructive/10" @click="cancelPolygonEdit">
+                    <button
+                        type="button"
+                        class="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-destructive hover:bg-destructive/10"
+                        @click="cancelPolygonEdit"
+                    >
                         Cancelar
                     </button>
                 </div>
@@ -681,7 +851,9 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
                     <div class="px-4 py-4">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
-                                <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
+                                <p
+                                    class="text-[10px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant"
+                                >
                                     {{ selectedKindLabel }} · {{ selectedItem.code }}
                                 </p>
                                 <h3 class="mt-1 font-display text-lg font-semibold text-on-surface">
@@ -691,32 +863,48 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
                             <button
                                 type="button"
                                 class="flex size-7 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
-                                @click="selectedId = null; selectedKind = null"
+                                @click="clearSelection"
                             >
                                 <X class="size-3.5" />
                             </button>
                         </div>
 
-                        <p v-if="selectedItem.description" class="mt-3 text-xs text-on-surface-variant">
+                        <p
+                            v-if="selectedItem.description"
+                            class="mt-3 text-xs text-on-surface-variant"
+                        >
                             {{ selectedItem.description }}
                         </p>
 
-                        <div v-if="selectedParentInfo" class="mt-3 flex items-center gap-2 rounded border border-outline-variant bg-surface-container px-3 py-2 text-xs">
+                        <div
+                            v-if="selectedParentInfo"
+                            class="mt-3 flex items-center gap-2 rounded border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                        >
                             <MapPin class="size-3.5 text-on-surface-variant" />
                             <div class="min-w-0">
-                                <p class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">{{ selectedParentInfo.label }}</p>
-                                <p class="truncate text-on-surface">{{ selectedParentInfo.name }}</p>
+                                <p
+                                    class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    {{ selectedParentInfo.label }}
+                                </p>
+                                <p class="truncate text-on-surface">
+                                    {{ selectedParentInfo.name }}
+                                </p>
                             </div>
                         </div>
 
                         <div class="mt-3 grid gap-2 text-xs">
                             <div class="flex justify-between">
                                 <span class="text-on-surface-variant">Líder</span>
-                                <span class="font-medium text-on-surface">{{ selectedItem.leaderName || '—' }}</span>
+                                <span class="font-medium text-on-surface">{{
+                                    selectedItem.leaderName || '—'
+                                }}</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-on-surface-variant">Vértices</span>
-                                <span class="font-medium text-on-surface">{{ selectedItem.polygon.length }}</span>
+                                <span class="font-medium text-on-surface">{{
+                                    selectedItem.polygon.length
+                                }}</span>
                             </div>
                         </div>
 
@@ -751,66 +939,147 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
         <DialogRoot v-model:open="formOpen">
             <DialogPortal>
                 <DialogOverlay class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
-                <DialogContent class="fixed left-1/2 top-1/2 z-50 w-[95vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none">
+                <DialogContent
+                    class="fixed left-1/2 top-1/2 z-50 w-[95vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none"
+                >
                     <div class="mb-4 flex items-start justify-between">
                         <div>
                             <DialogTitle class="font-display text-xl font-semibold text-on-surface">
-                                {{ formMode === 'create' ? `Nuevo ${selectedKindLabelFor(formKind).toLowerCase()}` : `Editar ${selectedKindLabelFor(formKind).toLowerCase()}` }}
+                                {{
+                                    formMode === 'create'
+                                        ? `Nuevo ${selectedKindLabelFor(formKind).toLowerCase()}`
+                                        : `Editar ${selectedKindLabelFor(formKind).toLowerCase()}`
+                                }}
                             </DialogTitle>
                             <DialogDescription class="mt-1 text-sm text-on-surface-variant">
-                                {{ formMode === 'create' ? 'Tras crearlo, podrás dibujar su polígono en el mapa.' : 'Actualiza los datos. Para cambiar el polígono usa el botón "Redibujar".' }}
+                                {{
+                                    formMode === 'create'
+                                        ? 'Tras crearlo, podrás dibujar su polígono en el mapa.'
+                                        : 'Actualiza los datos. Para cambiar el polígono usa el botón "Redibujar".'
+                                }}
                             </DialogDescription>
                         </div>
-                        <DialogClose class="flex size-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
+                        <DialogClose
+                            class="flex size-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+                        >
                             <X class="size-4" />
                         </DialogClose>
                     </div>
 
                     <div class="space-y-4">
                         <div v-if="formMode === 'create' && formKind === 'zone'">
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Distrito padre</label>
+                            <label
+                                class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >Distrito padre</label
+                            >
                             <div class="mt-1">
-                                <UiSearchSelect v-model="formParentId" :options="districtOptions" placeholder="Selecciona un distrito" />
+                                <UiSearchSelect
+                                    v-model="formParentId"
+                                    :options="districtOptions"
+                                    placeholder="Selecciona un distrito"
+                                />
                             </div>
                         </div>
                         <div v-if="formMode === 'create' && formKind === 'sector'">
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Zona padre</label>
+                            <label
+                                class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >Zona padre</label
+                            >
                             <div class="mt-1">
-                                <UiSearchSelect v-model="formParentId" :options="zoneOptions" placeholder="Selecciona una zona" />
+                                <UiSearchSelect
+                                    v-model="formParentId"
+                                    :options="zoneOptions"
+                                    placeholder="Selecciona una zona"
+                                />
                             </div>
                         </div>
 
                         <div class="grid gap-3 md:grid-cols-[1fr_120px]">
                             <div>
-                                <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Nombre *</label>
-                                <input v-model="formData.name" type="text" class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Nombre del territorio" />
+                                <label
+                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                    >Nombre *</label
+                                >
+                                <input
+                                    v-model="formData.name"
+                                    type="text"
+                                    class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                    placeholder="Nombre del territorio"
+                                />
                             </div>
                             <div>
-                                <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Código *</label>
-                                <input v-model="formData.code" type="text" class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm uppercase text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="DM" />
+                                <label
+                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                    >Código *</label
+                                >
+                                <input
+                                    v-model="formData.code"
+                                    type="text"
+                                    class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm uppercase text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                    placeholder="DM"
+                                />
                             </div>
                         </div>
                         <div>
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Descripción</label>
-                            <textarea v-model="formData.description" rows="2" class="mt-1 w-full rounded border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Cobertura geográfica y observaciones" />
+                            <label
+                                class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >Descripción</label
+                            >
+                            <textarea
+                                v-model="formData.description"
+                                rows="2"
+                                class="mt-1 w-full rounded border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                placeholder="Cobertura geográfica y observaciones"
+                            />
                         </div>
                         <div>
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Líder responsable</label>
-                            <input v-model="formData.leaderName" type="text" class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Nombre del responsable" />
+                            <label
+                                class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >Líder responsable</label
+                            >
+                            <input
+                                v-model="formData.leaderName"
+                                type="text"
+                                class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                placeholder="Nombre del responsable"
+                            />
                         </div>
                         <div>
-                            <span class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Color de identificación</span>
+                            <span
+                                class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >Color de identificación</span
+                            >
                             <div class="mt-2 flex flex-wrap items-center gap-2">
-                                <button v-for="c in formCurrentPalette" :key="c" type="button" class="size-7 rounded-full border-2 transition-transform hover:scale-110" :style="{ backgroundColor: c, borderColor: formData.color === c ? '#fff' : 'transparent' }" :aria-label="`Color ${c}`" @click="formData.color = c" />
+                                <button
+                                    v-for="c in formCurrentPalette"
+                                    :key="c"
+                                    type="button"
+                                    class="size-7 rounded-full border-2 transition-transform hover:scale-110"
+                                    :style="{
+                                        backgroundColor: c,
+                                        borderColor: formData.color === c ? '#fff' : 'transparent',
+                                    }"
+                                    :aria-label="`Color ${c}`"
+                                    @click="formData.color = c"
+                                />
                             </div>
                         </div>
                     </div>
 
                     <div class="mt-6 flex justify-end gap-2">
                         <DialogClose as-child>
-                            <UiButton variant="outline" type="button" class="h-10 rounded px-4 text-xs uppercase tracking-wider">Cancelar</UiButton>
+                            <UiButton
+                                variant="outline"
+                                type="button"
+                                class="h-10 rounded px-4 text-xs uppercase tracking-wider"
+                                >Cancelar</UiButton
+                            >
                         </DialogClose>
-                        <UiButton type="button" class="h-10 rounded px-5 text-xs uppercase tracking-wider" @click="saveForm">
+                        <UiButton
+                            type="button"
+                            class="h-10 rounded px-5 text-xs uppercase tracking-wider"
+                            @click="saveForm"
+                        >
                             <Save class="mr-2 size-4" />
                             {{ formMode === 'create' ? 'Crear' : 'Guardar' }}
                         </UiButton>
@@ -822,23 +1091,39 @@ const formCurrentPalette = computed(() => paletteFor(formKind.value))
         <DialogRoot v-model:open="deleteDialogOpen">
             <DialogPortal>
                 <DialogOverlay class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
-                <DialogContent class="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none">
+                <DialogContent
+                    class="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none"
+                >
                     <div class="flex items-start gap-4">
-                        <div class="flex size-11 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                        <div
+                            class="flex size-11 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+                        >
                             <AlertTriangle class="size-5" />
                         </div>
                         <div>
-                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">Eliminar territorio</DialogTitle>
+                            <DialogTitle class="font-display text-xl font-semibold text-on-surface"
+                                >Eliminar territorio</DialogTitle
+                            >
                             <DialogDescription class="mt-2 text-sm text-on-surface-variant">
-                                Esta acción es permanente. Si tiene hijos (zonas o sectores), también serán eliminados.
+                                Esta acción es permanente. Si tiene hijos (zonas o sectores),
+                                también serán eliminados.
                             </DialogDescription>
                         </div>
                     </div>
                     <div class="mt-6 flex justify-end gap-2">
                         <DialogClose as-child>
-                            <UiButton variant="outline" type="button" class="h-10 rounded px-4 text-xs uppercase tracking-wider">Cancelar</UiButton>
+                            <UiButton
+                                variant="outline"
+                                type="button"
+                                class="h-10 rounded px-4 text-xs uppercase tracking-wider"
+                                >Cancelar</UiButton
+                            >
                         </DialogClose>
-                        <UiButton type="button" class="h-10 rounded bg-destructive px-4 text-xs uppercase tracking-wider text-white hover:bg-destructive/90" @click="confirmDelete">
+                        <UiButton
+                            type="button"
+                            class="h-10 rounded bg-destructive px-4 text-xs uppercase tracking-wider text-white hover:bg-destructive/90"
+                            @click="confirmDelete"
+                        >
                             <Trash2 class="mr-2 size-4" /> Eliminar
                         </UiButton>
                     </div>

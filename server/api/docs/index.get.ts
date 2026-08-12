@@ -1,4 +1,4 @@
-import { createScalarHtml } from '../../utils/swagger.util'
+import { createScalarHtml } from '../../utils/openapi/api-docs.util'
 
 export default defineEventHandler(() => {
     return new Response(createScalarHtml(), {

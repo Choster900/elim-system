@@ -1,6 +1,6 @@
 import { getQuery } from 'h3'
 import type { H3Event } from 'h3'
-import type { PaginationMeta } from '../types/api-response.types'
+import type { PaginationMeta } from '../../types/api-response.types'
 
 export interface PaginationParams {
     page: number

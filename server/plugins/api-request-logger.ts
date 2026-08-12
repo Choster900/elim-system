@@ -1,16 +1,31 @@
-import { getQuery, getRequestURL } from 'h3'
+import { getHeader, getQuery, readBody, type H3Event } from 'h3'
+import { getSanitizedRequestUrl, printApiLog } from '../utils/logging/api-log.util'
 
 const API_PREFIX = '/api'
 const REQUEST_START_KEY = '__apiRequestStartedAtMs'
-const LOG_SEPARATOR = '----------------------------------------------------------------'
-const LOG_INDENT = '\t'
+const OMITTED_MULTIPART_BODY = '[multipart body omitted]'
+const OMITTED_BINARY_BODY = '[binary body omitted]'
+const UNAVAILABLE_BODY = '[body unavailable]'
+const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-function printApiLog(label: 'API_REQUEST' | 'API_RESPONSE', payload: Record<string, unknown>) {
-    const prettyPayload = JSON.stringify(payload, null, LOG_INDENT)
-    const timestamp = new Date().toISOString()
-    const lines = [LOG_SEPARATOR, `[${label}] ${timestamp}`, prettyPayload, LOG_SEPARATOR]
+async function getRequestBodyForLog(event: H3Event, method: string) {
+    if (!BODY_METHODS.has(method)) {
+        return null
+    }
 
-    console.log(lines.join('\n'))
+    const contentType = getHeader(event, 'content-type')?.toLowerCase() ?? ''
+    if (contentType.startsWith('multipart/form-data')) {
+        return OMITTED_MULTIPART_BODY
+    }
+    if (contentType.startsWith('application/octet-stream')) {
+        return OMITTED_BINARY_BODY
+    }
+
+    try {
+        return (await readBody(event)) ?? null
+    } catch {
+        return UNAVAILABLE_BODY
+    }
 }
 
 export default defineNitroPlugin((nitroApp) => {
@@ -19,21 +34,24 @@ export default defineNitroPlugin((nitroApp) => {
         return
     }
 
-    nitroApp.hooks.hook('request', (event) => {
+    nitroApp.hooks.hook('request', async (event) => {
         if (!event.path.startsWith(API_PREFIX)) {
             return
         }
 
         ;(event.context as Record<string, unknown>)[REQUEST_START_KEY] = Date.now()
 
+        const method = event.node.req.method || 'GET'
         const query = getQuery(event)
         const hasQuery = Object.keys(query).length > 0
+        const body = await getRequestBodyForLog(event, method)
 
         printApiLog('API_REQUEST', {
-            method: event.node.req.method || 'GET',
+            method,
             path: event.path,
-            url: getRequestURL(event).toString(),
+            url: getSanitizedRequestUrl(event),
             query: hasQuery ? query : null,
+            body,
         })
     })
 

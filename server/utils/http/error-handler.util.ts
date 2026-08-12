@@ -1,7 +1,7 @@
 import { setResponseStatus } from 'h3'
 import type { H3Event } from 'h3'
-import { ApiErrorCode } from '../types/api-response.types'
-import { ApiResponseFactory } from './response.util'
+import { ApiErrorCode } from '../../types/api-response.types'
+import { ApiResponseFactory } from './api-response.util'
 
 interface H3ErrorLike {
     statusCode?: number
@@ -54,7 +54,7 @@ export function handleApiError(event: H3Event, error: unknown) {
         ? isDev && h3Error?.message
             ? h3Error.message
             : 'Contacte al administrador si el problema persiste'
-        : (h3Error?.statusMessage ?? null)
+        : (h3Error?.message ?? h3Error?.statusMessage ?? null)
 
     setResponseStatus(event, statusCode)
 

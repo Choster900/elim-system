@@ -83,13 +83,15 @@ export const statusOptions: { value: MeetingStatus; label: string }[] = [
     { value: 'cancelada', label: 'Cancelada' },
 ]
 
-export const colorPalette = ['#e9c176', '#9bc1bc', '#d39a9a', '#a3b18a', '#b4a7d6', '#f4a261', '#8ab0d9']
-
-function isoOffset(days: number): string {
-    const d = new Date()
-    d.setDate(d.getDate() + days)
-    return d.toISOString().slice(0, 10)
-}
+export const colorPalette = [
+    '#e9c176',
+    '#9bc1bc',
+    '#d39a9a',
+    '#a3b18a',
+    '#b4a7d6',
+    '#f4a261',
+    '#8ab0d9',
+]
 
 const SEED_BASE_ISO = '2026-01-01T00:00:00.000Z'
 
@@ -98,7 +100,8 @@ export function getMockMeetings(): MockMeeting[] {
     const seeds: Omit<MockMeeting, 'id'>[] = [
         {
             title: 'Servicio Dominical de Adoración',
-            description: 'Encuentro central de la semana. Tiempo de adoración y exposición de la Palabra.',
+            description:
+                'Encuentro central de la semana. Tiempo de adoración y exposición de la Palabra.',
             typeId: 'tip-servicio',
             sectorId: 'sec-centro',
             supervisorId: 'sup-1',
@@ -331,3 +334,4 @@ export function getMockMeetings(): MockMeeting[] {
         id: `meet-${String(i + 1).padStart(3, '0')}`,
     }))
 }
+import { offsetIsoDate as isoOffset } from '~/utils/date/date-format.util'

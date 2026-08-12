@@ -3,6 +3,8 @@ import { Eye, EyeOff, Lock, Mail } from '@lucide/vue'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type { HttpClientError } from '~/presentation/shared/interfaces/http/http-client-error.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
+import { formatValidationMessage } from '~/utils/string/text-format.util'
 import { useLoginMutation } from '../composables/useLoginMutation'
 import { useAuthStore } from '../stores/auth.store'
 
@@ -11,8 +13,8 @@ defineOptions({ name: 'AuthLoginForm' })
 type FieldKey = 'email' | 'password'
 
 const form = reactive<Record<FieldKey, string>>({
-    email: '',
-    password: '',
+    email: 'admin@local.test',
+    password: 'Admin12345!',
 })
 
 const fieldErrors = reactive<Record<FieldKey, string | null>>({
@@ -29,27 +31,20 @@ const authStore = useAuthStore()
 
 const isLoading = computed(() => loginMutation.isPending.value)
 
-watch(() => form.email, () => {
-    fieldErrors.email = null
-    formError.value = null
-})
-watch(() => form.password, () => {
-    fieldErrors.password = null
-    formError.value = null
-})
-
-function cleanFieldMessage(raw: string) {
-    const stripped = raw.replace(/^"[^"]+"\s*/, '').trim()
-    return stripped.charAt(0).toUpperCase() + stripped.slice(1)
-}
-
-function resolveErrorMessage(error: unknown) {
-    const fallbackMessage = 'No fue posible iniciar sesión'
-    const httpError = error as HttpClientError | undefined
-    const apiResponse = httpError?.details as ApiResponse<null> | undefined
-
-    return apiResponse?.message ?? httpError?.message ?? fallbackMessage
-}
+watch(
+    () => form.email,
+    () => {
+        fieldErrors.email = null
+        formError.value = null
+    },
+)
+watch(
+    () => form.password,
+    () => {
+        fieldErrors.password = null
+        formError.value = null
+    },
+)
 
 function applyValidationErrors(apiResponse: ApiResponse<null> | undefined) {
     const fields = apiResponse?.error?.fields
@@ -59,7 +54,7 @@ function applyValidationErrors(apiResponse: ApiResponse<null> | undefined) {
     for (const key of Object.keys(fields) as FieldKey[]) {
         const messages = fields[key]
         if (key in fieldErrors && messages?.length) {
-            fieldErrors[key] = cleanFieldMessage(messages[0]!)
+            fieldErrors[key] = formatValidationMessage(messages[0]!)
             applied = true
         }
     }
@@ -89,11 +84,14 @@ async function onSubmit() {
         }
 
         if (apiResponse?.error) {
-            formError.value = apiResponse.error.details ?? apiResponse.message ?? resolveErrorMessage(error)
+            formError.value =
+                apiResponse.error.details ??
+                apiResponse.message ??
+                resolveHttpErrorMessage(error, 'No fue posible iniciar sesión')
             return
         }
 
-        toast.error(resolveErrorMessage(error))
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible iniciar sesión'))
     }
 }
 </script>
@@ -124,7 +122,11 @@ async function onSubmit() {
                     :aria-invalid="!!fieldErrors.email"
                     aria-describedby="email-error"
                     class="h-11 rounded-none border-x-0 border-t-0 bg-transparent pl-8 text-on-surface placeholder:text-[#d1c5b4]/40 focus-visible:ring-0 focus-visible:ring-offset-0"
-                    :class="fieldErrors.email ? 'border-destructive focus-visible:border-destructive' : 'focus-visible:border-primary'"
+                    :class="
+                        fieldErrors.email
+                            ? 'border-destructive focus-visible:border-destructive'
+                            : 'focus-visible:border-primary'
+                    "
                 />
             </div>
             <p v-if="fieldErrors.email" id="email-error" class="text-xs text-destructive">
@@ -137,7 +139,10 @@ async function onSubmit() {
                 <UiLabel for="password" class="text-xs uppercase text-on-surface-variant">
                     Contraseña
                 </UiLabel>
-                <NuxtLink to="#" class="text-xs font-semibold uppercase text-primary underline-offset-4 hover:underline">
+                <NuxtLink
+                    to="#"
+                    class="text-xs font-semibold uppercase text-primary underline-offset-4 hover:underline"
+                >
                     ¿Olvidaste tu contraseña?
                 </NuxtLink>
             </div>
@@ -156,7 +161,11 @@ async function onSubmit() {
                     :aria-invalid="!!fieldErrors.password"
                     aria-describedby="password-error"
                     class="h-11 rounded-none border-x-0 border-t-0 bg-transparent px-8 text-on-surface placeholder:text-[#d1c5b4]/40 focus-visible:ring-0 focus-visible:ring-offset-0"
-                    :class="fieldErrors.password ? 'border-destructive focus-visible:border-destructive' : 'focus-visible:border-primary'"
+                    :class="
+                        fieldErrors.password
+                            ? 'border-destructive focus-visible:border-destructive'
+                            : 'focus-visible:border-primary'
+                    "
                 />
                 <button
                     type="button"
@@ -182,7 +191,11 @@ async function onSubmit() {
         </div>
 
         <div class="pt-2">
-            <UiButton type="submit" class="h-11 w-full rounded text-xs uppercase" :loading="isLoading">
+            <UiButton
+                type="submit"
+                class="h-11 w-full rounded text-xs uppercase"
+                :loading="isLoading"
+            >
                 Iniciar sesión
             </UiButton>
         </div>

@@ -13,7 +13,7 @@ export async function getPermissionById(id: string) {
     if (!permission) {
         throw createError({
             statusCode: 404,
-            statusMessage: 'El permiso solicitado no existe',
+            message: 'El permiso solicitado no existe',
             data: { code: ApiErrorCode.RESOURCE_NOT_FOUND },
         })
     }

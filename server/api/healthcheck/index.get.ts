@@ -1,5 +1,5 @@
 import { createHealthResponse } from '../../services/health.service'
-import { ApiResponseFactory } from '../../utils/response.util'
+import { ApiResponseFactory } from '../../utils/http/api-response.util'
 
 export default defineEventHandler(() => {
     const config = useRuntimeConfig()

@@ -1,6 +1,6 @@
 import { createError } from 'h3'
 import type { Schema } from 'joi'
-import { ApiErrorCode } from '../types/api-response.types'
+import { ApiErrorCode } from '../../types/api-response.types'
 
 export function validateDto<T>(schema: Schema<T>, body: unknown): T {
     const { error, value } = schema.validate(body, { abortEarly: false })
@@ -17,7 +17,7 @@ export function validateDto<T>(schema: Schema<T>, body: unknown): T {
 
     throw createError({
         statusCode: 400,
-        statusMessage: 'Los datos enviados no son válidos',
+        message: 'Los datos enviados no son válidos',
         data: { code: ApiErrorCode.VALIDATION_ERROR, fields },
     })
 }

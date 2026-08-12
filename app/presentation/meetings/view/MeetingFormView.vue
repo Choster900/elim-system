@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ArrowLeft, CalendarDays, Info, MapPinned, Save, Settings2, Users } from '@lucide/vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { formatMeetingPreviewDate } from '~/presentation/meetings/utils/meeting-format.util'
+import { toIsoDate } from '~/utils/date/date-format.util'
+import { readJsonStorage, writeJsonStorage } from '~/utils/storage/json-storage.util'
 import {
     type MockMeeting,
     colorPalette,
@@ -27,13 +30,7 @@ useHead({
 })
 
 function loadMeetings(): MockMeeting[] {
-    if (!import.meta.client) return getMockMeetings()
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        return raw ? (JSON.parse(raw) as MockMeeting[]) : getMockMeetings()
-    } catch {
-        return getMockMeetings()
-    }
+    return readJsonStorage(STORAGE_KEY, getMockMeetings())
 }
 
 function emptyForm(): Omit<MockMeeting, 'id' | 'createdAt'> {
@@ -44,7 +41,7 @@ function emptyForm(): Omit<MockMeeting, 'id' | 'createdAt'> {
         sectorId: mockSectors[0]!.id,
         supervisorId: mockSupervisors[0]!.id,
         coSupervisorIds: [],
-        date: new Date().toISOString().slice(0, 10),
+        date: toIsoDate(new Date()),
         startTime: '19:00',
         endTime: '20:30',
         location: '',
@@ -162,7 +159,7 @@ async function saveMeeting() {
             })
             toast.success('Reunión creada')
         }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(meetings))
+        writeJsonStorage(STORAGE_KEY, meetings)
         await navigateTo('/catalogos/reuniones')
     } finally {
         isSaving.value = false
@@ -177,16 +174,6 @@ const selectedType = computed(() => mockMeetingTypes.find((t) => t.id === form.t
 const selectedSector = computed(() => mockSectors.find((s) => s.id === form.sectorId))
 const selectedSupervisor = computed(() => mockSupervisors.find((s) => s.id === form.supervisorId))
 
-function formatPreviewDate(iso: string) {
-    if (!iso) return '—'
-    return new Date(iso + 'T00:00:00').toLocaleDateString('es-SV', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-    })
-}
-
 const inputClass =
     'h-11 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
 const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
@@ -194,8 +181,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
 
 <template>
     <div class="pb-24 pt-20">
-        <div class="sticky top-16 z-30 border-b border-outline-variant bg-surface/80 backdrop-blur-md">
-            <div class="mx-auto flex w-full max-w-system items-center justify-between gap-4 px-6 py-4 lg:px-10">
+        <div
+            class="sticky top-16 z-30 border-b border-outline-variant bg-surface/80 backdrop-blur-md"
+        >
+            <div
+                class="mx-auto flex w-full max-w-system items-center justify-between gap-4 px-6 py-4 lg:px-10"
+            >
                 <div class="flex items-center gap-4">
                     <NuxtLink
                         to="/catalogos/reuniones"
@@ -205,7 +196,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                         <ArrowLeft class="size-4" />
                     </NuxtLink>
                     <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
+                        <p
+                            class="text-[11px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant"
+                        >
                             Catálogos · Reuniones
                         </p>
                         <h1 class="font-display text-2xl font-semibold text-on-surface md:text-3xl">
@@ -237,24 +230,41 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
         </div>
 
         <main class="mx-auto w-full max-w-system px-6 py-8 lg:px-10">
-            <div v-if="notFound" class="mx-auto max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center">
-                <p class="font-display text-lg font-semibold text-destructive">Reunión no encontrada</p>
+            <div
+                v-if="notFound"
+                class="mx-auto max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center"
+            >
+                <p class="font-display text-lg font-semibold text-destructive">
+                    Reunión no encontrada
+                </p>
                 <p class="mt-2 text-sm text-on-surface-variant">
                     La reunión que intentas editar ya no existe en el catálogo.
                 </p>
-                <NuxtLink to="/catalogos/reuniones" class="mt-4 inline-block text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+                <NuxtLink
+                    to="/catalogos/reuniones"
+                    class="mt-4 inline-block text-xs font-semibold uppercase tracking-wider text-primary hover:underline"
+                >
                     Volver al listado
                 </NuxtLink>
             </div>
 
-            <form v-else class="grid gap-6 lg:grid-cols-[1fr_320px]" novalidate @submit.prevent="saveMeeting">
+            <form
+                v-else
+                class="grid gap-6 lg:grid-cols-[1fr_320px]"
+                novalidate
+                @submit.prevent="saveMeeting"
+            >
                 <div class="space-y-6">
                     <UiCard class="p-6">
                         <div class="mb-5 flex items-center gap-3">
                             <Info class="size-5 text-primary" />
                             <div>
-                                <h2 class="font-display text-lg font-semibold text-on-surface">Información general</h2>
-                                <p class="text-xs text-on-surface-variant">Identifica la reunión y su propósito.</p>
+                                <h2 class="font-display text-lg font-semibold text-on-surface">
+                                    Información general
+                                </h2>
+                                <p class="text-xs text-on-surface-variant">
+                                    Identifica la reunión y su propósito.
+                                </p>
                             </div>
                         </div>
 
@@ -266,9 +276,17 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     v-model="form.title"
                                     type="text"
                                     placeholder="Ej. Reunión de líderes de jóvenes"
-                                    :class="[inputClass, 'mt-1', formErrors.title ? 'border-destructive focus:border-destructive focus:ring-destructive' : '']"
+                                    :class="[
+                                        inputClass,
+                                        'mt-1',
+                                        formErrors.title
+                                            ? 'border-destructive focus:border-destructive focus:ring-destructive'
+                                            : '',
+                                    ]"
                                 />
-                                <p v-if="formErrors.title" class="mt-1 text-xs text-destructive">{{ formErrors.title }}</p>
+                                <p v-if="formErrors.title" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.title }}
+                                </p>
                             </div>
                             <div>
                                 <label :class="labelClass">Tipo</label>
@@ -292,7 +310,11 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 v-model="form.description"
                                 rows="3"
                                 placeholder="Propósito, agenda principal, o cualquier contexto relevante."
-                                :class="['mt-1', inputClass, 'h-auto resize-none py-2 leading-relaxed']"
+                                :class="[
+                                    'mt-1',
+                                    inputClass,
+                                    'h-auto resize-none py-2 leading-relaxed',
+                                ]"
                             />
                         </div>
                     </UiCard>
@@ -301,8 +323,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                         <div class="mb-5 flex items-center gap-3">
                             <CalendarDays class="size-5 text-primary" />
                             <div>
-                                <h2 class="font-display text-lg font-semibold text-on-surface">Programación</h2>
-                                <p class="text-xs text-on-surface-variant">Fecha, horario y recurrencia.</p>
+                                <h2 class="font-display text-lg font-semibold text-on-surface">
+                                    Programación
+                                </h2>
+                                <p class="text-xs text-on-surface-variant">
+                                    Fecha, horario y recurrencia.
+                                </p>
                             </div>
                         </div>
 
@@ -317,7 +343,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :invalid="!!formErrors.date"
                                     />
                                 </div>
-                                <p v-if="formErrors.date" class="mt-1 text-xs text-destructive">{{ formErrors.date }}</p>
+                                <p v-if="formErrors.date" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.date }}
+                                </p>
                             </div>
                             <div>
                                 <label :class="labelClass" for="meeting-start">Inicio *</label>
@@ -325,9 +353,18 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     id="meeting-start"
                                     v-model="form.startTime"
                                     type="time"
-                                    :class="[inputClass, 'mt-1', formErrors.startTime ? 'border-destructive' : '']"
+                                    :class="[
+                                        inputClass,
+                                        'mt-1',
+                                        formErrors.startTime ? 'border-destructive' : '',
+                                    ]"
                                 />
-                                <p v-if="formErrors.startTime" class="mt-1 text-xs text-destructive">{{ formErrors.startTime }}</p>
+                                <p
+                                    v-if="formErrors.startTime"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ formErrors.startTime }}
+                                </p>
                             </div>
                             <div>
                                 <label :class="labelClass" for="meeting-end">Fin *</label>
@@ -335,9 +372,15 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     id="meeting-end"
                                     v-model="form.endTime"
                                     type="time"
-                                    :class="[inputClass, 'mt-1', formErrors.endTime ? 'border-destructive' : '']"
+                                    :class="[
+                                        inputClass,
+                                        'mt-1',
+                                        formErrors.endTime ? 'border-destructive' : '',
+                                    ]"
                                 />
-                                <p v-if="formErrors.endTime" class="mt-1 text-xs text-destructive">{{ formErrors.endTime }}</p>
+                                <p v-if="formErrors.endTime" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.endTime }}
+                                </p>
                             </div>
                         </div>
 
@@ -345,7 +388,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             <div>
                                 <label :class="labelClass" for="meeting-location">Ubicación</label>
                                 <div class="relative mt-1">
-                                    <MapPinned class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant" />
+                                    <MapPinned
+                                        class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant"
+                                    />
                                     <input
                                         id="meeting-location"
                                         v-model="form.location"
@@ -373,8 +418,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                         <div class="mb-5 flex items-center gap-3">
                             <Users class="size-5 text-primary" />
                             <div>
-                                <h2 class="font-display text-lg font-semibold text-on-surface">Asignación</h2>
-                                <p class="text-xs text-on-surface-variant">Responsables y sector ministerial.</p>
+                                <h2 class="font-display text-lg font-semibold text-on-surface">
+                                    Asignación
+                                </h2>
+                                <p class="text-xs text-on-surface-variant">
+                                    Responsables y sector ministerial.
+                                </p>
                             </div>
                         </div>
 
@@ -392,7 +441,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :invalid="!!formErrors.sectorId"
                                     />
                                 </div>
-                                <p v-if="formErrors.sectorId" class="mt-1 text-xs text-destructive">{{ formErrors.sectorId }}</p>
+                                <p v-if="formErrors.sectorId" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.sectorId }}
+                                </p>
                             </div>
                             <div>
                                 <label :class="labelClass">Supervisor *</label>
@@ -408,14 +459,23 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :invalid="!!formErrors.supervisorId"
                                     />
                                 </div>
-                                <p v-if="formErrors.supervisorId" class="mt-1 text-xs text-destructive">{{ formErrors.supervisorId }}</p>
+                                <p
+                                    v-if="formErrors.supervisorId"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ formErrors.supervisorId }}
+                                </p>
                             </div>
                             <div>
                                 <label :class="labelClass">Co-supervisores</label>
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.coSupervisorIds"
-                                        :options="mockSupervisors.filter(x => x.id !== form.supervisorId)"
+                                        :options="
+                                            mockSupervisors.filter(
+                                                (x) => x.id !== form.supervisorId,
+                                            )
+                                        "
                                         option-value="id"
                                         option-label="name"
                                         option-description="role"
@@ -433,14 +493,20 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                         <div class="mb-5 flex items-center gap-3">
                             <Settings2 class="size-5 text-primary" />
                             <div>
-                                <h2 class="font-display text-lg font-semibold text-on-surface">Detalles</h2>
-                                <p class="text-xs text-on-surface-variant">Estado, asistencia y configuración.</p>
+                                <h2 class="font-display text-lg font-semibold text-on-surface">
+                                    Detalles
+                                </h2>
+                                <p class="text-xs text-on-surface-variant">
+                                    Estado, asistencia y configuración.
+                                </p>
                             </div>
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-3">
                             <div>
-                                <label :class="labelClass" for="meeting-attendees">Asistentes esperados</label>
+                                <label :class="labelClass" for="meeting-attendees"
+                                    >Asistentes esperados</label
+                                >
                                 <input
                                     id="meeting-attendees"
                                     v-model.number="form.expectedAttendees"
@@ -468,7 +534,10 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :key="c"
                                         type="button"
                                         class="size-7 rounded-full border-2 transition-transform hover:scale-110"
-                                        :style="{ backgroundColor: c, borderColor: form.color === c ? '#fff' : 'transparent' }"
+                                        :style="{
+                                            backgroundColor: c,
+                                            borderColor: form.color === c ? '#fff' : 'transparent',
+                                        }"
                                         :aria-label="`Color ${c}`"
                                         @click="form.color = c"
                                     />
@@ -478,18 +547,32 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
 
                         <div class="mt-4 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
                             <div>
-                                <label :class="labelClass" for="meeting-notes">Notas internas</label>
+                                <label :class="labelClass" for="meeting-notes"
+                                    >Notas internas</label
+                                >
                                 <textarea
                                     id="meeting-notes"
                                     v-model="form.notes"
                                     rows="2"
                                     placeholder="Detalles operativos, recordatorios, requisitos especiales..."
-                                    :class="['mt-1', inputClass, 'h-auto resize-none py-2 leading-relaxed']"
+                                    :class="[
+                                        'mt-1',
+                                        inputClass,
+                                        'h-auto resize-none py-2 leading-relaxed',
+                                    ]"
                                 />
                             </div>
-                            <label class="flex h-11 items-center gap-3 rounded border border-outline-variant bg-surface-container px-4">
-                                <input v-model="form.isPublic" type="checkbox" class="size-4 accent-primary" />
-                                <span class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                            <label
+                                class="flex h-11 items-center gap-3 rounded border border-outline-variant bg-surface-container px-4"
+                            >
+                                <input
+                                    v-model="form.isPublic"
+                                    type="checkbox"
+                                    class="size-4 accent-primary"
+                                />
+                                <span
+                                    class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
                                     Visible públicamente
                                 </span>
                             </label>
@@ -499,63 +582,110 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
 
                 <aside class="lg:sticky lg:top-40 lg:self-start">
                     <UiCard class="overflow-hidden">
-                        <div
-                            class="h-2"
-                            :style="{ backgroundColor: form.color }"
-                        />
+                        <div class="h-2" :style="{ backgroundColor: form.color }" />
                         <div class="p-5">
-                            <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant"
+                            >
                                 Vista previa
                             </p>
                             <h3 class="mt-3 font-display text-lg font-semibold text-on-surface">
                                 {{ form.title || 'Título de la reunión' }}
                             </h3>
-                            <p v-if="selectedType" class="mt-1 text-xs" :style="{ color: selectedType.accent }">
+                            <p
+                                v-if="selectedType"
+                                class="mt-1 text-xs"
+                                :style="{ color: selectedType.accent }"
+                            >
                                 {{ selectedType.label }}
                             </p>
 
-                            <div class="mt-5 space-y-3 border-t border-outline-variant pt-4 text-xs">
+                            <div
+                                class="mt-5 space-y-3 border-t border-outline-variant pt-4 text-xs"
+                            >
                                 <div class="flex items-start gap-2">
-                                    <CalendarDays class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant" />
+                                    <CalendarDays
+                                        class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant"
+                                    />
                                     <div class="text-on-surface">
-                                        <p class="capitalize">{{ formatPreviewDate(form.date) }}</p>
-                                        <p class="text-on-surface-variant">{{ form.startTime }} – {{ form.endTime }}</p>
+                                        <p class="capitalize">
+                                            {{ formatMeetingPreviewDate(form.date) }}
+                                        </p>
+                                        <p class="text-on-surface-variant">
+                                            {{ form.startTime }} – {{ form.endTime }}
+                                        </p>
                                     </div>
                                 </div>
                                 <div v-if="form.location" class="flex items-start gap-2">
-                                    <MapPinned class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant" />
+                                    <MapPinned
+                                        class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant"
+                                    />
                                     <p class="text-on-surface">{{ form.location }}</p>
                                 </div>
                                 <div v-if="selectedSector" class="flex items-start gap-2">
-                                    <span class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center text-on-surface-variant">·</span>
+                                    <span
+                                        class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center text-on-surface-variant"
+                                        >·</span
+                                    >
                                     <div>
-                                        <p class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">Sector</p>
+                                        <p
+                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                        >
+                                            Sector
+                                        </p>
                                         <p class="text-on-surface">{{ selectedSector.name }}</p>
                                     </div>
                                 </div>
                                 <div v-if="selectedSupervisor" class="flex items-start gap-2">
-                                    <Users class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant" />
+                                    <Users
+                                        class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant"
+                                    />
                                     <div>
-                                        <p class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">Supervisor</p>
+                                        <p
+                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                        >
+                                            Supervisor
+                                        </p>
                                         <p class="text-on-surface">{{ selectedSupervisor.name }}</p>
-                                        <p class="text-on-surface-variant">{{ selectedSupervisor.role }}</p>
+                                        <p class="text-on-surface-variant">
+                                            {{ selectedSupervisor.role }}
+                                        </p>
                                     </div>
                                 </div>
-                                <div v-if="form.coSupervisorIds.length > 0" class="flex items-start gap-2">
-                                    <span class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center text-on-surface-variant">+</span>
+                                <div
+                                    v-if="form.coSupervisorIds.length > 0"
+                                    class="flex items-start gap-2"
+                                >
+                                    <span
+                                        class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center text-on-surface-variant"
+                                        >+</span
+                                    >
                                     <div>
-                                        <p class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                                        <p
+                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                        >
                                             Co-supervisores ({{ form.coSupervisorIds.length }})
                                         </p>
                                         <p class="text-on-surface">
-                                            {{ form.coSupervisorIds.map(id => mockSupervisors.find(s => s.id === id)?.name).filter(Boolean).join(', ') }}
+                                            {{
+                                                form.coSupervisorIds
+                                                    .map(
+                                                        (id) =>
+                                                            mockSupervisors.find((s) => s.id === id)
+                                                                ?.name,
+                                                    )
+                                                    .filter(Boolean)
+                                                    .join(', ')
+                                            }}
                                         </p>
                                     </div>
                                 </div>
                             </div>
 
                             <div class="mt-5 border-t border-outline-variant pt-4">
-                                <p class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                                <p
+                                    class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
                                     Los campos con * son obligatorios
                                 </p>
                             </div>

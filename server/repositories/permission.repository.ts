@@ -1,5 +1,5 @@
 import { prisma } from '../database/prisma'
-import { mapPrismaError } from '../utils/prisma-error.util'
+import { mapPrismaError } from '../utils/database/prisma-error.util'
 import type { CreatePermissionDto } from '../dto/permission/create-permission.dto'
 import type { UpdatePermissionDto } from '../dto/permission/update-permission.dto'
 

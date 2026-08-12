@@ -23,7 +23,7 @@ function getJwtSecret() {
     if (!secret) {
         throw createError({
             statusCode: 500,
-            statusMessage: 'JWT secret is not configured',
+            message: 'JWT secret is not configured',
             data: { code: ApiErrorCode.INTERNAL_SERVER_ERROR },
         })
     }
@@ -35,7 +35,7 @@ function buildTokenError(error: unknown) {
 
     return createError({
         statusCode: 401,
-        statusMessage: isExpired ? 'Token expirado' : 'Token inválido',
+        message: isExpired ? 'Token expirado' : 'Token inválido',
         data: {
             code: isExpired ? ApiErrorCode.TOKEN_EXPIRED : ApiErrorCode.INVALID_TOKEN,
         },
@@ -89,7 +89,7 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
         ) {
             throw createError({
                 statusCode: 401,
-                statusMessage: 'Token inválido',
+                message: 'Token inválido',
                 data: { code: ApiErrorCode.INVALID_TOKEN },
             })
         }
@@ -118,7 +118,7 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
         ) {
             throw createError({
                 statusCode: 401,
-                statusMessage: 'Token inválido',
+                message: 'Token inválido',
                 data: { code: ApiErrorCode.INVALID_TOKEN },
             })
         }
