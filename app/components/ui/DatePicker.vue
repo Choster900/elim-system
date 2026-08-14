@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CalendarDate, type DateValue, getLocalTimeZone, today } from '@internationalized/date'
-import { Calendar, ChevronLeft, ChevronRight, X } from '@lucide/vue'
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from '@lucide/vue'
 import { formatShortIsoDate, parseLocalIsoDate } from '~/utils/date/date-format.util'
 import { fromDateValue, toDateValue } from '~/utils/date/date-value.util'
 import {
@@ -83,13 +83,17 @@ const singleValue = computed<DateValue | undefined>(() => {
 })
 
 const calendarPage = shallowRef<DateValue>(singleValue.value ?? today(getLocalTimeZone()))
+const calendarPickerMode = ref<'calendar' | 'month' | 'year'>('calendar')
 
 watch(singleValue, (value) => {
     if (value) calendarPage.value = value
 })
 
 watch(open, (isOpen) => {
-    if (isOpen) calendarPage.value = singleValue.value ?? today(getLocalTimeZone())
+    if (isOpen) {
+        calendarPage.value = singleValue.value ?? today(getLocalTimeZone())
+        calendarPickerMode.value = 'calendar'
+    }
 })
 
 const monthOptions = computed(() => {
@@ -106,14 +110,22 @@ const yearOptions = computed(() => {
     return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => lastYear - index)
 })
 
-function changeCalendarMonth(event: Event) {
-    const month = Number((event.target as HTMLSelectElement).value)
+const currentMonthLabel = computed(
+    () => monthOptions.value.find((month) => month.value === calendarPage.value.month)?.label ?? '',
+)
+
+function selectCalendarMonth(month: number) {
     calendarPage.value = new CalendarDate(calendarPage.value.year, month, 1)
+    calendarPickerMode.value = 'calendar'
 }
 
-function changeCalendarYear(event: Event) {
-    const year = Number((event.target as HTMLSelectElement).value)
+function selectCalendarYear(year: number) {
     calendarPage.value = new CalendarDate(year, calendarPage.value.month, 1)
+    calendarPickerMode.value = 'calendar'
+}
+
+function toggleCalendarPicker(mode: 'month' | 'year') {
+    calendarPickerMode.value = calendarPickerMode.value === mode ? 'calendar' : mode
 }
 
 function onCalendarPageChange(value: DateValue) {
@@ -268,7 +280,7 @@ const headCellClass =
             <PopoverContent
                 :side-offset="6"
                 align="start"
-                class="z-50 rounded-lg border border-outline-variant bg-surface-container p-3 shadow-xl focus:outline-none"
+                class="z-50 w-[280px] rounded-xl border border-outline-variant bg-surface-container p-3 shadow-xl focus:outline-none"
             >
                 <div
                     v-if="mode === 'range'"
@@ -310,80 +322,160 @@ const headCellClass =
                     @update:model-value="onSingleChange"
                     @update:placeholder="onCalendarPageChange"
                 >
-                    <CalendarHeader class="mb-2 flex items-center justify-between">
-                        <CalendarPrev :class="navBtnClass" aria-label="Mes anterior">
+                    <CalendarHeader class="mb-3 flex items-center justify-between gap-2">
+                        <CalendarPrev
+                            :class="navBtnClass"
+                            aria-label="Mes anterior"
+                            @click="calendarPickerMode = 'calendar'"
+                        >
                             <ChevronLeft class="size-4" />
                         </CalendarPrev>
-                        <div v-if="yearSelect" class="flex items-center gap-1.5 px-1">
+                        <div
+                            v-if="yearSelect"
+                            class="flex min-w-0 flex-1 items-center rounded-lg border border-outline-variant bg-surface p-0.5 shadow-sm"
+                        >
                             <CalendarHeading class="sr-only" />
-                            <select
-                                :value="calendarPage.month"
-                                class="h-8 rounded border border-outline-variant bg-surface px-2 text-xs font-semibold capitalize text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                            <button
+                                type="button"
+                                class="flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold capitalize text-on-surface transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                :class="
+                                    calendarPickerMode === 'month'
+                                        ? 'bg-primary/10 text-primary'
+                                        : ''
+                                "
                                 aria-label="Seleccionar mes"
+                                :aria-expanded="calendarPickerMode === 'month'"
                                 data-testid="calendar-month-select"
-                                @change="changeCalendarMonth"
+                                @click="toggleCalendarPicker('month')"
                             >
-                                <option
-                                    v-for="month in monthOptions"
-                                    :key="month.value"
-                                    :value="month.value"
-                                >
-                                    {{ month.label }}
-                                </option>
-                            </select>
-                            <select
-                                :value="calendarPage.year"
-                                class="h-8 rounded border border-outline-variant bg-surface px-2 text-xs font-semibold text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                <span class="truncate">{{ currentMonthLabel }}</span>
+                                <ChevronDown
+                                    class="size-3 shrink-0 transition-transform"
+                                    :class="calendarPickerMode === 'month' ? 'rotate-180' : ''"
+                                />
+                            </button>
+                            <span class="h-4 w-px shrink-0 bg-outline-variant" />
+                            <button
+                                type="button"
+                                class="flex h-7 items-center justify-center gap-1 rounded-md px-2 text-xs font-bold tabular-nums text-on-surface transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                :class="
+                                    calendarPickerMode === 'year'
+                                        ? 'bg-primary/10 text-primary'
+                                        : ''
+                                "
                                 aria-label="Seleccionar año"
+                                :aria-expanded="calendarPickerMode === 'year'"
                                 data-testid="calendar-year-select"
-                                @change="changeCalendarYear"
+                                @click="toggleCalendarPicker('year')"
                             >
-                                <option v-for="year in yearOptions" :key="year" :value="year">
-                                    {{ year }}
-                                </option>
-                            </select>
+                                {{ calendarPage.year }}
+                                <ChevronDown
+                                    class="size-3 shrink-0 transition-transform"
+                                    :class="calendarPickerMode === 'year' ? 'rotate-180' : ''"
+                                />
+                            </button>
                         </div>
                         <CalendarHeading
                             v-else
                             class="text-sm font-semibold capitalize text-on-surface"
                         />
-                        <CalendarNext :class="navBtnClass" aria-label="Mes siguiente">
+                        <CalendarNext
+                            :class="navBtnClass"
+                            aria-label="Mes siguiente"
+                            @click="calendarPickerMode = 'calendar'"
+                        >
                             <ChevronRight class="size-4" />
                         </CalendarNext>
                     </CalendarHeader>
-                    <CalendarGrid v-for="month in grid" :key="month.value.toString()">
-                        <CalendarGridHead>
-                            <CalendarGridRow class="grid grid-cols-7">
-                                <CalendarHeadCell
-                                    v-for="day in weekDays"
-                                    :key="day"
-                                    :class="headCellClass"
-                                >
-                                    {{ day.slice(0, 1).toUpperCase() }}
-                                </CalendarHeadCell>
-                            </CalendarGridRow>
-                        </CalendarGridHead>
-                        <CalendarGridBody>
-                            <CalendarGridRow
-                                v-for="(weekDates, index) in month.rows"
-                                :key="`${month.value.toString()}-${index}`"
-                                class="grid grid-cols-7"
+
+                    <div
+                        v-if="yearSelect && calendarPickerMode === 'month'"
+                        class="grid grid-cols-3 gap-1 rounded-lg border border-outline-variant bg-surface/60 p-2"
+                        data-testid="calendar-month-panel"
+                    >
+                        <button
+                            v-for="month in monthOptions"
+                            :key="month.value"
+                            type="button"
+                            class="h-9 rounded-md px-2 text-xs font-medium capitalize text-on-surface-variant transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            :class="
+                                calendarPage.month === month.value
+                                    ? 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
+                                    : ''
+                            "
+                            @click="selectCalendarMonth(month.value)"
+                        >
+                            {{ month.label }}
+                        </button>
+                    </div>
+
+                    <div
+                        v-else-if="yearSelect && calendarPickerMode === 'year'"
+                        class="rounded-lg border border-outline-variant bg-surface/60 p-2"
+                        data-testid="calendar-year-panel"
+                    >
+                        <div class="mb-2 flex items-center justify-between px-1">
+                            <span
+                                class="text-[10px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant"
+                                >Elige el año</span
                             >
-                                <CalendarCell
-                                    v-for="weekDate in weekDates"
-                                    :key="weekDate.toString()"
-                                    :date="weekDate"
-                                    class="p-0"
+                            <span class="text-[10px] tabular-nums text-on-surface-variant/70">
+                                {{ Math.min(minYear, maxYear) }}–{{ Math.max(minYear, maxYear) }}
+                            </span>
+                        </div>
+                        <div class="grid max-h-48 grid-cols-4 gap-1 overflow-y-auto pr-1">
+                            <button
+                                v-for="year in yearOptions"
+                                :key="year"
+                                type="button"
+                                class="h-8 rounded-md text-xs font-medium tabular-nums text-on-surface-variant transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                :class="
+                                    calendarPage.year === year
+                                        ? 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
+                                        : ''
+                                "
+                                @click="selectCalendarYear(year)"
+                            >
+                                {{ year }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <template v-else>
+                        <CalendarGrid v-for="month in grid" :key="month.value.toString()">
+                            <CalendarGridHead>
+                                <CalendarGridRow class="grid grid-cols-7">
+                                    <CalendarHeadCell
+                                        v-for="day in weekDays"
+                                        :key="day"
+                                        :class="headCellClass"
+                                    >
+                                        {{ day.slice(0, 1).toUpperCase() }}
+                                    </CalendarHeadCell>
+                                </CalendarGridRow>
+                            </CalendarGridHead>
+                            <CalendarGridBody>
+                                <CalendarGridRow
+                                    v-for="(weekDates, index) in month.rows"
+                                    :key="`${month.value.toString()}-${index}`"
+                                    class="grid grid-cols-7"
                                 >
-                                    <CalendarCellTrigger
-                                        :day="weekDate"
-                                        :month="month.value"
-                                        :class="cellTriggerClass"
-                                    />
-                                </CalendarCell>
-                            </CalendarGridRow>
-                        </CalendarGridBody>
-                    </CalendarGrid>
+                                    <CalendarCell
+                                        v-for="weekDate in weekDates"
+                                        :key="weekDate.toString()"
+                                        :date="weekDate"
+                                        class="p-0"
+                                    >
+                                        <CalendarCellTrigger
+                                            :day="weekDate"
+                                            :month="month.value"
+                                            :class="cellTriggerClass"
+                                        />
+                                    </CalendarCell>
+                                </CalendarGridRow>
+                            </CalendarGridBody>
+                        </CalendarGrid>
+                    </template>
                 </CalendarRoot>
 
                 <RangeCalendarRoot
