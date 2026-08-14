@@ -48,6 +48,9 @@ const props = withDefaults(
         invalid?: boolean
         locale?: string
         weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
+        yearSelect?: boolean
+        minYear?: number
+        maxYear?: number
     }>(),
     {
         mode: 'single',
@@ -58,6 +61,9 @@ const props = withDefaults(
         invalid: false,
         locale: 'es-SV',
         weekStartsOn: 1,
+        yearSelect: false,
+        minYear: 1900,
+        maxYear: new Date().getFullYear(),
     },
 )
 
@@ -75,6 +81,44 @@ const singleValue = computed<DateValue | undefined>(() => {
     if (props.mode !== 'single') return undefined
     return toDateValue(typeof props.modelValue === 'string' ? props.modelValue : null)
 })
+
+const calendarPage = shallowRef<DateValue>(singleValue.value ?? today(getLocalTimeZone()))
+
+watch(singleValue, (value) => {
+    if (value) calendarPage.value = value
+})
+
+watch(open, (isOpen) => {
+    if (isOpen) calendarPage.value = singleValue.value ?? today(getLocalTimeZone())
+})
+
+const monthOptions = computed(() => {
+    const formatter = new Intl.DateTimeFormat(props.locale, { month: 'long' })
+    return Array.from({ length: 12 }, (_, index) => ({
+        value: index + 1,
+        label: formatter.format(new Date(2020, index, 1)),
+    }))
+})
+
+const yearOptions = computed(() => {
+    const firstYear = Math.min(props.minYear, props.maxYear)
+    const lastYear = Math.max(props.minYear, props.maxYear)
+    return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => lastYear - index)
+})
+
+function changeCalendarMonth(event: Event) {
+    const month = Number((event.target as HTMLSelectElement).value)
+    calendarPage.value = new CalendarDate(calendarPage.value.year, month, 1)
+}
+
+function changeCalendarYear(event: Event) {
+    const year = Number((event.target as HTMLSelectElement).value)
+    calendarPage.value = new CalendarDate(year, calendarPage.value.month, 1)
+}
+
+function onCalendarPageChange(value: DateValue) {
+    calendarPage.value = value
+}
 
 const rangeValue = computed<{ start: DateValue | undefined; end: DateValue | undefined }>(() => {
     if (props.mode !== 'range') return { start: undefined, end: undefined }
@@ -261,14 +305,48 @@ const headCellClass =
                     :model-value="singleValue"
                     :locale="locale"
                     :week-starts-on="weekStartsOn"
+                    :placeholder="calendarPage"
                     class="select-none"
                     @update:model-value="onSingleChange"
+                    @update:placeholder="onCalendarPageChange"
                 >
                     <CalendarHeader class="mb-2 flex items-center justify-between">
                         <CalendarPrev :class="navBtnClass" aria-label="Mes anterior">
                             <ChevronLeft class="size-4" />
                         </CalendarPrev>
-                        <CalendarHeading class="text-sm font-semibold capitalize text-on-surface" />
+                        <div v-if="yearSelect" class="flex items-center gap-1.5 px-1">
+                            <CalendarHeading class="sr-only" />
+                            <select
+                                :value="calendarPage.month"
+                                class="h-8 rounded border border-outline-variant bg-surface px-2 text-xs font-semibold capitalize text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                aria-label="Seleccionar mes"
+                                data-testid="calendar-month-select"
+                                @change="changeCalendarMonth"
+                            >
+                                <option
+                                    v-for="month in monthOptions"
+                                    :key="month.value"
+                                    :value="month.value"
+                                >
+                                    {{ month.label }}
+                                </option>
+                            </select>
+                            <select
+                                :value="calendarPage.year"
+                                class="h-8 rounded border border-outline-variant bg-surface px-2 text-xs font-semibold text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                aria-label="Seleccionar año"
+                                data-testid="calendar-year-select"
+                                @change="changeCalendarYear"
+                            >
+                                <option v-for="year in yearOptions" :key="year" :value="year">
+                                    {{ year }}
+                                </option>
+                            </select>
+                        </div>
+                        <CalendarHeading
+                            v-else
+                            class="text-sm font-semibold capitalize text-on-surface"
+                        />
                         <CalendarNext :class="navBtnClass" aria-label="Mes siguiente">
                             <ChevronRight class="size-4" />
                         </CalendarNext>
