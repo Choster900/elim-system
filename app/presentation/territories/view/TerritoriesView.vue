@@ -1,877 +1,1294 @@
 <script setup lang="ts">
-import {
-    AlertTriangle,
-    ChevronDown,
-    ChevronRight,
-    Layers,
-    Map as MapIcon,
-    MapPin,
-    Pencil,
-    Plus,
-    Save,
-    Sparkles,
-    Trash2,
-    Undo2,
-    X,
-} from '@lucide/vue'
-import {
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogOverlay,
-    DialogPortal,
-    DialogRoot,
-    DialogTitle,
-} from 'radix-vue'
+import { ExternalLink, MoreHorizontal, Plus, Search, X } from '@lucide/vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import AssignMeetingDrawer from '~/presentation/territories/components/AssignMeetingDrawer.vue'
+import TerritoryFormDrawer from '~/presentation/territories/components/TerritoryFormDrawer.vue'
 import {
-    DEFAULT_MAP_ZOOM,
-    ELSALVADOR_CENTER,
-    type LatLng,
-    type MockDistrict,
-    type MockTerritorySector,
-    type MockZone,
-    type Polygon,
-    districtPalette,
-    mockDistricts,
-    mockTerritorySectors,
-    mockZones,
-    sectorPalette,
-    zonePalette,
+  ELSALVADOR_CENTER,
+  type LatLng,
+  type MockDistrict,
+  type MockTerritorySector,
+  type MockZone,
+  type Polygon,
+  districtPalette,
+  mockDistricts,
+  mockTerritorySectors,
+  mockZones,
+  sectorPalette,
+  zonePalette,
 } from '~/mock/territories.mock'
+import {
+  type MockMeeting,
+  frequencyOptions,
+  getMockMeetings,
+  mockMeetingTypes,
+  mockSupervisors,
+  statusOptions,
+} from '~/mock/meetings.mock'
 
 defineOptions({ name: 'TerritoriesView' })
 
 useHead({
-    title: 'Distritos · Sistema',
+  title: 'Distritos · Sistema',
 })
 
-type Kind = 'district' | 'zone' | 'sector'
-type AnyTerritory = MockDistrict | MockZone | MockTerritorySector
+type Level = 'distrito' | 'zona' | 'sector' | 'reunion'
+type EntityLevel = 'distrito' | 'zona' | 'sector'
 
-const STORAGE_KEY = 'territories-catalog-v1'
+interface EntityInput {
+  name: string
+  code: string
+  leaderName: string
+  description: string
+  color: string
+  polygon: Polygon
+}
+
+const HIER_KEY = 'hierarchy-catalog-v1'
+const MEET_KEY = 'meetings-catalog-v2'
+
+// Level accent colors, drawn from the app palette so they harmonize with the gold primary.
+const LEVEL_ACCENT: Record<Level, string> = {
+  distrito: '#e9c176',
+  zona: '#f4a261',
+  sector: '#a3b18a',
+  reunion: '#8ab0d9',
+}
+const LEVEL_LABEL: Record<Level, string> = {
+  distrito: 'Distrito',
+  zona: 'Zona',
+  sector: 'Sector',
+  reunion: 'Reunión',
+}
+
+const toast = useAppToast()
 
 const districts = ref<MockDistrict[]>(structuredClone(mockDistricts))
 const zones = ref<MockZone[]>(structuredClone(mockZones))
 const sectors = ref<MockTerritorySector[]>(structuredClone(mockTerritorySectors))
+const meetings = ref<MockMeeting[]>(getMockMeetings())
 
-const layers = reactive({ districts: true, zones: true, sectors: true })
-const expandedDistricts = ref<Set<string>>(new Set([mockDistricts[0]!.id]))
-const expandedZones = ref<Set<string>>(new Set())
+const selD = ref<string | null>(mockDistricts[0]?.id ?? null)
+const selZ = ref<string | null>(null)
+const selS = ref<string | null>(null)
+const selM = ref<string | null>(null)
+const query = ref('')
 
-const selectedId = ref<string | null>(null)
-const selectedKind = ref<Kind | null>(null)
-const editingPolygon = ref(false)
-const tempPolygon = ref<Polygon>([])
+// Context menu
+const menuFor = ref<string | null>(null)
+const menuLevel = ref<Level | null>(null)
+const menuPos = reactive({ left: 0, top: 0 })
+const menuMode = ref<'normal' | 'confirm' | 'move'>('normal')
 
+// Detail drawer
+const drawer = ref<{ level: Level, id: string } | null>(null)
+
+// Entity form drawer (create/edit district/zone/sector)
 const formOpen = ref(false)
+const formLevel = ref<EntityLevel>('distrito')
 const formMode = ref<'create' | 'edit'>('create')
-const formKind = ref<Kind>('district')
-const formParentId = ref<string | null>(null)
-const formData = reactive({
-    id: '',
-    name: '',
-    code: '',
-    description: '',
-    leaderName: '',
-    color: '#e9c176',
-})
+const formEntity = ref<EntityInput | null>(null)
+const formParentCentroid = ref<LatLng | null>(null)
+const formParentLabel = ref<string | null>(null)
+let formEditId: string | null = null
+let formParentDistrictId: string | null = null
+let formParentZoneId: string | null = null
 
-const deleteDialogOpen = ref(false)
-const deleteTarget = ref<{ kind: Kind; id: string } | null>(null)
+// Assign-meeting drawer
+const assignOpen = ref(false)
 
-const toast = useAppToast()
-
-function loadFromStorage() {
-    if (!import.meta.client) return
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (!raw) return
-        const parsed = JSON.parse(raw)
-        if (parsed.districts) districts.value = parsed.districts
-        if (parsed.zones) zones.value = parsed.zones
-        if (parsed.sectors) sectors.value = parsed.sectors
-    } catch {
-        // ignore
-    }
+// ===== persistence =====
+function persistHierarchy() {
+  if (!import.meta.client) return
+  localStorage.setItem(
+    HIER_KEY,
+    JSON.stringify({ districts: districts.value, zones: zones.value, sectors: sectors.value }),
+  )
+}
+function persistMeetings() {
+  if (!import.meta.client) return
+  localStorage.setItem(MEET_KEY, JSON.stringify(meetings.value))
 }
 
-function persist() {
-    if (!import.meta.client) return
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ districts: districts.value, zones: zones.value, sectors: sectors.value }),
-    )
+function loadHierarchy() {
+  if (!import.meta.client) return
+  try {
+    const raw = localStorage.getItem(HIER_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (parsed.districts) districts.value = parsed.districts
+    if (parsed.zones) zones.value = parsed.zones
+    if (parsed.sectors) sectors.value = parsed.sectors
+  }
+  catch {
+    // ignore corrupted storage
+  }
+}
+function loadMeetings() {
+  if (!import.meta.client) return
+  try {
+    const raw = localStorage.getItem(MEET_KEY)
+    meetings.value = raw ? (JSON.parse(raw) as MockMeeting[]) : getMockMeetings()
+  }
+  catch {
+    meetings.value = getMockMeetings()
+  }
 }
 
+// ===== lookups =====
 function zonesOf(districtId: string) {
-    return zones.value.filter((z) => z.districtId === districtId)
+  return zones.value.filter(z => z.districtId === districtId)
 }
 function sectorsOf(zoneId: string) {
-    return sectors.value.filter((s) => s.zoneId === zoneId)
+  return sectors.value.filter(s => s.zoneId === zoneId)
 }
-function findById(kind: Kind, id: string): AnyTerritory | undefined {
-    if (kind === 'district') return districts.value.find((d) => d.id === id)
-    if (kind === 'zone') return zones.value.find((z) => z.id === id)
-    return sectors.value.find((s) => s.id === id)
+function meetingsOf(sectorId: string) {
+  return meetings.value.filter(m => m.sectorId === sectorId)
+}
+function zoneMeetings(zone: MockZone) {
+  return sectorsOf(zone.id).reduce((acc, s) => acc + meetingsOf(s.id).length, 0)
+}
+function districtSectors(district: MockDistrict) {
+  return zonesOf(district.id).reduce((acc, z) => acc + sectorsOf(z.id).length, 0)
+}
+function districtMeetings(district: MockDistrict) {
+  return zonesOf(district.id).reduce((acc, z) => acc + zoneMeetings(z), 0)
+}
+function sectorLabelOf(sectorId: string) {
+  return sectors.value.find(s => s.id === sectorId)?.name ?? 'Sin sector'
 }
 
-const selectedItem = computed<AnyTerritory | null>(() => {
-    if (!selectedId.value || !selectedKind.value) return null
-    return findById(selectedKind.value, selectedId.value) ?? null
+const selDist = computed(() => (selD.value ? districts.value.find(d => d.id === selD.value) ?? null : null))
+const selZone = computed(() =>
+  selZ.value && selDist.value ? zonesOf(selDist.value.id).find(z => z.id === selZ.value) ?? null : null,
+)
+const selSector = computed(() =>
+  selS.value && selZone.value ? sectorsOf(selZone.value.id).find(s => s.id === selS.value) ?? null : null,
+)
+
+// ===== formatting & geometry =====
+function plural(n: number, singular: string, pluralWord: string) {
+  return `${n} ${n === 1 ? singular : pluralWord}`
+}
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+function meetingDay(m: MockMeeting) {
+  return capitalize(new Date(`${m.date}T00:00:00`).toLocaleDateString('es-SV', { weekday: 'long' }))
+}
+function fmtTime(time: string) {
+  const [h, min] = time.split(':').map(Number)
+  const period = (h ?? 0) < 12 ? 'AM' : 'PM'
+  const hour12 = (((h ?? 0) + 11) % 12) + 1
+  return `${hour12}:${String(min ?? 0).padStart(2, '0')} ${period}`
+}
+function centroid(polygon: Polygon): LatLng {
+  const sum = polygon.reduce((acc, [lat, lng]) => [acc[0] + lat, acc[1] + lng], [0, 0])
+  return [sum[0]! / polygon.length, sum[1]! / polygon.length]
+}
+function paletteFor(level: EntityLevel) {
+  if (level === 'distrito') return districtPalette
+  if (level === 'zona') return zonePalette
+  return sectorPalette
+}
+
+// ===== search =====
+const normalizedQuery = computed(() => query.value.trim().toLowerCase())
+function matches(name: string) {
+  const q = normalizedQuery.value
+  return !q || name.toLowerCase().includes(q)
+}
+
+// ===== columns =====
+interface ColumnItem {
+  id: string
+  level: Level
+  name: string
+  color: string
+  sub: string
+  badge: string
+  selected: boolean
+}
+interface Column {
+  level: Level
+  label: string
+  accent: string
+  count: number
+  canAdd: boolean
+  addTitle: string
+  hint: string | null
+  empty: string | null
+  items: ColumnItem[]
+}
+
+const columns = computed<Column[]>(() => {
+  const cols: Column[] = []
+
+  // Distritos
+  const dItems = districts.value.filter(d => matches(d.name))
+  cols.push({
+    level: 'distrito',
+    label: 'Distritos',
+    accent: LEVEL_ACCENT.distrito,
+    count: districts.value.length,
+    canAdd: true,
+    addTitle: 'Agregar distrito',
+    hint: null,
+    empty: dItems.length === 0 ? 'Sin resultados' : null,
+    items: dItems.map(d => ({
+      id: d.id,
+      level: 'distrito',
+      name: d.name,
+      color: d.color,
+      sub: plural(zonesOf(d.id).length, 'zona', 'zonas'),
+      badge: String(districtMeetings(d)),
+      selected: selD.value === d.id,
+    })),
+  })
+
+  // Zonas
+  const dist = selDist.value
+  const zItems = dist ? zonesOf(dist.id).filter(z => matches(z.name)) : []
+  cols.push({
+    level: 'zona',
+    label: 'Zonas',
+    accent: LEVEL_ACCENT.zona,
+    count: dist ? zonesOf(dist.id).length : 0,
+    canAdd: !!dist,
+    addTitle: 'Agregar zona',
+    hint: dist ? null : 'Selecciona un distrito para ver sus zonas.',
+    empty: dist && zItems.length === 0 ? (zonesOf(dist.id).length ? 'Sin resultados' : 'Este distrito no tiene zonas.') : null,
+    items: zItems.map(z => ({
+      id: z.id,
+      level: 'zona',
+      name: z.name,
+      color: z.color,
+      sub: plural(sectorsOf(z.id).length, 'sector', 'sectores'),
+      badge: String(zoneMeetings(z)),
+      selected: selZ.value === z.id,
+    })),
+  })
+
+  // Sectores
+  const zone = selZone.value
+  const sItems = zone ? sectorsOf(zone.id).filter(s => matches(s.name)) : []
+  cols.push({
+    level: 'sector',
+    label: 'Sectores',
+    accent: LEVEL_ACCENT.sector,
+    count: zone ? sectorsOf(zone.id).length : 0,
+    canAdd: !!zone,
+    addTitle: 'Agregar sector',
+    hint: zone ? null : 'Selecciona una zona para ver sus sectores.',
+    empty: zone && sItems.length === 0 ? (sectorsOf(zone.id).length ? 'Sin resultados' : 'Esta zona no tiene sectores.') : null,
+    items: sItems.map(s => ({
+      id: s.id,
+      level: 'sector',
+      name: s.name,
+      color: s.color,
+      sub: plural(meetingsOf(s.id).length, 'reunión', 'reuniones'),
+      badge: String(meetingsOf(s.id).length),
+      selected: selS.value === s.id,
+    })),
+  })
+
+  // Reuniones
+  const sector = selSector.value
+  const mItems = sector ? meetingsOf(sector.id).filter(m => matches(m.title)) : []
+  cols.push({
+    level: 'reunion',
+    label: 'Reuniones',
+    accent: LEVEL_ACCENT.reunion,
+    count: sector ? meetingsOf(sector.id).length : 0,
+    canAdd: !!sector,
+    addTitle: 'Asignar reunión',
+    hint: sector ? null : 'Selecciona un sector para ver sus reuniones.',
+    empty: sector && mItems.length === 0 ? (meetingsOf(sector.id).length ? 'Sin resultados' : 'Este sector no tiene reuniones. Usa + para asignar una.') : null,
+    items: mItems.map(m => ({
+      id: m.id,
+      level: 'reunion',
+      name: m.title,
+      color: m.color,
+      sub: `${meetingDay(m)} · ${fmtTime(m.startTime)}`,
+      badge: String(m.expectedAttendees),
+      selected: selM.value === m.id,
+    })),
+  })
+
+  return cols
 })
 
-const selectedKindLabel = computed(() => {
-    if (selectedKind.value === 'district') return 'Distrito'
-    if (selectedKind.value === 'zone') return 'Zona'
-    if (selectedKind.value === 'sector') return 'Sector'
-    return ''
-})
-
-const selectedParentInfo = computed(() => {
-    if (!selectedItem.value || !selectedKind.value) return null
-    if (selectedKind.value === 'zone') {
-        const d = districts.value.find((x) => x.id === (selectedItem.value as MockZone).districtId)
-        return d ? { label: 'Distrito', name: d.name } : null
-    }
-    if (selectedKind.value === 'sector') {
-        const z = zones.value.find((x) => x.id === (selectedItem.value as MockTerritorySector).zoneId)
-        if (!z) return null
-        const d = districts.value.find((x) => x.id === z.districtId)
-        return { label: 'Zona', name: `${z.name}${d ? ` · ${d.name}` : ''}` }
-    }
-    return null
-})
-
-const summary = computed(() => ({
-    districts: districts.value.length,
-    zones: zones.value.length,
-    sectors: sectors.value.length,
+// ===== totals & breadcrumb =====
+const totals = computed(() => ({
+  d: districts.value.length,
+  z: zones.value.length,
+  s: sectors.value.length,
+  m: meetings.value.length,
 }))
 
-function toggleDistrict(id: string) {
-    if (expandedDistricts.value.has(id)) expandedDistricts.value.delete(id)
-    else expandedDistricts.value.add(id)
-    expandedDistricts.value = new Set(expandedDistricts.value)
-}
-function toggleZone(id: string) {
-    if (expandedZones.value.has(id)) expandedZones.value.delete(id)
-    else expandedZones.value.add(id)
-    expandedZones.value = new Set(expandedZones.value)
+const crumbs = computed(() => {
+  const list: { name: string, level: Level, id: string }[] = []
+  if (selDist.value) list.push({ name: selDist.value.name, level: 'distrito', id: selDist.value.id })
+  if (selZone.value) list.push({ name: selZone.value.name, level: 'zona', id: selZone.value.id })
+  if (selSector.value) list.push({ name: selSector.value.name, level: 'sector', id: selSector.value.id })
+  if (selM.value && selSector.value) {
+    const m = meetingsOf(selSector.value.id).find(x => x.id === selM.value)
+    if (m) list.push({ name: m.title, level: 'reunion', id: m.id })
+  }
+  return list
+})
+
+// ===== selection =====
+function select(level: Level, id: string) {
+  closeMenu()
+  if (level === 'distrito') {
+    selD.value = id
+    selZ.value = null
+    selS.value = null
+    selM.value = null
+  }
+  else if (level === 'zona') {
+    selZ.value = id
+    selS.value = null
+    selM.value = null
+  }
+  else if (level === 'sector') {
+    selS.value = id
+    selM.value = null
+  }
+  else {
+    selM.value = id
+    drawer.value = { level: 'reunion', id }
+  }
 }
 
-function selectItem(kind: Kind, id: string) {
-    selectedKind.value = kind
-    selectedId.value = id
-    if (editingPolygon.value) cancelPolygonEdit()
-    if (kind === 'zone') {
-        const z = zones.value.find((x) => x.id === id)
-        if (z) expandedDistricts.value = new Set([...expandedDistricts.value, z.districtId])
-    } else if (kind === 'sector') {
-        const s = sectors.value.find((x) => x.id === id)
-        if (s) {
-            const z = zones.value.find((x) => x.id === s.zoneId)
-            if (z) {
-                expandedDistricts.value = new Set([...expandedDistricts.value, z.districtId])
-                expandedZones.value = new Set([...expandedZones.value, z.id])
-            }
-        }
-    }
-    centerOnPolygon((findById(kind, id) as AnyTerritory).polygon)
+function clearSelection() {
+  selD.value = null
+  selZ.value = null
+  selS.value = null
+  selM.value = null
+  drawer.value = null
 }
 
-function paletteFor(kind: Kind): string[] {
-    if (kind === 'district') return districtPalette
-    if (kind === 'zone') return zonePalette
-    return sectorPalette
+// ===== context menu =====
+function openMenu(level: Level, id: string, event: MouseEvent) {
+  event.stopPropagation()
+  if (menuFor.value === id) {
+    closeMenu()
+    return
+  }
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  menuPos.left = Math.max(12, rect.right - 208)
+  menuPos.top = rect.bottom + 6
+  menuFor.value = id
+  menuLevel.value = level
+  menuMode.value = 'normal'
+}
+function closeMenu() {
+  menuFor.value = null
+  menuLevel.value = null
+  menuMode.value = 'normal'
 }
 
-function openCreate(kind: Kind, parentId?: string) {
-    formMode.value = 'create'
-    formKind.value = kind
-    formParentId.value = parentId ?? null
-    const palette = paletteFor(kind)
-    formData.id = ''
-    formData.name = ''
-    formData.code = ''
-    formData.description = ''
-    formData.leaderName = ''
-    formData.color = palette[Math.floor(Math.random() * palette.length)] || palette[0]!
-    formOpen.value = true
+const canMove = computed(() => menuLevel.value !== null && menuLevel.value !== 'distrito')
+
+const menuName = computed(() => {
+  if (!menuFor.value || !menuLevel.value) return ''
+  return findEntity(menuLevel.value, menuFor.value)?.name ?? ''
+})
+
+// ===== detail drawer =====
+function openDetail(level: Level, id: string) {
+  drawer.value = { level, id }
+  closeMenu()
+}
+function closeDrawer() {
+  drawer.value = null
 }
 
-function openEdit(kind: Kind, id: string) {
-    const item = findById(kind, id)
-    if (!item) return
-    formMode.value = 'edit'
-    formKind.value = kind
-    formParentId.value =
-        kind === 'zone' ? (item as MockZone).districtId : kind === 'sector' ? (item as MockTerritorySector).zoneId : null
-    formData.id = item.id
-    formData.name = item.name
-    formData.code = item.code
-    formData.description = item.description
-    formData.leaderName = item.leaderName
-    formData.color = item.color
-    formOpen.value = true
+interface DetailField {
+  label: string
+  value: string
+}
+interface EntityLike {
+  name: string
 }
 
-function defaultPolygonNear(center: LatLng): Polygon {
-    const [lat, lng] = center
-    const d = 0.015
-    return [
-        [lat + d, lng - d],
-        [lat + d, lng + d],
-        [lat - d, lng + d],
-        [lat - d, lng - d],
+function findDistrict(id: string) {
+  return districts.value.find(d => d.id === id) ?? null
+}
+function findEntity(level: Level, id: string): EntityLike | null {
+  if (level === 'distrito') return findDistrict(id)
+  if (level === 'zona') return zones.value.find(z => z.id === id) ?? null
+  if (level === 'sector') return sectors.value.find(s => s.id === id) ?? null
+  const m = meetings.value.find(x => x.id === id)
+  return m ? { name: m.title } : null
+}
+function zoneParent(zoneId: string) {
+  const z = zones.value.find(x => x.id === zoneId)
+  return z ? findDistrict(z.districtId) : null
+}
+function sectorParent(sectorId: string) {
+  const s = sectors.value.find(x => x.id === sectorId)
+  if (!s) return null
+  const z = zones.value.find(x => x.id === s.zoneId)
+  const d = z ? findDistrict(z.districtId) : null
+  return { sector: s, zone: z ?? null, district: d }
+}
+function meetingParent(meetingId: string) {
+  const m = meetings.value.find(x => x.id === meetingId)
+  if (!m) return null
+  return { meeting: m, ...(sectorParent(m.sectorId) ?? { sector: null, zone: null, district: null }) }
+}
+
+const detail = computed(() => {
+  if (!drawer.value) return null
+  const { level, id } = drawer.value
+
+  if (level === 'distrito') {
+    const d = findDistrict(id)
+    if (!d) return null
+    const fields: DetailField[] = [
+      { label: 'Pastor', value: d.leaderName || '—' },
+      { label: 'Código', value: d.code },
+      { label: 'Zonas', value: String(zonesOf(d.id).length) },
+      { label: 'Sectores', value: String(districtSectors(d)) },
+      { label: 'Reuniones', value: String(districtMeetings(d)) },
+      { label: 'Creado', value: new Date(d.createdAt).getFullYear().toString() },
     ]
+    if (d.description) fields.push({ label: 'Descripción', value: d.description })
+    return { level, levelLabel: LEVEL_LABEL.distrito, accent: LEVEL_ACCENT.distrito, name: d.name, fields }
+  }
+
+  if (level === 'zona') {
+    const z = zones.value.find(x => x.id === id)
+    if (!z) return null
+    const parent = zoneParent(z.id)
+    const fields: DetailField[] = [
+      { label: 'Líder', value: z.leaderName || '—' },
+      { label: 'Distrito', value: parent?.name ?? '—' },
+      { label: 'Código', value: z.code },
+      { label: 'Sectores', value: String(sectorsOf(z.id).length) },
+      { label: 'Reuniones', value: String(zoneMeetings(z)) },
+    ]
+    return { level, levelLabel: LEVEL_LABEL.zona, accent: LEVEL_ACCENT.zona, name: z.name, fields }
+  }
+
+  if (level === 'sector') {
+    const parent = sectorParent(id)
+    if (!parent?.sector) return null
+    const s = parent.sector
+    const fields: DetailField[] = [
+      { label: 'Líder', value: s.leaderName || '—' },
+      { label: 'Zona', value: parent.zone?.name ?? '—' },
+      { label: 'Distrito', value: parent.district?.name ?? '—' },
+      { label: 'Código', value: s.code },
+      { label: 'Reuniones', value: String(meetingsOf(s.id).length) },
+    ]
+    return { level, levelLabel: LEVEL_LABEL.sector, accent: LEVEL_ACCENT.sector, name: s.name, fields }
+  }
+
+  const parent = meetingParent(id)
+  if (!parent?.meeting) return null
+  const m = parent.meeting
+  const type = mockMeetingTypes.find(t => t.id === m.typeId)
+  const supervisor = mockSupervisors.find(s => s.id === m.supervisorId)
+  const frequency = frequencyOptions.find(f => f.value === m.frequency)
+  const status = statusOptions.find(st => st.value === m.status)
+  const fields: DetailField[] = [
+    { label: 'Tipo', value: type?.label ?? '—' },
+    { label: 'Supervisor', value: supervisor?.name ?? '—' },
+    { label: 'Día', value: meetingDay(m) },
+    { label: 'Hora', value: `${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}` },
+    { label: 'Ubicación', value: m.location || '—' },
+    { label: 'Frecuencia', value: frequency?.label ?? '—' },
+    { label: 'Estado', value: status?.label ?? '—' },
+    { label: 'Asistentes', value: String(m.expectedAttendees) },
+    { label: 'Sector', value: parent.sector?.name ?? '—' },
+    { label: 'Zona', value: parent.zone?.name ?? '—' },
+  ]
+  return { level, levelLabel: LEVEL_LABEL.reunion, accent: LEVEL_ACCENT.reunion, name: m.title, fields }
+})
+
+// ===== move =====
+interface MoveTarget {
+  id: string
+  name: string
+}
+const moveTargets = computed<MoveTarget[]>(() => {
+  if (!menuFor.value || !menuLevel.value) return []
+  const level = menuLevel.value
+  const id = menuFor.value
+  if (level === 'zona') {
+    const parent = zoneParent(id)
+    return districts.value.filter(d => !parent || d.id !== parent.id).map(d => ({ id: d.id, name: d.name }))
+  }
+  if (level === 'sector') {
+    const parent = sectorParent(id)
+    const targets: MoveTarget[] = []
+    districts.value.forEach(d =>
+      zonesOf(d.id).forEach((z) => {
+        if (!parent?.zone || z.id !== parent.zone.id) targets.push({ id: z.id, name: `${d.name} · ${z.name}` })
+      }),
+    )
+    return targets
+  }
+  if (level === 'reunion') {
+    const parent = meetingParent(id)
+    const targets: MoveTarget[] = []
+    zones.value.forEach(z =>
+      sectorsOf(z.id).forEach((s) => {
+        if (!parent?.sector || s.id !== parent.sector.id) targets.push({ id: s.id, name: `${z.name} · ${s.name}` })
+      }),
+    )
+    return targets
+  }
+  return []
+})
+
+function moveEntity(targetId: string) {
+  if (!menuFor.value || !menuLevel.value) return
+  const level = menuLevel.value
+  const id = menuFor.value
+  if (level === 'zona') {
+    const z = zones.value.find(x => x.id === id)
+    if (z) z.districtId = targetId
+    persistHierarchy()
+  }
+  else if (level === 'sector') {
+    const s = sectors.value.find(x => x.id === id)
+    if (s) s.zoneId = targetId
+    persistHierarchy()
+  }
+  else if (level === 'reunion') {
+    const m = meetings.value.find(x => x.id === id)
+    if (m) m.sectorId = targetId
+    persistMeetings()
+  }
+  closeMenu()
+  toast.success(`${LEVEL_LABEL[level]} movido`)
 }
 
-function saveForm() {
-    if (!formData.name.trim()) {
-        toast.error('El nombre es obligatorio')
-        return
+// ===== delete (district/zone/sector) =====
+function removeEntity() {
+  if (!menuFor.value || !menuLevel.value) return
+  const level = menuLevel.value
+  const id = menuFor.value
+
+  if (level === 'distrito') {
+    const childZones = zonesOf(id).map(z => z.id)
+    sectors.value = sectors.value.filter(s => !childZones.includes(s.zoneId))
+    zones.value = zones.value.filter(z => z.districtId !== id)
+    districts.value = districts.value.filter(d => d.id !== id)
+    if (selD.value === id) clearSelection()
+  }
+  else if (level === 'zona') {
+    sectors.value = sectors.value.filter(s => s.zoneId !== id)
+    zones.value = zones.value.filter(z => z.id !== id)
+    if (selZ.value === id) {
+      selZ.value = null
+      selS.value = null
+      selM.value = null
     }
-    if (!formData.code.trim()) {
-        toast.error('El código es obligatorio')
-        return
+  }
+  else if (level === 'sector') {
+    sectors.value = sectors.value.filter(s => s.id !== id)
+    if (selS.value === id) {
+      selS.value = null
+      selM.value = null
     }
+  }
 
-    if (formMode.value === 'create') {
-        const newId = `${formKind.value}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-        const polygon = defaultPolygonNear(ELSALVADOR_CENTER)
-        const base = {
-            id: newId,
-            name: formData.name,
-            code: formData.code,
-            description: formData.description,
-            leaderName: formData.leaderName,
-            color: formData.color,
-            polygon,
-            createdAt: new Date().toISOString(),
-        }
-        if (formKind.value === 'district') {
-            districts.value.push({ ...base })
-        } else if (formKind.value === 'zone') {
-            if (!formParentId.value) {
-                toast.error('Selecciona un distrito padre')
-                return
-            }
-            zones.value.push({ ...base, districtId: formParentId.value })
-        } else {
-            if (!formParentId.value) {
-                toast.error('Selecciona una zona padre')
-                return
-            }
-            sectors.value.push({ ...base, zoneId: formParentId.value })
-        }
-        toast.success(`${selectedKindLabelFor(formKind.value)} creado`)
-        selectItem(formKind.value, newId)
-    } else {
-        const item = findById(formKind.value, formData.id)
-        if (!item) return
-        item.name = formData.name
-        item.code = formData.code
-        item.description = formData.description
-        item.leaderName = formData.leaderName
-        item.color = formData.color
-        toast.success('Cambios guardados')
+  if (drawer.value?.id === id) drawer.value = null
+  persistHierarchy()
+  const label = LEVEL_LABEL[level]
+  closeMenu()
+  toast.success(`${label} eliminado`)
+}
+
+// ===== reunion actions =====
+function goToMeeting(id: string) {
+  closeMenu()
+  navigateTo(`/catalogos/reuniones/${id}/editar`)
+}
+function unassignMeeting(id: string) {
+  const m = meetings.value.find(x => x.id === id)
+  if (m) m.sectorId = ''
+  if (selM.value === id) selM.value = null
+  if (drawer.value?.id === id) drawer.value = null
+  persistMeetings()
+  closeMenu()
+  toast.success('Reunión quitada del sector')
+}
+
+// ===== entity form (create/edit) =====
+function toEntityInput(e: MockDistrict | MockZone | MockTerritorySector): EntityInput {
+  return { name: e.name, code: e.code, leaderName: e.leaderName, description: e.description, color: e.color, polygon: e.polygon }
+}
+
+function openCreate(level: EntityLevel) {
+  closeMenu()
+  formMode.value = 'create'
+  formLevel.value = level
+  formEntity.value = null
+  formEditId = null
+  formParentDistrictId = null
+  formParentZoneId = null
+
+  if (level === 'distrito') {
+    formParentCentroid.value = ELSALVADOR_CENTER
+    formParentLabel.value = null
+  }
+  else if (level === 'zona') {
+    const d = selDist.value
+    if (!d) return
+    formParentDistrictId = d.id
+    formParentCentroid.value = centroid(d.polygon)
+    formParentLabel.value = d.name
+  }
+  else {
+    const z = selZone.value
+    const d = selDist.value
+    if (!z) return
+    formParentZoneId = z.id
+    formParentCentroid.value = centroid(z.polygon)
+    formParentLabel.value = d ? `${d.name} · ${z.name}` : z.name
+  }
+  formOpen.value = true
+}
+
+function editFromMenu() {
+  const level = menuLevel.value
+  const id = menuFor.value
+  if (!level || !id || level === 'reunion') return
+  openEdit(level, id)
+}
+
+function openEdit(level: EntityLevel, id: string) {
+  closeMenu()
+  let entity: MockDistrict | MockZone | MockTerritorySector | undefined
+  let parentLabel: string | null = null
+  if (level === 'distrito') {
+    entity = districts.value.find(d => d.id === id)
+  }
+  else if (level === 'zona') {
+    entity = zones.value.find(z => z.id === id)
+    parentLabel = entity ? zoneParent(entity.id)?.name ?? null : null
+  }
+  else {
+    entity = sectors.value.find(s => s.id === id)
+    const p = entity ? sectorParent(entity.id) : null
+    parentLabel = p ? `${p.district?.name ?? '—'} · ${p.zone?.name ?? '—'}` : null
+  }
+  if (!entity) return
+
+  formMode.value = 'edit'
+  formLevel.value = level
+  formEditId = id
+  formEntity.value = toEntityInput(entity)
+  formParentCentroid.value = centroid(entity.polygon)
+  formParentLabel.value = parentLabel
+  formOpen.value = true
+}
+
+function onFormSave(payload: EntityInput) {
+  const level = formLevel.value
+  const nowIso = new Date().toISOString()
+
+  if (formMode.value === 'create') {
+    const id = `${level}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    if (level === 'distrito') {
+      districts.value.push({ id, ...payload, createdAt: nowIso })
+      selD.value = id
+      selZ.value = null
+      selS.value = null
+      selM.value = null
     }
-
-    persist()
-    formOpen.value = false
-}
-
-function selectedKindLabelFor(kind: Kind) {
-    if (kind === 'district') return 'Distrito'
-    if (kind === 'zone') return 'Zona'
-    return 'Sector'
-}
-
-function askDelete(kind: Kind, id: string) {
-    deleteTarget.value = { kind, id }
-    deleteDialogOpen.value = true
-}
-
-function confirmDelete() {
-    if (!deleteTarget.value) return
-    const { kind, id } = deleteTarget.value
-    if (kind === 'district') {
-        const childZones = zones.value.filter((z) => z.districtId === id).map((z) => z.id)
-        sectors.value = sectors.value.filter((s) => !childZones.includes(s.zoneId))
-        zones.value = zones.value.filter((z) => z.districtId !== id)
-        districts.value = districts.value.filter((d) => d.id !== id)
-    } else if (kind === 'zone') {
-        sectors.value = sectors.value.filter((s) => s.zoneId !== id)
-        zones.value = zones.value.filter((z) => z.id !== id)
-    } else {
-        sectors.value = sectors.value.filter((s) => s.id !== id)
+    else if (level === 'zona' && formParentDistrictId) {
+      zones.value.push({ id, districtId: formParentDistrictId, ...payload, createdAt: nowIso })
+      selZ.value = id
+      selS.value = null
+      selM.value = null
     }
-    if (selectedId.value === id) {
-        selectedId.value = null
-        selectedKind.value = null
+    else if (level === 'sector' && formParentZoneId) {
+      sectors.value.push({ id, zoneId: formParentZoneId, ...payload, createdAt: nowIso })
+      selS.value = id
+      selM.value = null
     }
-    persist()
-    deleteDialogOpen.value = false
-    deleteTarget.value = null
-    toast.success('Eliminado')
-}
-
-function startPolygonEdit() {
-    if (!selectedItem.value) return
-    tempPolygon.value = []
-    editingPolygon.value = true
-    toast.info('Click en el mapa para definir vértices. Doble click para finalizar.')
-}
-
-function cancelPolygonEdit() {
-    editingPolygon.value = false
-    tempPolygon.value = []
-}
-
-function savePolygonEdit() {
-    if (!selectedItem.value || tempPolygon.value.length < 3) {
-        toast.error('Necesitas al menos 3 puntos')
-        return
+    toast.success(`${LEVEL_LABEL[level]} creado`)
+  }
+  else if (formEditId) {
+    const target
+      = level === 'distrito'
+        ? districts.value.find(d => d.id === formEditId)
+        : level === 'zona'
+          ? zones.value.find(z => z.id === formEditId)
+          : sectors.value.find(s => s.id === formEditId)
+    if (target) {
+      target.name = payload.name
+      target.code = payload.code
+      target.leaderName = payload.leaderName
+      target.description = payload.description
+      target.color = payload.color
+      target.polygon = payload.polygon
     }
-    selectedItem.value.polygon = [...tempPolygon.value]
-    persist()
-    editingPolygon.value = false
-    tempPolygon.value = []
-    toast.success('Polígono actualizado')
+    toast.success('Cambios guardados')
+  }
+
+  persistHierarchy()
+  formOpen.value = false
 }
 
-function addTempPoint(latlng: LatLng) {
-    if (!editingPolygon.value) return
-    tempPolygon.value = [...tempPolygon.value, latlng]
+// ===== assign meetings =====
+interface AssignItem {
+  id: string
+  title: string
+  meta: string
+  color: string
+  assigned: boolean
+}
+const assignItems = computed<AssignItem[]>(() => {
+  const sector = selSector.value
+  if (!sector) return []
+  return meetings.value.map(m => ({
+    id: m.id,
+    title: m.title,
+    color: m.color,
+    meta: `${sectorLabelOf(m.sectorId)} · ${meetingDay(m)} ${fmtTime(m.startTime)}`,
+    assigned: m.sectorId === sector.id,
+  }))
+})
+
+function openAssign() {
+  closeMenu()
+  if (!selSector.value) return
+  assignOpen.value = true
+}
+function assignMeeting(id: string) {
+  const sector = selSector.value
+  if (!sector) return
+  const m = meetings.value.find(x => x.id === id)
+  if (m) m.sectorId = sector.id
+  persistMeetings()
+  toast.success('Reunión asignada')
 }
 
-function undoTempPoint() {
-    if (tempPolygon.value.length === 0) return
-    tempPolygon.value = tempPolygon.value.slice(0, -1)
+function onColumnAdd(level: Level) {
+  if (level === 'reunion') openAssign()
+  else openCreate(level)
 }
 
-// ===== Leaflet integration =====
-const mapContainer = ref<HTMLElement | null>(null)
+// ===== locator map (Leaflet, detail drawer) =====
+const mapEl = ref<HTMLElement | null>(null)
 let map: import('leaflet').Map | null = null
-let polygonLayers = new Map<string, import('leaflet').Polygon>()
-let tempPolygonLayer: import('leaflet').Polygon | null = null
-let tempMarkers: import('leaflet').CircleMarker[] = []
 let L: typeof import('leaflet') | null = null
 
-async function initMap() {
-    if (!import.meta.client || !mapContainer.value) return
-    L = (await import('leaflet')).default ?? (await import('leaflet'))
-    if (!L || !mapContainer.value) return
+function polygonFor(level: Level, id: string): Polygon | null {
+  if (level === 'distrito') return findDistrict(id)?.polygon ?? null
+  if (level === 'zona') return zones.value.find(z => z.id === id)?.polygon ?? null
+  if (level === 'sector') return sectors.value.find(s => s.id === id)?.polygon ?? null
+  const parent = meetingParent(id)
+  return parent?.sector?.polygon ?? null
+}
 
-    map = L.map(mapContainer.value, {
-        center: ELSALVADOR_CENTER,
-        zoom: DEFAULT_MAP_ZOOM,
-        zoomControl: true,
-        attributionControl: true,
-    })
+function destroyMap() {
+  if (map) {
+    map.remove()
+    map = null
+  }
+}
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap · © CARTO',
-        subdomains: 'abcd',
-        maxZoom: 20,
+async function renderMap() {
+  if (!import.meta.client || !drawer.value) return
+  const { level, id } = drawer.value
+
+  // A meeting shows a single point: its saved position, or its sector's centroid as a fallback.
+  const meetingPoint
+    = level === 'reunion'
+      ? (meetings.value.find(m => m.id === id)?.position
+        ?? (() => {
+          const poly = polygonFor(level, id)
+          return poly && poly.length ? centroid(poly) : null
+        })())
+      : null
+
+  const polygon = polygonFor(level, id)
+  if (level !== 'reunion' && (!polygon || polygon.length === 0)) {
+    destroyMap()
+    return
+  }
+  if (level === 'reunion' && !meetingPoint) {
+    destroyMap()
+    return
+  }
+  if (!L) L = (await import('leaflet')).default ?? (await import('leaflet'))
+  await nextTick()
+  if (!mapEl.value || !L) return
+  destroyMap()
+
+  const accent = detail.value?.accent ?? '#e9c176'
+  map = L.map(mapEl.value, {
+    zoomControl: true,
+    attributionControl: false,
+    scrollWheelZoom: false,
+    dragging: true,
+  })
+  map.zoomControl.setPosition('topright')
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 20,
+  }).addTo(map)
+
+  if (level === 'reunion') {
+    const point = meetingPoint!
+    map.setView(point, 15)
+    L.circleMarker(point, {
+      radius: 9,
+      color: accent,
+      weight: 2,
+      fillColor: accent,
+      fillOpacity: 0.45,
     }).addTo(map)
-
-    map.on('click', (e: any) => {
-        if (editingPolygon.value) {
-            addTempPoint([e.latlng.lat, e.latlng.lng])
-        }
-    })
-    map.on('dblclick', (e: any) => {
-        if (editingPolygon.value) {
-            e.originalEvent.preventDefault()
-            savePolygonEdit()
-        }
-    })
-
-    renderPolygons()
+  }
+  else {
+    const shape = L.polygon(polygon!, {
+      color: accent,
+      weight: 2,
+      fillColor: accent,
+      fillOpacity: 0.12,
+      dashArray: '5 5',
+    }).addTo(map)
+    map.fitBounds(shape.getBounds(), { padding: [22, 22] })
+  }
+  const current = map
+  setTimeout(() => current?.invalidateSize(), 60)
 }
-
-function clearPolygons() {
-    polygonLayers.forEach((layer) => layer.remove())
-    polygonLayers.clear()
-}
-
-function renderPolygons() {
-    if (!map || !L) return
-    clearPolygons()
-
-    const drawForKind = (
-        items: AnyTerritory[],
-        kind: Kind,
-        weight: number,
-        fillOpacity: number,
-    ) => {
-        for (const item of items) {
-            if (kind === 'district' && !layers.districts) continue
-            if (kind === 'zone' && !layers.zones) continue
-            if (kind === 'sector' && !layers.sectors) continue
-            const isSelected = selectedId.value === item.id && selectedKind.value === kind
-            const polygon = L!
-                .polygon(item.polygon, {
-                    color: item.color,
-                    weight: isSelected ? weight + 2 : weight,
-                    fillColor: item.color,
-                    fillOpacity: isSelected ? fillOpacity + 0.15 : fillOpacity,
-                    dashArray: kind === 'district' ? undefined : kind === 'zone' ? '6,4' : '2,3',
-                })
-                .addTo(map!)
-            polygon.bindTooltip(`<strong>${item.name}</strong><br><span style="font-size:10px;opacity:0.7">${selectedKindLabelFor(kind).toUpperCase()} · ${item.code}</span>`, {
-                sticky: true,
-                direction: 'top',
-                className: 'territory-tooltip',
-            })
-            polygon.on('click', (e: any) => {
-                e.originalEvent.stopPropagation()
-                if (editingPolygon.value) return
-                selectItem(kind, item.id)
-            })
-            polygonLayers.set(`${kind}-${item.id}`, polygon)
-        }
-    }
-
-    drawForKind(districts.value, 'district', 3, 0.08)
-    drawForKind(zones.value, 'zone', 2.5, 0.1)
-    drawForKind(sectors.value, 'sector', 2, 0.18)
-
-    renderTempPolygon()
-}
-
-function renderTempPolygon() {
-    if (!map || !L) return
-    tempPolygonLayer?.remove()
-    tempPolygonLayer = null
-    tempMarkers.forEach((m) => m.remove())
-    tempMarkers = []
-    if (!editingPolygon.value || tempPolygon.value.length === 0) return
-    if (tempPolygon.value.length >= 2) {
-        tempPolygonLayer = L.polygon(tempPolygon.value, {
-            color: '#e9c176',
-            weight: 3,
-            fillColor: '#e9c176',
-            fillOpacity: 0.2,
-            dashArray: '4,4',
-        }).addTo(map)
-    }
-    tempPolygon.value.forEach((pt, i) => {
-        const marker = L!
-            .circleMarker(pt, {
-                radius: 6,
-                color: '#fff',
-                weight: 2,
-                fillColor: '#e9c176',
-                fillOpacity: 1,
-            })
-            .addTo(map!)
-        marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'territory-vertex' })
-        tempMarkers.push(marker)
-    })
-}
-
-function centerOnPolygon(polygon: Polygon) {
-    if (!map || !L || polygon.length === 0) return
-    const bounds = L.latLngBounds(polygon as any)
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 })
-}
-
-onMounted(async () => {
-    loadFromStorage()
-    await nextTick()
-    await initMap()
-})
-
-onBeforeUnmount(() => {
-    if (map) {
-        map.remove()
-        map = null
-    }
-})
 
 watch(
-    () => [layers.districts, layers.zones, layers.sectors, selectedId.value, selectedKind.value, districts.value.length, zones.value.length, sectors.value.length],
-    () => renderPolygons(),
-    { deep: true },
+  () => (drawer.value ? `${drawer.value.level}:${drawer.value.id}` : ''),
+  (key) => {
+    if (!key) {
+      destroyMap()
+      return
+    }
+    renderMap()
+  },
 )
-watch(tempPolygon, () => renderTempPolygon(), { deep: true })
 
-const districtOptions = computed(() => districts.value.map((d) => ({ value: d.id, label: d.name })))
-const zoneOptions = computed(() => zones.value.map((z) => ({ value: z.id, label: z.name })))
-const formCurrentPalette = computed(() => paletteFor(formKind.value))
+onMounted(() => {
+  loadHierarchy()
+  loadMeetings()
+})
+onBeforeUnmount(() => {
+  destroyMap()
+})
 </script>
 
 <template>
-    <div class="flex h-[calc(100vh-4rem)] flex-col">
-        <header class="border-b border-outline-variant bg-surface px-6 py-4 lg:px-10">
-            <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <p class="text-[11px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
-                        Catálogos · Geografía Ministerial
-                    </p>
-                    <h1 class="mt-2 font-display text-2xl font-semibold text-on-surface md:text-3xl">
-                        Distritos, Zonas y Sectores
-                    </h1>
-                </div>
-                <div class="flex items-center gap-5 text-xs text-on-surface-variant">
-                    <div class="flex items-center gap-1.5">
-                        <span class="size-2 rounded-full bg-[#e9c176]" />
-                        <span>{{ summary.districts }} distritos</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="size-2 rounded-full bg-[#9bc1bc]" />
-                        <span>{{ summary.zones }} zonas</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="size-2 rounded-full bg-[#a3b18a]" />
-                        <span>{{ summary.sectors }} sectores</span>
-                    </div>
-                </div>
-            </div>
+  <div class="flex h-screen flex-col bg-surface-container-lowest pt-[72px]">
+    <!-- Toolbar: breadcrumb, totals, search -->
+    <div
+      class="flex flex-none flex-col gap-3 border-b border-outline-variant bg-surface-container px-6 py-3.5 lg:flex-row lg:items-center lg:px-10"
+    >
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
+          Gestión de jerarquía
+        </p>
+        <div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
+          <button
+            type="button"
+            class="font-semibold text-primary hover:underline"
+            @click="clearSelection"
+          >
+            Jerarquía
+          </button>
+          <template
+            v-for="c in crumbs"
+            :key="c.id"
+          >
+            <span class="text-outline">/</span>
+            <button
+              type="button"
+              class="text-on-surface hover:text-primary"
+              @click="select(c.level, c.id)"
+            >
+              {{ c.name }}
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2 lg:ml-auto">
+        <div class="flex items-center gap-4 text-xs text-on-surface-variant">
+          <span><strong class="font-semibold text-on-surface">{{ totals.d }}</strong> distritos</span>
+          <span><strong class="font-semibold text-on-surface">{{ totals.z }}</strong> zonas</span>
+          <span><strong class="font-semibold text-on-surface">{{ totals.s }}</strong> sectores</span>
+          <span><strong class="font-semibold text-on-surface">{{ totals.m }}</strong> reuniones</span>
+        </div>
+        <div
+          class="flex items-center gap-2 rounded-full border border-outline-variant bg-surface px-4 py-2 sm:w-72"
+        >
+          <Search class="size-4 shrink-0 text-on-surface-variant" />
+          <input
+            v-model="query"
+            type="text"
+            placeholder="Buscar distrito, zona, sector…"
+            class="w-full bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant"
+          >
+          <button
+            v-if="query"
+            type="button"
+            class="shrink-0 text-on-surface-variant hover:text-on-surface"
+            aria-label="Limpiar búsqueda"
+            @click="query = ''"
+          >
+            <X class="size-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Miller columns -->
+    <main class="flex min-h-0 flex-1 overflow-x-auto bg-surface">
+      <section
+        v-for="col in columns"
+        :key="col.level"
+        class="flex min-w-[240px] flex-1 flex-col border-r border-outline-variant last:border-r-0"
+      >
+        <header
+          class="flex flex-none items-center justify-between border-b border-outline-variant px-4 py-2.5"
+        >
+          <div class="flex items-center gap-2">
+            <span
+              class="text-[11px] font-bold uppercase tracking-[0.16em]"
+              :style="{ color: col.accent }"
+            >
+              {{ col.label }}
+            </span>
+            <span
+              class="rounded-full bg-surface-container px-2.5 py-0.5 text-[11px] font-semibold text-on-surface-variant"
+            >
+              {{ col.count }}
+            </span>
+          </div>
+          <button
+            v-if="col.canAdd"
+            type="button"
+            class="flex size-7 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+            :title="col.addTitle"
+            :aria-label="col.addTitle"
+            @click="onColumnAdd(col.level)"
+          >
+            <Plus class="size-4" />
+          </button>
         </header>
 
-        <div class="flex flex-1 overflow-hidden">
-            <aside class="hidden w-80 shrink-0 flex-col border-r border-outline-variant bg-surface-container md:flex">
-                <div class="flex items-center justify-between border-b border-outline-variant px-4 py-3">
-                    <h2 class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Jerarquía</h2>
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90"
-                        @click="openCreate('district')"
-                    >
-                        <Plus class="size-3" /> Distrito
-                    </button>
-                </div>
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <p
+            v-if="col.hint"
+            class="px-5 py-10 text-center text-sm leading-relaxed text-on-surface-variant"
+          >
+            {{ col.hint }}
+          </p>
+          <p
+            v-else-if="col.empty"
+            class="px-5 py-10 text-center text-sm italic text-on-surface-variant"
+          >
+            {{ col.empty }}
+          </p>
 
-                <div class="flex items-center gap-3 border-b border-outline-variant px-4 py-2.5 text-[11px]">
-                    <Layers class="size-3.5 text-on-surface-variant" />
-                    <label class="flex items-center gap-1.5 text-on-surface-variant">
-                        <input v-model="layers.districts" type="checkbox" class="size-3 accent-primary" />
-                        Distritos
-                    </label>
-                    <label class="flex items-center gap-1.5 text-on-surface-variant">
-                        <input v-model="layers.zones" type="checkbox" class="size-3 accent-primary" />
-                        Zonas
-                    </label>
-                    <label class="flex items-center gap-1.5 text-on-surface-variant">
-                        <input v-model="layers.sectors" type="checkbox" class="size-3 accent-primary" />
-                        Sectores
-                    </label>
-                </div>
+          <button
+            v-for="it in col.items"
+            :key="it.id"
+            type="button"
+            class="group relative flex w-full items-center gap-3 border-b border-outline-variant/50 px-4 py-3 text-left transition-colors hover:bg-surface-container-high"
+            :class="it.selected ? 'bg-primary/10' : ''"
+            @click="select(it.level, it.id)"
+          >
+            <span
+              v-if="it.selected"
+              class="absolute inset-y-0 left-0 w-[3px] bg-primary"
+            />
+            <span
+              class="size-2.5 shrink-0 rounded-full"
+              :style="{ backgroundColor: it.color }"
+            />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-semibold text-on-surface">{{ it.name }}</span>
+              <span class="mt-0.5 block truncate text-xs text-on-surface-variant">{{ it.sub }}</span>
+            </span>
+            <span
+              class="shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
+            >
+              {{ it.badge }}
+            </span>
+            <span
+              class="flex size-7 shrink-0 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+              role="button"
+              :aria-label="`Acciones de ${it.name}`"
+              @click="openMenu(it.level, it.id, $event)"
+            >
+              <MoreHorizontal class="size-4" />
+            </span>
+          </button>
+        </div>
+      </section>
+    </main>
 
-                <div class="flex-1 overflow-y-auto px-2 py-2">
-                    <div v-if="districts.length === 0" class="px-3 py-8 text-center text-xs text-on-surface-variant">
-                        Aún no hay distritos. Crea el primero arriba.
-                    </div>
-                    <ul class="space-y-0.5">
-                        <li v-for="d in districts" :key="d.id">
-                            <div
-                                class="group flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-surface-container-high"
-                                :class="selectedKind === 'district' && selectedId === d.id ? 'bg-primary/10' : ''"
-                            >
-                                <button type="button" class="text-on-surface-variant" @click="toggleDistrict(d.id)">
-                                    <ChevronDown v-if="expandedDistricts.has(d.id)" class="size-3.5" />
-                                    <ChevronRight v-else class="size-3.5" />
-                                </button>
-                                <button type="button" class="flex flex-1 items-center gap-2 truncate text-left" @click="selectItem('district', d.id)">
-                                    <span class="size-3 shrink-0 rounded" :style="{ backgroundColor: d.color }" />
-                                    <span class="truncate text-xs font-semibold text-on-surface">{{ d.name }}</span>
-                                    <span class="text-[10px] text-on-surface-variant">{{ zonesOf(d.id).length }}</span>
-                                </button>
-                                <div class="hidden gap-0.5 group-hover:flex">
-                                    <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" :aria-label="`Editar ${d.name}`" @click="openEdit('district', d.id)">
-                                        <Pencil class="size-3" />
-                                    </button>
-                                    <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" :aria-label="`Añadir zona en ${d.name}`" @click="openCreate('zone', d.id)">
-                                        <Plus class="size-3" />
-                                    </button>
-                                    <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive" :aria-label="`Eliminar ${d.name}`" @click="askDelete('district', d.id)">
-                                        <Trash2 class="size-3" />
-                                    </button>
-                                </div>
-                            </div>
+    <!-- Context menu -->
+    <template v-if="menuFor">
+      <div
+        class="fixed inset-0 z-40"
+        @click="closeMenu"
+      />
+      <div
+        class="fixed z-50 w-52 rounded-xl border border-outline-variant bg-surface-container p-1.5 shadow-2xl"
+        :style="{ left: `${menuPos.left}px`, top: `${menuPos.top}px` }"
+        @click.stop
+      >
+        <template v-if="menuMode === 'normal'">
+          <button
+            type="button"
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
+            @click="openDetail(menuLevel!, menuFor!)"
+          >
+            Ver detalle
+          </button>
+          <button
+            v-if="menuLevel !== 'reunion'"
+            type="button"
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
+            @click="editFromMenu"
+          >
+            Editar
+          </button>
+          <button
+            v-else
+            type="button"
+            class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
+            @click="goToMeeting(menuFor!)"
+          >
+            Ir a reunión
+            <ExternalLink class="size-3.5 text-on-surface-variant" />
+          </button>
+          <button
+            v-if="canMove"
+            type="button"
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
+            @click="menuMode = 'move'"
+          >
+            Mover a…
+          </button>
+          <button
+            v-if="menuLevel !== 'reunion'"
+            type="button"
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+            @click="menuMode = 'confirm'"
+          >
+            Eliminar
+          </button>
+          <button
+            v-else
+            type="button"
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+            @click="unassignMeeting(menuFor!)"
+          >
+            Quitar del sector
+          </button>
+        </template>
 
-                            <ul v-if="expandedDistricts.has(d.id)" class="ml-5 space-y-0.5 border-l border-outline-variant pl-2">
-                                <li v-for="z in zonesOf(d.id)" :key="z.id">
-                                    <div
-                                        class="group flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-surface-container-high"
-                                        :class="selectedKind === 'zone' && selectedId === z.id ? 'bg-primary/10' : ''"
-                                    >
-                                        <button type="button" class="text-on-surface-variant" @click="toggleZone(z.id)">
-                                            <ChevronDown v-if="expandedZones.has(z.id)" class="size-3.5" />
-                                            <ChevronRight v-else class="size-3.5" />
-                                        </button>
-                                        <button type="button" class="flex flex-1 items-center gap-2 truncate text-left" @click="selectItem('zone', z.id)">
-                                            <span class="size-2.5 shrink-0 rounded" :style="{ backgroundColor: z.color }" />
-                                            <span class="truncate text-xs text-on-surface">{{ z.name }}</span>
-                                            <span class="text-[10px] text-on-surface-variant">{{ sectorsOf(z.id).length }}</span>
-                                        </button>
-                                        <div class="hidden gap-0.5 group-hover:flex">
-                                            <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" @click="openEdit('zone', z.id)">
-                                                <Pencil class="size-3" />
-                                            </button>
-                                            <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" @click="openCreate('sector', z.id)">
-                                                <Plus class="size-3" />
-                                            </button>
-                                            <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive" @click="askDelete('zone', z.id)">
-                                                <Trash2 class="size-3" />
-                                            </button>
-                                        </div>
-                                    </div>
+        <template v-else-if="menuMode === 'confirm'">
+          <p class="px-3 py-2 text-sm leading-snug text-on-surface-variant">
+            ¿Eliminar <strong class="text-on-surface">{{ menuName }}</strong>?
+          </p>
+          <div class="flex gap-1.5 p-1">
+            <button
+              type="button"
+              class="flex-1 rounded-lg bg-destructive px-3 py-2 text-sm font-semibold text-white hover:bg-destructive/90"
+              @click="removeEntity"
+            >
+              Eliminar
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high"
+              @click="menuMode = 'normal'"
+            >
+              Cancelar
+            </button>
+          </div>
+        </template>
 
-                                    <ul v-if="expandedZones.has(z.id)" class="ml-5 space-y-0.5 border-l border-outline-variant pl-2">
-                                        <li
-                                            v-for="s in sectorsOf(z.id)"
-                                            :key="s.id"
-                                            class="group flex items-center gap-1 rounded px-2 py-1.5 transition-colors hover:bg-surface-container-high"
-                                            :class="selectedKind === 'sector' && selectedId === s.id ? 'bg-primary/10' : ''"
-                                        >
-                                            <button type="button" class="flex flex-1 items-center gap-2 truncate text-left" @click="selectItem('sector', s.id)">
-                                                <span class="size-2 shrink-0 rounded-full" :style="{ backgroundColor: s.color }" />
-                                                <span class="truncate text-xs text-on-surface">{{ s.name }}</span>
-                                            </button>
-                                            <div class="hidden gap-0.5 group-hover:flex">
-                                                <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary" @click="openEdit('sector', s.id)">
-                                                    <Pencil class="size-3" />
-                                                </button>
-                                                <button type="button" class="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-destructive" @click="askDelete('sector', s.id)">
-                                                    <Trash2 class="size-3" />
-                                                </button>
-                                            </div>
-                                        </li>
-                                    </ul>
-                                </li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
-            </aside>
+        <template v-else>
+          <p class="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
+            Mover a…
+          </p>
+          <div class="max-h-52 overflow-y-auto">
+            <button
+              v-for="t in moveTargets"
+              :key="t.id"
+              type="button"
+              class="block w-full truncate rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
+              @click="moveEntity(t.id)"
+            >
+              {{ t.name }}
+            </button>
+            <p
+              v-if="moveTargets.length === 0"
+              class="px-3 py-2 text-sm italic text-on-surface-variant"
+            >
+              No hay destinos disponibles.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm text-on-surface-variant hover:bg-surface-container-high"
+            @click="menuMode = 'normal'"
+          >
+            Cancelar
+          </button>
+        </template>
+      </div>
+    </template>
 
-            <main class="relative flex-1">
-                <div ref="mapContainer" class="absolute inset-0 z-0 bg-surface-container-low" />
-
-                <div
-                    v-if="editingPolygon"
-                    class="absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-primary/40 bg-surface/95 px-4 py-2 shadow-lg backdrop-blur"
-                >
-                    <Sparkles class="size-4 text-primary" />
-                    <div class="text-xs text-on-surface">
-                        <p class="font-semibold">Editando polígono</p>
-                        <p class="text-on-surface-variant">{{ tempPolygon.length }} puntos · click para añadir, doble click para guardar</p>
-                    </div>
-                    <button type="button" class="rounded border border-outline-variant px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary" @click="undoTempPoint">
-                        <Undo2 class="inline size-3" /> Deshacer
-                    </button>
-                    <button type="button" class="rounded bg-primary px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90" @click="savePolygonEdit">
-                        Guardar
-                    </button>
-                    <button type="button" class="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-destructive hover:bg-destructive/10" @click="cancelPolygonEdit">
-                        Cancelar
-                    </button>
-                </div>
-
-                <aside
-                    v-if="selectedItem && !editingPolygon"
-                    class="absolute right-4 top-4 z-10 w-80 max-w-[calc(100%-2rem)] rounded-lg border border-outline-variant bg-surface/95 shadow-xl backdrop-blur"
-                >
-                    <div class="h-1.5" :style="{ backgroundColor: selectedItem.color }" />
-                    <div class="px-4 py-4">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="min-w-0">
-                                <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
-                                    {{ selectedKindLabel }} · {{ selectedItem.code }}
-                                </p>
-                                <h3 class="mt-1 font-display text-lg font-semibold text-on-surface">
-                                    {{ selectedItem.name }}
-                                </h3>
-                            </div>
-                            <button
-                                type="button"
-                                class="flex size-7 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
-                                @click="selectedId = null; selectedKind = null"
-                            >
-                                <X class="size-3.5" />
-                            </button>
-                        </div>
-
-                        <p v-if="selectedItem.description" class="mt-3 text-xs text-on-surface-variant">
-                            {{ selectedItem.description }}
-                        </p>
-
-                        <div v-if="selectedParentInfo" class="mt-3 flex items-center gap-2 rounded border border-outline-variant bg-surface-container px-3 py-2 text-xs">
-                            <MapPin class="size-3.5 text-on-surface-variant" />
-                            <div class="min-w-0">
-                                <p class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">{{ selectedParentInfo.label }}</p>
-                                <p class="truncate text-on-surface">{{ selectedParentInfo.name }}</p>
-                            </div>
-                        </div>
-
-                        <div class="mt-3 grid gap-2 text-xs">
-                            <div class="flex justify-between">
-                                <span class="text-on-surface-variant">Líder</span>
-                                <span class="font-medium text-on-surface">{{ selectedItem.leaderName || '—' }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-on-surface-variant">Vértices</span>
-                                <span class="font-medium text-on-surface">{{ selectedItem.polygon.length }}</span>
-                            </div>
-                        </div>
-
-                        <div class="mt-4 grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                class="flex items-center justify-center gap-1.5 rounded border border-outline-variant px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary"
-                                @click="openEdit(selectedKind!, selectedItem.id)"
-                            >
-                                <Pencil class="size-3" /> Editar datos
-                            </button>
-                            <button
-                                type="button"
-                                class="flex items-center justify-center gap-1.5 rounded bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90"
-                                @click="startPolygonEdit"
-                            >
-                                <MapIcon class="size-3" /> Redibujar
-                            </button>
-                        </div>
-                    </div>
-                </aside>
-
-                <div
-                    v-if="!selectedItem && !editingPolygon"
-                    class="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-outline-variant bg-surface/95 px-4 py-2 text-xs text-on-surface-variant shadow backdrop-blur"
-                >
-                    Selecciona un territorio en el árbol o el mapa para ver detalles
-                </div>
-            </main>
+    <!-- Detail drawer -->
+    <template v-if="drawer && detail">
+      <div
+        class="fixed inset-0 z-40 bg-black/50"
+        @click="closeDrawer"
+      />
+      <aside
+        class="hierarchy-drawer fixed inset-y-0 right-0 z-50 flex w-[430px] max-w-[92vw] flex-col bg-surface-container-low shadow-2xl"
+      >
+        <div class="flex-none border-b border-outline-variant px-6 py-5">
+          <div class="flex items-center justify-between">
+            <span
+              class="text-[11px] font-bold uppercase tracking-[0.2em]"
+              :style="{ color: detail.accent }"
+            >
+              {{ detail.levelLabel }}
+            </span>
+            <button
+              type="button"
+              class="text-on-surface-variant hover:text-on-surface"
+              aria-label="Cerrar detalle"
+              @click="closeDrawer"
+            >
+              <X class="size-4" />
+            </button>
+          </div>
+          <h2 class="mt-1.5 font-display text-2xl font-semibold text-on-surface">
+            {{ detail.name }}
+          </h2>
         </div>
 
-        <DialogRoot v-model:open="formOpen">
-            <DialogPortal>
-                <DialogOverlay class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
-                <DialogContent class="fixed left-1/2 top-1/2 z-50 w-[95vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none">
-                    <div class="mb-4 flex items-start justify-between">
-                        <div>
-                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">
-                                {{ formMode === 'create' ? `Nuevo ${selectedKindLabelFor(formKind).toLowerCase()}` : `Editar ${selectedKindLabelFor(formKind).toLowerCase()}` }}
-                            </DialogTitle>
-                            <DialogDescription class="mt-1 text-sm text-on-surface-variant">
-                                {{ formMode === 'create' ? 'Tras crearlo, podrás dibujar su polígono en el mapa.' : 'Actualiza los datos. Para cambiar el polígono usa el botón "Redibujar".' }}
-                            </DialogDescription>
-                        </div>
-                        <DialogClose class="flex size-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
-                            <X class="size-4" />
-                        </DialogClose>
-                    </div>
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <div class="px-6 pt-5">
+            <p class="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              Ubicación
+            </p>
+            <div
+              ref="mapEl"
+              class="hierarchy-map h-44 w-full overflow-hidden rounded-2xl border border-outline-variant bg-surface-container"
+            />
+          </div>
+          <dl class="px-6 pb-8 pt-2">
+            <div
+              v-for="f in detail.fields"
+              :key="f.label"
+              class="flex justify-between gap-5 border-b border-outline-variant/60 py-3.5"
+            >
+              <dt class="flex-none text-sm text-on-surface-variant">
+                {{ f.label }}
+              </dt>
+              <dd class="text-right text-sm font-medium text-on-surface">
+                {{ f.value }}
+              </dd>
+            </div>
+          </dl>
+        </div>
 
-                    <div class="space-y-4">
-                        <div v-if="formMode === 'create' && formKind === 'zone'">
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Distrito padre</label>
-                            <div class="mt-1">
-                                <UiSearchSelect v-model="formParentId" :options="districtOptions" placeholder="Selecciona un distrito" />
-                            </div>
-                        </div>
-                        <div v-if="formMode === 'create' && formKind === 'sector'">
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Zona padre</label>
-                            <div class="mt-1">
-                                <UiSearchSelect v-model="formParentId" :options="zoneOptions" placeholder="Selecciona una zona" />
-                            </div>
-                        </div>
+        <div
+          v-if="drawer.level === 'reunion'"
+          class="flex-none border-t border-outline-variant px-6 py-4"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            @click="goToMeeting(drawer.id)"
+          >
+            <ExternalLink class="size-4" /> Ir a la reunión
+          </button>
+        </div>
+      </aside>
+    </template>
 
-                        <div class="grid gap-3 md:grid-cols-[1fr_120px]">
-                            <div>
-                                <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Nombre *</label>
-                                <input v-model="formData.name" type="text" class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Nombre del territorio" />
-                            </div>
-                            <div>
-                                <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Código *</label>
-                                <input v-model="formData.code" type="text" class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm uppercase text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="DM" />
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Descripción</label>
-                            <textarea v-model="formData.description" rows="2" class="mt-1 w-full rounded border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Cobertura geográfica y observaciones" />
-                        </div>
-                        <div>
-                            <label class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Líder responsable</label>
-                            <input v-model="formData.leaderName" type="text" class="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Nombre del responsable" />
-                        </div>
-                        <div>
-                            <span class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Color de identificación</span>
-                            <div class="mt-2 flex flex-wrap items-center gap-2">
-                                <button v-for="c in formCurrentPalette" :key="c" type="button" class="size-7 rounded-full border-2 transition-transform hover:scale-110" :style="{ backgroundColor: c, borderColor: formData.color === c ? '#fff' : 'transparent' }" :aria-label="`Color ${c}`" @click="formData.color = c" />
-                            </div>
-                        </div>
-                    </div>
+    <!-- Create / edit drawer (district · zone · sector) -->
+    <TerritoryFormDrawer
+      :open="formOpen"
+      :level="formLevel"
+      :mode="formMode"
+      :entity="formEntity"
+      :parent-centroid="formParentCentroid"
+      :parent-label="formParentLabel"
+      :palette="paletteFor(formLevel)"
+      :accent="LEVEL_ACCENT[formLevel]"
+      :level-label="formLevel"
+      :leader-label="formLevel === 'distrito' ? 'Pastor' : 'Líder'"
+      @close="formOpen = false"
+      @save="onFormSave"
+    />
 
-                    <div class="mt-6 flex justify-end gap-2">
-                        <DialogClose as-child>
-                            <UiButton variant="outline" type="button" class="h-10 rounded px-4 text-xs uppercase tracking-wider">Cancelar</UiButton>
-                        </DialogClose>
-                        <UiButton type="button" class="h-10 rounded px-5 text-xs uppercase tracking-wider" @click="saveForm">
-                            <Save class="mr-2 size-4" />
-                            {{ formMode === 'create' ? 'Crear' : 'Guardar' }}
-                        </UiButton>
-                    </div>
-                </DialogContent>
-            </DialogPortal>
-        </DialogRoot>
-
-        <DialogRoot v-model:open="deleteDialogOpen">
-            <DialogPortal>
-                <DialogOverlay class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
-                <DialogContent class="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none">
-                    <div class="flex items-start gap-4">
-                        <div class="flex size-11 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-                            <AlertTriangle class="size-5" />
-                        </div>
-                        <div>
-                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">Eliminar territorio</DialogTitle>
-                            <DialogDescription class="mt-2 text-sm text-on-surface-variant">
-                                Esta acción es permanente. Si tiene hijos (zonas o sectores), también serán eliminados.
-                            </DialogDescription>
-                        </div>
-                    </div>
-                    <div class="mt-6 flex justify-end gap-2">
-                        <DialogClose as-child>
-                            <UiButton variant="outline" type="button" class="h-10 rounded px-4 text-xs uppercase tracking-wider">Cancelar</UiButton>
-                        </DialogClose>
-                        <UiButton type="button" class="h-10 rounded bg-destructive px-4 text-xs uppercase tracking-wider text-white hover:bg-destructive/90" @click="confirmDelete">
-                            <Trash2 class="mr-2 size-4" /> Eliminar
-                        </UiButton>
-                    </div>
-                </DialogContent>
-            </DialogPortal>
-        </DialogRoot>
-    </div>
+    <!-- Assign existing catalog meetings to the selected sector -->
+    <AssignMeetingDrawer
+      :open="assignOpen"
+      :sector-name="selSector?.name ?? ''"
+      :accent="LEVEL_ACCENT.reunion"
+      :items="assignItems"
+      @close="assignOpen = false"
+      @assign="assignMeeting"
+      @go="goToMeeting"
+    />
+  </div>
 </template>
 
-<style>
-.territory-tooltip {
-    background: rgba(0, 0, 0, 0.85);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+<style scoped>
+.hierarchy-drawer {
+    animation: hierarchy-drawer-in 0.28s ease;
 }
-.territory-tooltip::before {
-    border-top-color: rgba(0, 0, 0, 0.85);
+@keyframes hierarchy-drawer-in {
+    from {
+        transform: translateX(26px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
-.territory-vertex {
-    background: transparent !important;
-    color: #fff !important;
-    border: none !important;
-    box-shadow: none !important;
-    font-size: 10px !important;
-    font-weight: 700 !important;
-    pointer-events: none !important;
+/* Contain Leaflet panes/controls in their own stacking context. */
+.hierarchy-map {
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
 }
-.leaflet-container {
-    background: var(--surface-container-low, #f5f5f5);
-    font-family: inherit;
+.hierarchy-map :deep(.leaflet-control-zoom) {
+    margin: 10px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+}
+.hierarchy-map :deep(.leaflet-control-zoom a) {
+    width: 30px;
+    height: 30px;
+    line-height: 30px;
+    background: var(--surface-container);
+    color: var(--on-surface);
+    border-bottom-color: var(--outline-variant);
+}
+.hierarchy-map :deep(.leaflet-control-zoom a:hover) {
+    background: var(--surface-container-high);
+    color: var(--primary);
 }
 </style>

@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 
-export const ADMIN_USER_SEED_PASSWORD = 'Admin12345!'
+export const ADMIN_USER_SEED_PASSWORD = ' '
 
 export const ADMIN_USER_SEED = {
     email: 'admin@local.test',
