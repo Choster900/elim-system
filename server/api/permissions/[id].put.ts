@@ -1,8 +1,8 @@
 import { updatePermission } from '../../services/permission.service'
 import { updatePermissionSchema } from '../../validators/permission.validator'
-import { validateDto } from '../../utils/validate-dto.util'
-import { ApiResponseFactory } from '../../utils/response.util'
-import { handleApiError } from '../../utils/error-handler.util'
+import { validateDto } from '../../utils/validation/dto-validation.util'
+import { ApiResponseFactory } from '../../utils/http/api-response.util'
+import { handleApiError } from '../../utils/http/error-handler.util'
 
 export default defineEventHandler(async (event) => {
     try {

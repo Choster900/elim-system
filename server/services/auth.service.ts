@@ -21,7 +21,7 @@ interface AuthTokensResult extends AuthResponseDto {
 function invalidCredentialsError() {
     return createError({
         statusCode: 401,
-        statusMessage: 'Credenciales inválidas',
+        message: 'Credenciales inválidas',
         data: { code: ApiErrorCode.INVALID_CREDENTIALS },
     })
 }
@@ -29,7 +29,7 @@ function invalidCredentialsError() {
 function invalidRefreshTokenError() {
     return createError({
         statusCode: 401,
-        statusMessage: 'Refresh token inválido',
+        message: 'Refresh token inválido',
         data: { code: ApiErrorCode.INVALID_TOKEN },
     })
 }
@@ -37,7 +37,7 @@ function invalidRefreshTokenError() {
 function inactiveUserError() {
     return createError({
         statusCode: 403,
-        statusMessage: 'Usuario inactivo',
+        message: 'Usuario inactivo',
         data: { code: ApiErrorCode.FORBIDDEN },
     })
 }

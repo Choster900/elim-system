@@ -29,14 +29,24 @@ import {
     DropdownMenuRoot,
     DropdownMenuTrigger,
 } from 'radix-vue'
-import DataTable, { type DataTableColumn } from '~/presentation/shared/components/DataTable/DataTable.vue'
+import DataTable, {
+    type DataTableColumn,
+} from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
-    type MeetingFrequency,
+    formatMeetingDate,
+    formatMeetingMonth,
+    formatMeetingTimeRange,
+    getMeetingDateDay,
+    getMeetingFrequencyLabel,
+    getMeetingStatusLabel,
+} from '~/presentation/meetings/utils/meeting-format.util'
+import { formatInitials } from '~/utils/string/text-format.util'
+import { readJsonStorage, writeJsonStorage } from '~/utils/storage/json-storage.util'
+import {
     type MeetingStatus,
     type MockMeeting,
     colorPalette,
-    frequencyOptions,
     getMockMeetings,
     mockMeetingTypes,
     mockSectors,
@@ -55,21 +65,16 @@ const STORAGE_KEY = 'meetings-catalog-v2'
 const meetings = ref<MockMeeting[]>(getMockMeetings())
 
 onMounted(() => {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (raw) {
-            meetings.value = JSON.parse(raw) as MockMeeting[]
-        } else {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(meetings.value))
-        }
-    } catch {
-        meetings.value = getMockMeetings()
+    const storedMeetings = readJsonStorage<MockMeeting[] | null>(STORAGE_KEY, null)
+    if (storedMeetings) {
+        meetings.value = storedMeetings
+    } else {
+        writeJsonStorage(STORAGE_KEY, meetings.value)
     }
 })
 
 function persist() {
-    if (!import.meta.client) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(meetings.value))
+    writeJsonStorage(STORAGE_KEY, meetings.value)
 }
 
 function isWithinNextDays(dateStr: string, days: number) {
@@ -85,7 +90,9 @@ const stats = computed(() => {
     const upcoming = meetings.value.filter(
         (m) => m.status === 'programada' && new Date(m.date) >= new Date(new Date().toDateString()),
     ).length
-    const thisWeek = meetings.value.filter((m) => m.status !== 'cancelada' && isWithinNextDays(m.date, 7)).length
+    const thisWeek = meetings.value.filter(
+        (m) => m.status !== 'cancelada' && isWithinNextDays(m.date, 7),
+    ).length
     const completed = meetings.value.filter((m) => m.status === 'completada').length
     return { total, upcoming, thisWeek, completed }
 })
@@ -99,12 +106,6 @@ function supervisorOf(id: string | null) {
 function typeOf(id: string) {
     return mockMeetingTypes.find((t) => t.id === id)
 }
-function frequencyLabel(value: MeetingFrequency) {
-    return frequencyOptions.find((f) => f.value === value)?.label ?? value
-}
-function statusLabel(value: MeetingStatus) {
-    return statusOptions.find((s) => s.value === value)?.label ?? value
-}
 function statusTone(status: MeetingStatus) {
     switch (status) {
         case 'programada':
@@ -116,19 +117,6 @@ function statusTone(status: MeetingStatus) {
         case 'cancelada':
             return 'border-destructive/40 bg-destructive/10 text-destructive'
     }
-}
-
-function formatDate(dateStr: string) {
-    const d = new Date(dateStr + 'T00:00:00')
-    return d.toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: 'short' })
-}
-function formatTimeRange(start: string, end: string) {
-    return `${start} – ${end}`
-}
-function getInitials(name: string) {
-    const parts = name.split(/\s+/).filter(Boolean)
-    if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-    return name.slice(0, 2).toUpperCase()
 }
 
 const columns: DataTableColumn<MockMeeting>[] = [
@@ -237,15 +225,16 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
     if (idx !== -1) {
         meetings.value[idx] = { ...meetings.value[idx]!, status: next }
         persist()
-        toast.success(`Estado: ${statusLabel(next)}`)
+        toast.success(`Estado: ${getMeetingStatusLabel(next)}`)
     }
 }
-
 </script>
 
 <template>
     <main class="mx-auto w-full max-w-system px-6 pb-20 pt-24 lg:px-10">
-        <section class="flex flex-col gap-6 border-b border-outline-variant pb-10 md:flex-row md:items-end md:justify-between">
+        <section
+            class="flex flex-col gap-6 border-b border-outline-variant pb-10 md:flex-row md:items-end md:justify-between"
+        >
             <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.4em] text-on-surface-variant">
                     Catálogos · Mantenimiento
@@ -254,8 +243,8 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                     Reuniones
                 </h1>
                 <p class="mt-3 max-w-xl text-sm leading-relaxed text-on-surface-variant">
-                    Administra los encuentros ministeriales: programa, asigna sectores y supervisores,
-                    y mantén la trazabilidad de cada reunión recurrente o única.
+                    Administra los encuentros ministeriales: programa, asigna sectores y
+                    supervisores, y mantén la trazabilidad de cada reunión recurrente o única.
                 </p>
             </div>
 
@@ -271,26 +260,50 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
         <section class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <UiCard class="p-6">
                 <CalendarDays class="mb-4 size-6 text-primary" />
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Total registradas</p>
-                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">{{ stats.total }}</h3>
+                <p
+                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                >
+                    Total registradas
+                </p>
+                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">
+                    {{ stats.total }}
+                </h3>
                 <p class="mt-2 text-xs text-on-surface-variant">Catálogo histórico completo</p>
             </UiCard>
             <UiCard class="p-6">
                 <Clock class="mb-4 size-6 text-primary" />
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Próximas</p>
-                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">{{ stats.upcoming }}</h3>
+                <p
+                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                >
+                    Próximas
+                </p>
+                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">
+                    {{ stats.upcoming }}
+                </h3>
                 <p class="mt-2 text-xs text-primary">Programadas a futuro</p>
             </UiCard>
             <UiCard class="p-6">
                 <Compass class="mb-4 size-6 text-primary" />
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Esta semana</p>
-                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">{{ stats.thisWeek }}</h3>
+                <p
+                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                >
+                    Esta semana
+                </p>
+                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">
+                    {{ stats.thisWeek }}
+                </h3>
                 <p class="mt-2 text-xs text-on-surface-variant">Dentro de los próximos 7 días</p>
             </UiCard>
             <UiCard class="p-6">
                 <CheckCircle2 class="mb-4 size-6 text-primary" />
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Completadas</p>
-                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">{{ stats.completed }}</h3>
+                <p
+                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                >
+                    Completadas
+                </p>
+                <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">
+                    {{ stats.completed }}
+                </h3>
                 <p class="mt-2 text-xs text-on-surface-variant">Cerradas con éxito</p>
             </UiCard>
         </section>
@@ -308,21 +321,34 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                     <div class="flex items-center gap-3">
                         <div
                             class="flex size-12 flex-col items-center justify-center rounded text-on-surface"
-                            :style="{ backgroundColor: (row as MockMeeting).color + '22', border: `1px solid ${(row as MockMeeting).color}55` }"
+                            :style="{
+                                backgroundColor: (row as MockMeeting).color + '22',
+                                border: `1px solid ${(row as MockMeeting).color}55`,
+                            }"
                         >
-                            <span class="font-display text-base font-semibold leading-none" :style="{ color: (row as MockMeeting).color }">
-                                {{ new Date((row as MockMeeting).date + 'T00:00:00').getDate() }}
+                            <span
+                                class="font-display text-base font-semibold leading-none"
+                                :style="{ color: (row as MockMeeting).color }"
+                            >
+                                {{ getMeetingDateDay((row as MockMeeting).date) }}
                             </span>
-                            <span class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant">
-                                {{ new Date((row as MockMeeting).date + 'T00:00:00').toLocaleDateString('es-SV', { month: 'short' }) }}
+                            <span
+                                class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                {{ formatMeetingMonth((row as MockMeeting).date) }}
                             </span>
                         </div>
                         <div>
                             <p class="text-xs font-semibold uppercase text-on-surface-variant">
-                                {{ formatDate((row as MockMeeting).date) }}
+                                {{ formatMeetingDate((row as MockMeeting).date) }}
                             </p>
                             <p class="text-[11px] text-on-surface-variant">
-                                {{ formatTimeRange((row as MockMeeting).startTime, (row as MockMeeting).endTime) }}
+                                {{
+                                    formatMeetingTimeRange(
+                                        (row as MockMeeting).startTime,
+                                        (row as MockMeeting).endTime,
+                                    )
+                                }}
                             </p>
                         </div>
                     </div>
@@ -330,12 +356,22 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
 
                 <template #cell-title="{ row }">
                     <div class="min-w-0">
-                        <p class="font-display text-sm font-semibold text-on-surface">{{ (row as MockMeeting).title }}</p>
-                        <p v-if="(row as MockMeeting).description" class="mt-0.5 line-clamp-1 text-xs text-on-surface-variant">
+                        <p class="font-display text-sm font-semibold text-on-surface">
+                            {{ (row as MockMeeting).title }}
+                        </p>
+                        <p
+                            v-if="(row as MockMeeting).description"
+                            class="mt-0.5 line-clamp-1 text-xs text-on-surface-variant"
+                        >
                             {{ (row as MockMeeting).description }}
                         </p>
-                        <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant">
-                            <span v-if="(row as MockMeeting).location" class="inline-flex items-center gap-1">
+                        <div
+                            class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant"
+                        >
+                            <span
+                                v-if="(row as MockMeeting).location"
+                                class="inline-flex items-center gap-1"
+                            >
                                 <MapPin class="size-3" />
                                 {{ (row as MockMeeting).location }}
                             </span>
@@ -343,8 +379,14 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                                 <Users class="size-3" />
                                 {{ (row as MockMeeting).expectedAttendees }} esperados
                             </span>
-                            <span>· {{ frequencyLabel((row as MockMeeting).frequency) }}</span>
-                            <span v-if="(row as MockMeeting).isPublic" class="inline-flex items-center gap-1">
+                            <span
+                                >·
+                                {{ getMeetingFrequencyLabel((row as MockMeeting).frequency) }}</span
+                            >
+                            <span
+                                v-if="(row as MockMeeting).isPublic"
+                                class="inline-flex items-center gap-1"
+                            >
                                 <Eye class="size-3" /> Pública
                             </span>
                             <span v-else class="inline-flex items-center gap-1">
@@ -357,7 +399,10 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                 <template #cell-type="{ row }">
                     <span
                         class="inline-flex rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-                        :style="{ color: typeOf((row as MockMeeting).typeId)?.accent, borderColor: (typeOf((row as MockMeeting).typeId)?.accent ?? '') + '55' }"
+                        :style="{
+                            color: typeOf((row as MockMeeting).typeId)?.accent,
+                            borderColor: (typeOf((row as MockMeeting).typeId)?.accent ?? '') + '55',
+                        }"
                     >
                         {{ typeOf((row as MockMeeting).typeId)?.label }}
                     </span>
@@ -365,17 +410,27 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
 
                 <template #cell-sector="{ row }">
                     <div class="flex items-center gap-2">
-                        <span class="flex size-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                        <span
+                            class="flex size-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+                        >
                             {{ sectorOf((row as MockMeeting).sectorId)?.code }}
                         </span>
-                        <span class="text-sm text-on-surface">{{ sectorOf((row as MockMeeting).sectorId)?.name }}</span>
+                        <span class="text-sm text-on-surface">{{
+                            sectorOf((row as MockMeeting).sectorId)?.name
+                        }}</span>
                     </div>
                 </template>
 
                 <template #cell-supervisor="{ row }">
                     <div class="flex items-center gap-3">
-                        <div class="flex size-9 items-center justify-center rounded-full border border-outline-variant bg-surface-container-high text-xs font-semibold text-on-surface">
-                            {{ getInitials(supervisorOf((row as MockMeeting).supervisorId)?.name ?? '') }}
+                        <div
+                            class="flex size-9 items-center justify-center rounded-full border border-outline-variant bg-surface-container-high text-xs font-semibold text-on-surface"
+                        >
+                            {{
+                                formatInitials(
+                                    supervisorOf((row as MockMeeting).supervisorId)?.name,
+                                )
+                            }}
                         </div>
                         <div class="min-w-0">
                             <p class="truncate text-sm font-medium text-on-surface">
@@ -393,7 +448,7 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                         class="inline-flex items-center rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider"
                         :class="statusTone((row as MockMeeting).status)"
                     >
-                        {{ statusLabel((row as MockMeeting).status) }}
+                        {{ getMeetingStatusLabel((row as MockMeeting).status) }}
                     </span>
                 </template>
 
@@ -425,7 +480,9 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                                 </DropdownMenuItem>
                                 <div class="my-1 h-px bg-outline-variant" />
                                 <DropdownMenuItem
-                                    v-for="s in statusOptions.filter(o => o.value !== (row as MockMeeting).status)"
+                                    v-for="s in statusOptions.filter(
+                                        (o) => o.value !== (row as MockMeeting).status,
+                                    )"
                                     :key="s.value"
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2 text-[11px] text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
                                     @select="changeStatus(row as MockMeeting, s.value)"
@@ -446,7 +503,6 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
             </DataTable>
         </section>
 
-
         <DialogRoot v-model:open="deleteDialogOpen">
             <DialogPortal>
                 <DialogOverlay class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
@@ -454,7 +510,9 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                     class="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none"
                 >
                     <div class="flex items-start gap-4">
-                        <div class="flex size-11 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                        <div
+                            class="flex size-11 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+                        >
                             <AlertTriangle class="size-5" />
                         </div>
                         <div>
@@ -462,18 +520,27 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                                 Eliminar reunión
                             </DialogTitle>
                             <DialogDescription class="mt-2 text-sm text-on-surface-variant">
-                                Esta acción no se puede deshacer. La reunión será removida del catálogo de forma permanente.
+                                Esta acción no se puede deshacer. La reunión será removida del
+                                catálogo de forma permanente.
                             </DialogDescription>
                         </div>
                     </div>
 
                     <div class="mt-6 flex justify-end gap-2">
                         <DialogClose as-child>
-                            <UiButton variant="outline" type="button" class="h-10 rounded px-4 text-xs uppercase tracking-wider">
+                            <UiButton
+                                variant="outline"
+                                type="button"
+                                class="h-10 rounded px-4 text-xs uppercase tracking-wider"
+                            >
                                 Cancelar
                             </UiButton>
                         </DialogClose>
-                        <UiButton type="button" class="h-10 rounded bg-destructive px-4 text-xs uppercase tracking-wider text-white hover:bg-destructive/90" @click="confirmDelete">
+                        <UiButton
+                            type="button"
+                            class="h-10 rounded bg-destructive px-4 text-xs uppercase tracking-wider text-white hover:bg-destructive/90"
+                            @click="confirmDelete"
+                        >
                             <Trash2 class="mr-2 size-4" />
                             Eliminar
                         </UiButton>

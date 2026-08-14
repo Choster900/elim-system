@@ -82,11 +82,15 @@ Base modular para aplicaciones full-stack con Nuxt/Nitro. Incluye arquitectura p
 │  ├─ types/
 │  │  └─ api-response.types.ts
 │  ├─ utils/
-│  │  ├─ response.util.ts
-│  │  ├─ error-handler.util.ts
-│  │  ├─ validate-dto.util.ts
-│  │  ├─ prisma-error.util.ts
-│  │  └─ pagination.util.ts
+│  │  ├─ auth/
+│  │  ├─ database/prisma-error.util.ts
+│  │  ├─ http/
+│  │  │  ├─ api-response.util.ts
+│  │  │  ├─ error-handler.util.ts
+│  │  │  └─ pagination.util.ts
+│  │  ├─ logging/api-log.util.ts
+│  │  ├─ openapi/api-docs.util.ts
+│  │  └─ validation/dto-validation.util.ts
 │  ├─ validators/
 │  └─ middleware/
 └─ docker files...
@@ -188,23 +192,23 @@ Todas las respuestas de la API siguen esta estructura:
 
 ```json
 {
-  "success": true,
-  "message": "Mensaje descriptivo",
-  "data": { },
-  "error": null,
-  "meta": {
-    "timestamp": "2024-01-01T00:00:00.000Z",
-    "path": "/api/permissions",
-    "pagination": { }
-  }
+    "success": true,
+    "message": "Mensaje descriptivo",
+    "data": {},
+    "error": null,
+    "meta": {
+        "timestamp": "2024-01-01T00:00:00.000Z",
+        "path": "/api/permissions",
+        "pagination": {}
+    }
 }
 ```
 
 ### ApiResponseFactory
 
 ```ts
-// server/utils/response.util.ts
-import { ApiResponseFactory } from '../utils/response.util'
+// server/utils/http/api-response.util.ts
+import { ApiResponseFactory } from '../utils/http/api-response.util'
 
 // Respuesta exitosa
 return ApiResponseFactory.success(data, 'Mensaje', { pagination })
@@ -217,19 +221,19 @@ return ApiResponseFactory.success(null, 'Eliminado correctamente')
 
 Definidos en `server/types/api-response.types.ts`:
 
-| Código | Descripción |
-|---|---|
-| `VALIDATION_ERROR` | Payload inválido |
-| `UNAUTHORIZED` | No autenticado |
-| `FORBIDDEN` | Sin permisos |
-| `RESOURCE_NOT_FOUND` | Recurso inexistente |
-| `RESOURCE_ALREADY_EXISTS` | Conflicto de unicidad |
-| `BUSINESS_RULE_ERROR` | Regla de negocio violada |
-| `INVALID_CREDENTIALS` | Credenciales incorrectas |
-| `TOKEN_EXPIRED` | Token vencido |
-| `INVALID_TOKEN` | Token inválido |
-| `INTERNAL_SERVER_ERROR` | Error interno |
-| `SERVICE_UNAVAILABLE` | Servicio no disponible |
+| Código                    | Descripción              |
+| ------------------------- | ------------------------ |
+| `VALIDATION_ERROR`        | Payload inválido         |
+| `UNAUTHORIZED`            | No autenticado           |
+| `FORBIDDEN`               | Sin permisos             |
+| `RESOURCE_NOT_FOUND`      | Recurso inexistente      |
+| `RESOURCE_ALREADY_EXISTS` | Conflicto de unicidad    |
+| `BUSINESS_RULE_ERROR`     | Regla de negocio violada |
+| `INVALID_CREDENTIALS`     | Credenciales incorrectas |
+| `TOKEN_EXPIRED`           | Token vencido            |
+| `INVALID_TOKEN`           | Token inválido           |
+| `INTERNAL_SERVER_ERROR`   | Error interno            |
+| `SERVICE_UNAVAILABLE`     | Servicio no disponible   |
 
 ## 9) Patrón DTO
 
@@ -264,16 +268,13 @@ La validación ocurre en la capa handler (no en el servicio). Se usa `validateDt
 
 ```ts
 // server/api/permissions/index.post.ts
-import { validateDto } from '../../utils/validate-dto.util'
+import { validateDto } from '../../utils/validation/dto-validation.util'
 import { createPermissionSchema } from '../../validators/permission.validator'
 import type { CreatePermissionDto } from '../../dto/permission/create-permission.dto'
 
 export default defineEventHandler(async (event) => {
     try {
-        const dto = validateDto<CreatePermissionDto>(
-            createPermissionSchema,
-            await readBody(event),
-        )
+        const dto = validateDto<CreatePermissionDto>(createPermissionSchema, await readBody(event))
         const permission = await createPermission(dto)
         return ApiResponseFactory.success(permission, 'Permiso creado correctamente')
     } catch (error) {
@@ -317,10 +318,10 @@ export default defineEventHandler(async (event) => {
 
 Los repositorios capturan errores de Prisma con `.catch(mapPrismaError)`. Convierte `PrismaClientKnownRequestError` en errores HTTP estándar:
 
-| Código Prisma | HTTP | ApiErrorCode |
-|---|---|---|
-| `P2002` | 409 | `RESOURCE_ALREADY_EXISTS` |
-| `P2025` | 404 | `RESOURCE_NOT_FOUND` |
+| Código Prisma | HTTP | ApiErrorCode              |
+| ------------- | ---- | ------------------------- |
+| `P2002`       | 409  | `RESOURCE_ALREADY_EXISTS` |
+| `P2025`       | 404  | `RESOURCE_NOT_FOUND`      |
 
 ```ts
 // server/repositories/permission.repository.ts
@@ -343,7 +344,7 @@ GET /api/permissions?page=1&limit=10
 ### Implementación en handler
 
 ```ts
-import { parsePaginationParams, buildPaginationMeta } from '../../utils/pagination.util'
+import { parsePaginationParams, buildPaginationMeta } from '../../utils/http/pagination.util'
 
 export default defineEventHandler(async (event) => {
     try {
@@ -361,19 +362,19 @@ export default defineEventHandler(async (event) => {
 
 ```json
 {
-  "success": true,
-  "message": "Permisos obtenidos correctamente",
-  "data": [],
-  "meta": {
-    "pagination": {
-      "page": 1,
-      "limit": 10,
-      "totalItems": 42,
-      "totalPages": 5,
-      "hasNextPage": true,
-      "hasPreviousPage": false
+    "success": true,
+    "message": "Permisos obtenidos correctamente",
+    "data": [],
+    "meta": {
+        "pagination": {
+            "page": 1,
+            "limit": 10,
+            "totalItems": 42,
+            "totalPages": 5,
+            "hasNextPage": true,
+            "hasPreviousPage": false
+        }
     }
-  }
 }
 ```
 

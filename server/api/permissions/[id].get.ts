@@ -1,6 +1,6 @@
 import { getPermissionById } from '../../services/permission.service'
-import { ApiResponseFactory } from '../../utils/response.util'
-import { handleApiError } from '../../utils/error-handler.util'
+import { ApiResponseFactory } from '../../utils/http/api-response.util'
+import { handleApiError } from '../../utils/http/error-handler.util'
 
 export default defineEventHandler(async (event) => {
     try {

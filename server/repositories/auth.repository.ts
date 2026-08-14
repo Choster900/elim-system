@@ -1,5 +1,5 @@
 import { prisma } from '../database/prisma'
-import { mapPrismaError } from '../utils/prisma-error.util'
+import { mapPrismaError } from '../utils/database/prisma-error.util'
 
 const authGraphInclude = {
     userRoles: {

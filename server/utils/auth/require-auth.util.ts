@@ -5,7 +5,7 @@ export function requireAuth(event: H3Event) {
     if (!event.context.auth) {
         throw createError({
             statusCode: 401,
-            statusMessage: 'No autenticado',
+            message: 'No autenticado',
             data: { code: ApiErrorCode.UNAUTHORIZED },
         })
     }

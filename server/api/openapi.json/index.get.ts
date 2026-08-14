@@ -1,4 +1,4 @@
-import { createOpenApiSpec } from '../../utils/swagger.util'
+import { createOpenApiSpec } from '../../utils/openapi/api-docs.util'
 import { getRequestURL } from 'h3'
 
 export default defineEventHandler((event) => {

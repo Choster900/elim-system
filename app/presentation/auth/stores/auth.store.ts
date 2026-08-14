@@ -1,26 +1,13 @@
 import { defineStore } from 'pinia'
+import { formatInitials } from '~/utils/string/text-format.util'
+import {
+    readJsonStorage,
+    removeStorageItem,
+    writeJsonStorage,
+} from '~/utils/storage/json-storage.util'
 import type { AuthUser } from '../interfaces/login-response.interface'
 
 const STORAGE_KEY = 'auth-user'
-
-function loadFromStorage(): AuthUser | null {
-    if (!import.meta.client) return null
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        return raw ? (JSON.parse(raw) as AuthUser) : null
-    } catch {
-        return null
-    }
-}
-
-function computeInitials(source: string | null | undefined): string {
-    if (!source) return 'US'
-    const parts = source.split(/[@.\s_-]+/).filter(Boolean)
-    if (parts.length >= 2) {
-        return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-    }
-    return source.slice(0, 2).toUpperCase()
-}
 
 interface AuthState {
     user: AuthUser | null
@@ -28,14 +15,14 @@ interface AuthState {
 
 export const useAuthStore = defineStore('auth', {
     state: (): AuthState => ({
-        user: loadFromStorage(),
+        user: readJsonStorage<AuthUser | null>(STORAGE_KEY, null),
     }),
     getters: {
         displayName(state): string {
             return state.user?.username || state.user?.email || 'Invitado'
         },
         initials(state): string {
-            return computeInitials(state.user?.username ?? state.user?.email ?? null)
+            return formatInitials(state.user?.username ?? state.user?.email, 'US')
         },
         isAuthenticated(state): boolean {
             return !!state.user
@@ -44,15 +31,11 @@ export const useAuthStore = defineStore('auth', {
     actions: {
         setUser(user: AuthUser) {
             this.user = user
-            if (import.meta.client) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
-            }
+            writeJsonStorage(STORAGE_KEY, user)
         },
         clearUser() {
             this.user = null
-            if (import.meta.client) {
-                localStorage.removeItem(STORAGE_KEY)
-            }
+            removeStorageItem(STORAGE_KEY)
         },
     },
 })

@@ -1,4 +1,4 @@
-import type { ApiResponse, ApiMeta } from '../types/api-response.types'
+import type { ApiResponse, ApiMeta } from '../../types/api-response.types'
 
 export class ApiResponseFactory {
     static success<T>(

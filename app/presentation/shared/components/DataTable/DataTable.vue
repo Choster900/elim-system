@@ -10,6 +10,7 @@ import {
     Search,
     X,
 } from '@lucide/vue'
+import { normalizeSearchText, toDisplayString } from '~/utils/string/text-format.util'
 
 export interface DataTableColumn<R> {
     key: string
@@ -73,11 +74,9 @@ watch(
 
 function getColumnValue(col: DataTableColumn<T>, row: T): string {
     if (col.accessor) {
-        const v = col.accessor(row)
-        return v == null ? '' : String(v)
+        return toDisplayString(col.accessor(row))
     }
-    const v = (row as Record<string, unknown>)[col.key]
-    return v == null ? '' : String(v)
+    return toDisplayString((row as Record<string, unknown>)[col.key])
 }
 
 function getRowKey(row: T, index: number): string {
@@ -94,7 +93,10 @@ const filteredRows = computed<T[]>(() => {
         if (raw == null) continue
 
         if (col.filterType === 'daterange') {
-            const range = (typeof raw === 'object' ? raw : null) as { start: string | null; end: string | null } | null
+            const range = (typeof raw === 'object' ? raw : null) as {
+                start: string | null
+                end: string | null
+            } | null
             if (!range || (!range.start && !range.end)) continue
             result = result.filter((row) => {
                 const v = getColumnValue(col, row)
@@ -107,19 +109,23 @@ const filteredRows = computed<T[]>(() => {
         }
 
         if (typeof raw !== 'string' || raw.trim() === '') continue
-        const needle = raw.trim().toLowerCase()
+        const needle = normalizeSearchText(raw)
 
         if (col.filterType === 'select' || col.filterType === 'date') {
             result = result.filter((row) => getColumnValue(col, row) === raw)
         } else {
-            result = result.filter((row) => getColumnValue(col, row).toLowerCase().includes(needle))
+            result = result.filter((row) =>
+                normalizeSearchText(getColumnValue(col, row)).includes(needle),
+            )
         }
     }
 
     if (props.showSearch && globalSearch.value.trim()) {
-        const needle = globalSearch.value.trim().toLowerCase()
+        const needle = normalizeSearchText(globalSearch.value)
         result = result.filter((row) =>
-            props.columns.some((col) => getColumnValue(col, row).toLowerCase().includes(needle)),
+            props.columns.some((col) =>
+                normalizeSearchText(getColumnValue(col, row)).includes(needle),
+            ),
         )
     }
 
@@ -151,7 +157,9 @@ const pagedRows = computed<T[]>(() => {
     return sortedRows.value.slice(start, start + pageSize.value)
 })
 
-const rangeStart = computed(() => (totalRows.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1))
+const rangeStart = computed(() =>
+    totalRows.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1,
+)
 const rangeEnd = computed(() => Math.min(currentPage.value * pageSize.value, totalRows.value))
 
 const hasActiveFilters = computed(() => {
@@ -225,7 +233,9 @@ const pageSizeSelectOptions = computed(() =>
         >
             <div class="flex flex-1 items-center gap-3">
                 <div v-if="showSearch" class="relative w-full max-w-sm">
-                    <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant" />
+                    <Search
+                        class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant"
+                    />
                     <input
                         v-model="globalSearch"
                         type="search"
@@ -253,21 +263,38 @@ const pageSizeSelectOptions = computed(() =>
                                 'border-b border-outline-variant px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant',
                                 alignClass(col.align),
                                 col.headerClass,
-                                col.sortable ? 'cursor-pointer select-none transition-colors hover:text-primary' : '',
+                                col.sortable
+                                    ? 'cursor-pointer select-none transition-colors hover:text-primary'
+                                    : '',
                             ]"
                             @click="toggleSort(col)"
                         >
-                            <span class="inline-flex items-center gap-1.5" :class="col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : ''">
+                            <span
+                                class="inline-flex items-center gap-1.5"
+                                :class="
+                                    col.align === 'right'
+                                        ? 'justify-end'
+                                        : col.align === 'center'
+                                          ? 'justify-center'
+                                          : ''
+                                "
+                            >
                                 {{ col.label }}
                                 <template v-if="col.sortable">
-                                    <ChevronUp v-if="sortKey === col.key && sortDir === 'asc'" class="size-3 text-primary" />
-                                    <ChevronDown v-else-if="sortKey === col.key && sortDir === 'desc'" class="size-3 text-primary" />
+                                    <ChevronUp
+                                        v-if="sortKey === col.key && sortDir === 'asc'"
+                                        class="size-3 text-primary"
+                                    />
+                                    <ChevronDown
+                                        v-else-if="sortKey === col.key && sortDir === 'desc'"
+                                        class="size-3 text-primary"
+                                    />
                                     <ChevronsUpDown v-else class="size-3 opacity-40" />
                                 </template>
                             </span>
                         </th>
                     </tr>
-                    <tr v-if="columns.some(c => c.filterable)" class="bg-surface-container">
+                    <tr v-if="columns.some((c) => c.filterable)" class="bg-surface-container">
                         <th
                             v-for="col in columns"
                             :key="`${col.key}-filter`"
@@ -277,7 +304,11 @@ const pageSizeSelectOptions = computed(() =>
                             <template v-if="col.filterable">
                                 <UiSearchSelect
                                     v-if="col.filterType === 'select'"
-                                    :model-value="(typeof columnFilters[col.key] === 'string' ? columnFilters[col.key] : null) as string | null"
+                                    :model-value="
+                                        (typeof columnFilters[col.key] === 'string'
+                                            ? columnFilters[col.key]
+                                            : null) as string | null
+                                    "
                                     :options="col.filterOptions ?? []"
                                     option-value="value"
                                     option-label="label"
@@ -285,31 +316,61 @@ const pageSizeSelectOptions = computed(() =>
                                     clearable
                                     :placeholder="`Todos`"
                                     :search-placeholder="`Buscar ${col.label.toLowerCase()}...`"
-                                    @update:model-value="(v) => (columnFilters[col.key] = v == null ? null : String(v))"
+                                    @update:model-value="
+                                        (v) =>
+                                            (columnFilters[col.key] = v == null ? null : String(v))
+                                    "
                                 />
                                 <UiDatePicker
                                     v-else-if="col.filterType === 'date'"
-                                    :model-value="(typeof columnFilters[col.key] === 'string' ? columnFilters[col.key] : null) as string | null"
+                                    :model-value="
+                                        (typeof columnFilters[col.key] === 'string'
+                                            ? columnFilters[col.key]
+                                            : null) as string | null
+                                    "
                                     mode="single"
                                     size="sm"
                                     placeholder="Fecha"
-                                    @update:model-value="(v) => (columnFilters[col.key] = (v ?? null) as string | null)"
+                                    @update:model-value="
+                                        (v) =>
+                                            (columnFilters[col.key] = (v ?? null) as string | null)
+                                    "
                                 />
                                 <UiDatePicker
                                     v-else-if="col.filterType === 'daterange'"
-                                    :model-value="(columnFilters[col.key] as { start: string|null; end: string|null } | null) ?? { start: null, end: null }"
+                                    :model-value="
+                                        (columnFilters[col.key] as {
+                                            start: string | null
+                                            end: string | null
+                                        } | null) ?? { start: null, end: null }
+                                    "
                                     mode="range"
                                     size="sm"
                                     placeholder="Rango de fechas"
-                                    @update:model-value="(v) => (columnFilters[col.key] = v as { start: string|null; end: string|null })"
+                                    @update:model-value="
+                                        (v) =>
+                                            (columnFilters[col.key] = v as {
+                                                start: string | null
+                                                end: string | null
+                                            })
+                                    "
                                 />
                                 <input
                                     v-else
-                                    :value="typeof columnFilters[col.key] === 'string' ? columnFilters[col.key] : ''"
+                                    :value="
+                                        typeof columnFilters[col.key] === 'string'
+                                            ? columnFilters[col.key]
+                                            : ''
+                                    "
                                     type="search"
                                     :placeholder="`Filtrar ${col.label.toLowerCase()}...`"
                                     class="h-8 w-full rounded border border-outline-variant bg-surface px-2 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                                    @input="(e) => (columnFilters[col.key] = (e.target as HTMLInputElement).value)"
+                                    @input="
+                                        (e) =>
+                                            (columnFilters[col.key] = (
+                                                e.target as HTMLInputElement
+                                            ).value)
+                                    "
                                 />
                             </template>
                         </th>
@@ -318,7 +379,10 @@ const pageSizeSelectOptions = computed(() =>
 
                 <tbody>
                     <tr v-if="loading">
-                        <td :colspan="columns.length" class="px-5 py-16 text-center text-sm text-on-surface-variant">
+                        <td
+                            :colspan="columns.length"
+                            class="px-5 py-16 text-center text-sm text-on-surface-variant"
+                        >
                             Cargando registros...
                         </td>
                     </tr>
@@ -326,8 +390,12 @@ const pageSizeSelectOptions = computed(() =>
                         <td :colspan="columns.length" class="px-5 py-16 text-center">
                             <slot name="empty">
                                 <div class="flex flex-col items-center gap-2">
-                                    <p class="font-display text-lg font-semibold text-on-surface">{{ emptyTitle }}</p>
-                                    <p class="text-sm text-on-surface-variant">{{ emptyMessage }}</p>
+                                    <p class="font-display text-lg font-semibold text-on-surface">
+                                        {{ emptyTitle }}
+                                    </p>
+                                    <p class="text-sm text-on-surface-variant">
+                                        {{ emptyMessage }}
+                                    </p>
                                     <button
                                         v-if="hasActiveFilters"
                                         type="button"
@@ -350,7 +418,12 @@ const pageSizeSelectOptions = computed(() =>
                         <td
                             v-for="col in columns"
                             :key="col.key"
-                            :class="[cellPadding, alignClass(col.align), col.cellClass, 'text-on-surface align-middle']"
+                            :class="[
+                                cellPadding,
+                                alignClass(col.align),
+                                col.cellClass,
+                                'text-on-surface align-middle',
+                            ]"
                         >
                             <slot
                                 :name="`cell-${col.key}`"
@@ -366,12 +439,14 @@ const pageSizeSelectOptions = computed(() =>
             </table>
         </div>
 
-        <div class="flex flex-col gap-3 border-t border-outline-variant bg-surface-container-low px-5 py-3 text-xs text-on-surface-variant md:flex-row md:items-center md:justify-between">
+        <div
+            class="flex flex-col gap-3 border-t border-outline-variant bg-surface-container-low px-5 py-3 text-xs text-on-surface-variant md:flex-row md:items-center md:justify-between"
+        >
             <div class="flex flex-wrap items-center gap-4">
                 <span>
-                    Mostrando <span class="font-semibold text-on-surface">{{ rangeStart }}</span>
-                    – <span class="font-semibold text-on-surface">{{ rangeEnd }}</span>
-                    de <span class="font-semibold text-on-surface">{{ totalRows }}</span>
+                    Mostrando <span class="font-semibold text-on-surface">{{ rangeStart }}</span> –
+                    <span class="font-semibold text-on-surface">{{ rangeEnd }}</span> de
+                    <span class="font-semibold text-on-surface">{{ totalRows }}</span>
                 </span>
                 <div class="flex items-center gap-2">
                     <span class="uppercase tracking-wider">Filas:</span>

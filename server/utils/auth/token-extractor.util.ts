@@ -18,7 +18,7 @@ export function extractAccessToken(event: H3Event) {
 
     throw createError({
         statusCode: 401,
-        statusMessage: 'No autenticado',
+        message: 'No autenticado',
         data: { code: ApiErrorCode.UNAUTHORIZED },
     })
 }
@@ -35,7 +35,7 @@ export function extractRefreshToken(event: H3Event, bodyToken?: string) {
 
     throw createError({
         statusCode: 401,
-        statusMessage: 'Refresh token requerido',
+        message: 'Refresh token requerido',
         data: { code: ApiErrorCode.UNAUTHORIZED },
     })
 }
