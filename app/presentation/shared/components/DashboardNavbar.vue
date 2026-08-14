@@ -46,7 +46,7 @@ const navItems: DashboardMenuItem[] = [
     {
         label: 'Comunidad',
         children: [
-            { label: 'Miembros', href: '#' },
+            { label: 'Miembros', href: '/comunidad/miembros' },
             { label: 'Grupos Pequeños', href: '#' },
             { label: 'Voluntarios', href: '#' },
         ],
@@ -107,7 +107,9 @@ const navItems: DashboardMenuItem[] = [
                             :to="item.href"
                             :class="[
                                 'text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface',
-                                item.label === 'Panel' ? 'border-b-2 border-primary pb-1 text-primary' : '',
+                                item.label === 'Panel'
+                                    ? 'border-b-2 border-primary pb-1 text-primary'
+                                    : '',
                             ]"
                         >
                             {{ item.label }}
@@ -184,7 +186,10 @@ const navItems: DashboardMenuItem[] = [
                                 <p class="text-sm font-semibold text-on-surface">
                                     {{ userDisplayName }}
                                 </p>
-                                <p v-if="userEmail" class="mt-0.5 truncate text-xs text-on-surface-variant">
+                                <p
+                                    v-if="userEmail"
+                                    class="mt-0.5 truncate text-xs text-on-surface-variant"
+                                >
                                     {{ userEmail }}
                                 </p>
                             </div>
@@ -225,15 +230,24 @@ const navItems: DashboardMenuItem[] = [
             </UiButton>
         </div>
 
-        <div v-if="isOpen" class="border-t border-outline-variant bg-surface-container-low px-6 py-5 lg:hidden">
+        <div
+            v-if="isOpen"
+            class="border-t border-outline-variant bg-surface-container-low px-6 py-5 lg:hidden"
+        >
             <div class="grid gap-4">
                 <div class="flex items-center gap-3 border-b border-outline-variant pb-4 sm:hidden">
-                    <div class="flex size-10 items-center justify-center rounded-full border border-outline-variant bg-surface-container text-sm font-semibold uppercase text-on-surface">
+                    <div
+                        class="flex size-10 items-center justify-center rounded-full border border-outline-variant bg-surface-container text-sm font-semibold uppercase text-on-surface"
+                    >
                         {{ userInitials }}
                     </div>
                     <div class="min-w-0">
-                        <p class="truncate text-sm font-semibold text-on-surface">{{ userDisplayName }}</p>
-                        <p v-if="userEmail" class="truncate text-xs text-on-surface-variant">{{ userEmail }}</p>
+                        <p class="truncate text-sm font-semibold text-on-surface">
+                            {{ userDisplayName }}
+                        </p>
+                        <p v-if="userEmail" class="truncate text-xs text-on-surface-variant">
+                            {{ userEmail }}
+                        </p>
                     </div>
                 </div>
 
@@ -247,7 +261,9 @@ const navItems: DashboardMenuItem[] = [
                         {{ item.label }}
                     </NuxtLink>
                     <div v-else class="space-y-2">
-                        <p class="text-sm font-semibold uppercase text-on-surface">{{ item.label }}</p>
+                        <p class="text-sm font-semibold uppercase text-on-surface">
+                            {{ item.label }}
+                        </p>
                         <div class="grid gap-2 pl-4">
                             <NuxtLink
                                 v-for="child in item.children"
