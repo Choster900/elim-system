@@ -140,6 +140,7 @@ function addVertex(pt: LatLng) {
 }
 function undoVertex() {
     tempPolygon.value = tempPolygon.value.slice(0, -1)
+    polygonError.value = false
     renderPolygon(false)
 }
 function clearPolygon() {
@@ -417,10 +418,7 @@ const labelClass =
                                 type="button"
                                 class="inline-flex items-center gap-1 rounded-md border border-outline-variant px-2 py-1 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
                                 :disabled="tempPolygon.length === 0"
-                                @click="
-                                    undoVertex()
-                                    polygonError = false
-                                "
+                                @click="undoVertex"
                             >
                                 <Undo2 class="size-3" /> Deshacer
                             </button>
