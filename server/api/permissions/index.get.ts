@@ -2,9 +2,11 @@ import { getAllPermissions } from '../../services/permission.service'
 import { ApiResponseFactory } from '../../utils/http/api-response.util'
 import { handleApiError } from '../../utils/http/error-handler.util'
 import { parsePaginationParams, buildPaginationMeta } from '../../utils/http/pagination.util'
+import { requirePermission } from '../../utils/auth/require-permission.util'
 
 export default defineEventHandler(async (event) => {
     try {
+        requirePermission(event, 'permissions.view')
         const { page, limit, skip } = parsePaginationParams(event)
         const { items, totalItems } = await getAllPermissions(skip, limit)
         const pagination = buildPaginationMeta(page, limit, totalItems)

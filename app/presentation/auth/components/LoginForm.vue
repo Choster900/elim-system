@@ -28,6 +28,7 @@ const showPassword = ref(false)
 const toast = useAppToast()
 const loginMutation = useLoginMutation()
 const authStore = useAuthStore()
+const route = useRoute()
 
 const isLoading = computed(() => loginMutation.isPending.value)
 
@@ -73,7 +74,13 @@ async function onSubmit() {
         })
         authStore.setUser(result.user)
         toast.success('Inicio de sesión exitoso')
-        await navigateTo('/dashboard')
+        const requestedRedirect =
+            typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+        const redirectPath =
+            requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
+                ? requestedRedirect
+                : '/dashboard'
+        await navigateTo(redirectPath)
     } catch (error: unknown) {
         const httpError = error as HttpClientError | undefined
         const apiResponse = httpError?.details as ApiResponse<null> | undefined

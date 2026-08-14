@@ -7,4 +7,13 @@ export default [
             layout: 'auth',
         },
     },
+    {
+        name: 'access-denied',
+        path: '/acceso-denegado',
+        component: () => import('~/presentation/auth/view/AccessDeniedView.vue'),
+        meta: {
+            layout: 'dashboard',
+            requiresAuth: true,
+        },
+    },
 ]

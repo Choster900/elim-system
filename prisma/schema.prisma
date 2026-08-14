@@ -36,6 +36,39 @@ enum MemberMaritalStatus {
   @@map("eci_estado_civil_miembro")
 }
 
+enum SystemUserStatus {
+  ACTIVE  @map("activo")
+  INVITED @map("invitado")
+  BLOCKED @map("bloqueado")
+
+  @@map("eus_estado_usuario")
+}
+
+enum AccessRecordStatus {
+  ACTIVE   @map("activo")
+  INACTIVE @map("inactivo")
+
+  @@map("ere_estado_registro")
+}
+
+enum MeetingStatus {
+  SCHEDULED   @map("programada")
+  IN_PROGRESS @map("en_curso")
+  COMPLETED   @map("completada")
+  CANCELLED   @map("cancelada")
+
+  @@map("ere_estado_reunion")
+}
+
+enum MeetingFrequency {
+  ONCE     @map("unica")
+  WEEKLY   @map("semanal")
+  BIWEEKLY @map("quincenal")
+  MONTHLY  @map("mensual")
+
+  @@map("fre_frecuencia_reunion")
+}
+
 model Member {
   id                    Int                   @id(map: "pk_mie_miembro") @default(autoincrement()) @map("mie_id")
   code                  String                @unique(map: "uk_mie_codigo") @map("mie_codigo") @db.VarChar(100)
@@ -66,17 +99,25 @@ model Member {
   emergencyContactName  String?               @map("mie_contacto_emergencia") @db.VarChar(100)
   emergencyContactPhone String?               @map("mie_telefono_emergencia") @db.VarChar(100)
   notes                 String?               @map("mie_nota") @db.VarChar(600)
+  territorySectorId     Int?                  @map("mie_id_sec")
   createdAt             DateTime              @default(now()) @map("mie_fecha_creacion")
   updatedAt             DateTime              @updatedAt @map("mie_fecha_modificacion")
   user                  User?
   communityRoles        MemberCommunityRole[]
   ministries            MemberMinistry[]
+  territorySector       TerritorySector?      @relation("MemberTerritorySector", fields: [territorySectorId], references: [id], onDelete: SetNull, map: "fk_mie_id_sec")
+  ledDistricts          District[]            @relation("DistrictLeader")
+  ledZones              Zone[]                @relation("ZoneLeader")
+  ledSectors            TerritorySector[]     @relation("SectorLeader")
+  supervisedMeetings    Meeting[]             @relation("MeetingSupervisor")
+  coSupervisedMeetings  MeetingCoSupervisor[]
 
   @@index([status], map: "ix_mie_estado")
   @@index([lastName, firstName], map: "ix_mie_nombre")
   @@index([birthDate], map: "ix_mie_fecha_nacimiento")
   @@index([joinedAt], map: "ix_mie_fecha_ingreso")
   @@index([district, zone, sector], map: "ix_mie_territorio")
+  @@index([territorySectorId], map: "ix_mie_sector")
   @@map("mie_miembro")
 }
 
@@ -151,6 +192,10 @@ model User {
   username               String?          @unique(map: "uk_usu_nombre_usuario") @map("usu_nombre_usuario") @db.VarChar(100)
   passwordHash           String           @map("usu_resumen_clave") @db.VarChar(100)
   isActive               Boolean          @default(true) @map("usu_activo")
+  status                 SystemUserStatus @default(ACTIVE) @map("usu_estado")
+  twoFactorEnabled       Boolean          @default(false) @map("usu_doble_factor")
+  mustChangePassword     Boolean          @default(true) @map("usu_cambiar_clave")
+  lastAccessAt           DateTime?        @map("usu_fecha_ultimo_acceso")
   createdAt              DateTime         @default(now()) @map("usu_fecha_creacion")
   updatedAt              DateTime         @updatedAt @map("usu_fecha_modificacion")
   member                 Member?          @relation(fields: [memberId], references: [id], onDelete: SetNull, map: "fk_usu_id_mie")
@@ -160,6 +205,8 @@ model User {
   grantedRolePermissions RolePermission[] @relation("RolePermissionGranter")
 
   @@index([isActive], map: "ix_usu_activo")
+  @@index([status], map: "ix_usu_estado")
+  @@index([lastAccessAt], map: "ix_usu_fecha_ultimo_acceso")
   @@map("usu_usuario")
 }
 
@@ -181,34 +228,41 @@ model AuthSession {
 }
 
 model Role {
-  id              Int              @id(map: "pk_rol_rol") @default(autoincrement()) @map("rol_id")
-  name            String           @unique(map: "uk_rol_nombre") @map("rol_nombre") @db.VarChar(100)
-  code            String           @unique(map: "uk_rol_codigo") @map("rol_codigo") @db.VarChar(100)
-  description     String?          @map("rol_descripcion") @db.VarChar(300)
-  isSystem        Boolean          @default(false) @map("rol_sistema")
-  createdAt       DateTime         @default(now()) @map("rol_fecha_creacion")
-  updatedAt       DateTime         @updatedAt @map("rol_fecha_modificacion")
+  id              Int                @id(map: "pk_rol_rol") @default(autoincrement()) @map("rol_id")
+  name            String             @unique(map: "uk_rol_nombre") @map("rol_nombre") @db.VarChar(100)
+  code            String             @unique(map: "uk_rol_codigo") @map("rol_codigo") @db.VarChar(100)
+  description     String?            @map("rol_descripcion") @db.VarChar(300)
+  isSystem        Boolean            @default(false) @map("rol_sistema")
+  status          AccessRecordStatus @default(ACTIVE) @map("rol_estado")
+  createdAt       DateTime           @default(now()) @map("rol_fecha_creacion")
+  updatedAt       DateTime           @updatedAt @map("rol_fecha_modificacion")
   userRoles       UserRole[]
   rolePermissions RolePermission[]
 
   @@index([isSystem], map: "ix_rol_sistema")
+  @@index([status], map: "ix_rol_estado")
   @@map("rol_rol")
 }
 
 model Permission {
-  id              Int              @id(map: "pk_per_permiso") @default(autoincrement()) @map("per_id")
-  name            String           @map("per_nombre") @db.VarChar(100)
-  code            String           @unique(map: "uk_per_codigo") @map("per_codigo") @db.VarChar(100)
-  resource        String           @map("per_recurso") @db.VarChar(100)
-  action          String           @map("per_accion") @db.VarChar(100)
-  description     String?          @map("per_descripcion") @db.VarChar(300)
-  createdAt       DateTime         @default(now()) @map("per_fecha_creacion")
-  updatedAt       DateTime         @updatedAt @map("per_fecha_modificacion")
+  id              Int                @id(map: "pk_per_permiso") @default(autoincrement()) @map("per_id")
+  name            String             @map("per_nombre") @db.VarChar(100)
+  code            String             @unique(map: "uk_per_codigo") @map("per_codigo") @db.VarChar(100)
+  module          String             @default("General") @map("per_modulo") @db.VarChar(100)
+  resource        String             @map("per_recurso") @db.VarChar(100)
+  action          String             @map("per_accion") @db.VarChar(100)
+  description     String?            @map("per_descripcion") @db.VarChar(300)
+  isSystem        Boolean            @default(false) @map("per_sistema")
+  status          AccessRecordStatus @default(ACTIVE) @map("per_estado")
+  createdAt       DateTime           @default(now()) @map("per_fecha_creacion")
+  updatedAt       DateTime           @updatedAt @map("per_fecha_modificacion")
   rolePermissions RolePermission[]
 
   @@unique([resource, action], map: "uk_per_recurso_accion")
+  @@index([module], map: "ix_per_modulo")
   @@index([resource], map: "ix_per_recurso")
   @@index([action], map: "ix_per_accion")
+  @@index([status], map: "ix_per_estado")
   @@map("per_permiso")
 }
 
@@ -242,4 +296,135 @@ model RolePermission {
   @@index([permissionId], map: "ix_rxp_permiso")
   @@index([grantedBy], map: "ix_rxp_otorgante")
   @@map("rxp_rol_permiso")
+}
+
+model District {
+  id          Int      @id(map: "pk_dis_distrito") @default(autoincrement()) @map("dis_id")
+  code        String   @unique(map: "uk_dis_codigo") @map("dis_codigo") @db.VarChar(100)
+  name        String   @unique(map: "uk_dis_nombre") @map("dis_nombre") @db.VarChar(100)
+  description String?  @map("dis_descripcion") @db.VarChar(300)
+  leaderName  String?  @map("dis_nombre_lider") @db.VarChar(100)
+  leaderId    Int?     @map("dis_id_mie")
+  color       String   @map("dis_color") @db.VarChar(100)
+  polygon     Json     @map("dis_poligono") @db.JsonB
+  isActive    Boolean  @default(true) @map("dis_activo")
+  createdAt   DateTime @default(now()) @map("dis_fecha_creacion")
+  updatedAt   DateTime @updatedAt @map("dis_fecha_modificacion")
+  leader      Member?  @relation("DistrictLeader", fields: [leaderId], references: [id], onDelete: SetNull, map: "fk_dis_id_mie")
+  zones       Zone[]
+
+  @@index([leaderId], map: "ix_dis_lider")
+  @@index([isActive], map: "ix_dis_activo")
+  @@map("dis_distrito")
+}
+
+model Zone {
+  id          Int               @id(map: "pk_zon_zona") @default(autoincrement()) @map("zon_id")
+  districtId  Int               @map("zon_id_dis")
+  code        String            @unique(map: "uk_zon_codigo") @map("zon_codigo") @db.VarChar(100)
+  name        String            @map("zon_nombre") @db.VarChar(100)
+  description String?           @map("zon_descripcion") @db.VarChar(300)
+  leaderName  String?           @map("zon_nombre_lider") @db.VarChar(100)
+  leaderId    Int?              @map("zon_id_mie")
+  color       String            @map("zon_color") @db.VarChar(100)
+  polygon     Json              @map("zon_poligono") @db.JsonB
+  isActive    Boolean           @default(true) @map("zon_activo")
+  createdAt   DateTime          @default(now()) @map("zon_fecha_creacion")
+  updatedAt   DateTime          @updatedAt @map("zon_fecha_modificacion")
+  district    District          @relation(fields: [districtId], references: [id], onDelete: Cascade, map: "fk_zon_id_dis")
+  leader      Member?           @relation("ZoneLeader", fields: [leaderId], references: [id], onDelete: SetNull, map: "fk_zon_id_mie")
+  sectors     TerritorySector[]
+
+  @@unique([districtId, name], map: "uk_zon_distrito_nombre")
+  @@index([districtId], map: "ix_zon_distrito")
+  @@index([leaderId], map: "ix_zon_lider")
+  @@index([isActive], map: "ix_zon_activo")
+  @@map("zon_zona")
+}
+
+model TerritorySector {
+  id          Int       @id(map: "pk_sec_sector") @default(autoincrement()) @map("sec_id")
+  zoneId      Int       @map("sec_id_zon")
+  code        String    @unique(map: "uk_sec_codigo") @map("sec_codigo") @db.VarChar(100)
+  name        String    @map("sec_nombre") @db.VarChar(100)
+  description String?   @map("sec_descripcion") @db.VarChar(300)
+  leaderName  String?   @map("sec_nombre_lider") @db.VarChar(100)
+  leaderId    Int?      @map("sec_id_mie")
+  color       String    @map("sec_color") @db.VarChar(100)
+  polygon     Json      @map("sec_poligono") @db.JsonB
+  isActive    Boolean   @default(true) @map("sec_activo")
+  createdAt   DateTime  @default(now()) @map("sec_fecha_creacion")
+  updatedAt   DateTime  @updatedAt @map("sec_fecha_modificacion")
+  zone        Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade, map: "fk_sec_id_zon")
+  leader      Member?   @relation("SectorLeader", fields: [leaderId], references: [id], onDelete: SetNull, map: "fk_sec_id_mie")
+  members     Member[]  @relation("MemberTerritorySector")
+  meetings    Meeting[]
+
+  @@unique([zoneId, name], map: "uk_sec_zona_nombre")
+  @@index([zoneId], map: "ix_sec_zona")
+  @@index([leaderId], map: "ix_sec_lider")
+  @@index([isActive], map: "ix_sec_activo")
+  @@map("sec_sector")
+}
+
+model MeetingType {
+  id          Int       @id(map: "pk_tir_tipo_reunion") @default(autoincrement()) @map("tir_id")
+  code        String    @unique(map: "uk_tir_codigo") @map("tir_codigo") @db.VarChar(100)
+  name        String    @unique(map: "uk_tir_nombre") @map("tir_nombre") @db.VarChar(100)
+  description String?   @map("tir_descripcion") @db.VarChar(300)
+  color       String    @map("tir_color") @db.VarChar(100)
+  isActive    Boolean   @default(true) @map("tir_activo")
+  createdAt   DateTime  @default(now()) @map("tir_fecha_creacion")
+  updatedAt   DateTime  @updatedAt @map("tir_fecha_modificacion")
+  meetings    Meeting[]
+
+  @@index([isActive], map: "ix_tir_activo")
+  @@map("tir_tipo_reunion")
+}
+
+model Meeting {
+  id                Int                   @id(map: "pk_reu_reunion") @default(autoincrement()) @map("reu_id")
+  typeId            Int                   @map("reu_id_tir")
+  sectorId          Int                   @map("reu_id_sec")
+  supervisorId      Int                   @map("reu_id_mie_supervisor")
+  title             String                @map("reu_titulo") @db.VarChar(100)
+  description       String?               @map("reu_descripcion") @db.VarChar(300)
+  date              DateTime              @map("reu_fecha") @db.Date
+  startTime         DateTime              @map("reu_hora_inicio") @db.Time(0)
+  endTime           DateTime              @map("reu_hora_fin") @db.Time(0)
+  location          String                @map("reu_ubicacion") @db.VarChar(300)
+  latitude          Decimal?              @map("reu_latitud") @db.Decimal(10, 7)
+  longitude         Decimal?              @map("reu_longitud") @db.Decimal(10, 7)
+  frequency         MeetingFrequency      @default(ONCE) @map("reu_frecuencia")
+  expectedAttendees Int                   @default(0) @map("reu_asistente_esperado")
+  status            MeetingStatus         @default(SCHEDULED) @map("reu_estado")
+  isPublic          Boolean               @default(false) @map("reu_publica")
+  notes             String?               @map("reu_nota") @db.VarChar(600)
+  color             String                @map("reu_color") @db.VarChar(100)
+  createdAt         DateTime              @default(now()) @map("reu_fecha_creacion")
+  updatedAt         DateTime              @updatedAt @map("reu_fecha_modificacion")
+  type              MeetingType           @relation(fields: [typeId], references: [id], onDelete: Restrict, map: "fk_reu_id_tir")
+  sector            TerritorySector       @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reu_id_sec")
+  supervisor        Member                @relation("MeetingSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_supervisor")
+  coSupervisors     MeetingCoSupervisor[]
+
+  @@index([typeId], map: "ix_reu_tipo")
+  @@index([sectorId], map: "ix_reu_sector")
+  @@index([supervisorId], map: "ix_reu_supervisor")
+  @@index([date], map: "ix_reu_fecha")
+  @@index([status], map: "ix_reu_estado")
+  @@map("reu_reunion")
+}
+
+model MeetingCoSupervisor {
+  id        Int      @id(map: "pk_rxm_reunion_miembro") @default(autoincrement()) @map("rxm_id")
+  meetingId Int      @map("rxm_reunion")
+  memberId  Int      @map("rxm_miembro")
+  createdAt DateTime @default(now()) @map("rxm_fecha_creacion")
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "fk_rxm_reunion")
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Restrict, map: "fk_rxm_miembro")
+
+  @@unique([meetingId, memberId], map: "uk_rxm_reunion_miembro")
+  @@index([memberId], map: "ix_rxm_miembro")
+  @@map("rxm_reunion_miembro")
 }

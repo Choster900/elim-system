@@ -16,6 +16,11 @@ const PRISMA_ERROR_MAP: Record<
         message: 'Recurso no encontrado',
         code: ApiErrorCode.RESOURCE_NOT_FOUND,
     },
+    P2003: {
+        statusCode: 409,
+        message: 'El recurso tiene registros asociados y no puede eliminarse',
+        code: ApiErrorCode.BUSINESS_RULE_ERROR,
+    },
 }
 
 export function mapPrismaError(error: unknown): never {

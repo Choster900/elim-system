@@ -1,26 +1,33 @@
 import bcrypt from 'bcryptjs'
 
-export const ADMIN_USER_SEED_PASSWORD = ' '
-
-export const ADMIN_USER_SEED = {
-    email: 'admin@local.test',
-    username: 'admin',
-    isActive: true,
-}
-
 export async function seedAdminUser(prisma) {
-    const passwordHash = await bcrypt.hash(ADMIN_USER_SEED_PASSWORD, 12)
+    const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@local.test'
+    const username = process.env.SEED_ADMIN_USERNAME ?? 'admin'
+    const password = process.env.SEED_ADMIN_PASSWORD ?? 'Admin12345!'
+
+    if (password.length < 8) {
+        throw new Error('SEED_ADMIN_PASSWORD must contain at least 8 characters.')
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12)
 
     return prisma.user.upsert({
-        where: { email: ADMIN_USER_SEED.email },
+        where: { email },
         create: {
-            ...ADMIN_USER_SEED,
+            email,
+            username,
             passwordHash,
+            isActive: true,
+            status: 'ACTIVE',
+            mustChangePassword: false,
+            twoFactorEnabled: false,
         },
         update: {
-            username: ADMIN_USER_SEED.username,
+            username,
             passwordHash,
-            isActive: ADMIN_USER_SEED.isActive,
+            isActive: true,
+            status: 'ACTIVE',
+            mustChangePassword: false,
         },
     })
 }
@@ -31,16 +38,6 @@ export async function seedAdminRoleAssignment(prisma, userId, roleId) {
             userId_roleId: { userId, roleId },
         },
         create: { userId, roleId },
-        update: {},
-    })
-}
-
-export async function seedAdminPermissionAssignment(prisma, roleId, permissionId) {
-    return prisma.rolePermission.upsert({
-        where: {
-            roleId_permissionId: { roleId, permissionId },
-        },
-        create: { roleId, permissionId },
         update: {},
     })
 }

@@ -1,44 +1,25 @@
-export type LatLng = [number, number]
-export type Polygon = LatLng[]
+import type {
+    District,
+    LatLng,
+    TerritorySector,
+    Zone,
+} from '~/presentation/territories/interfaces/territory.interface'
 
-export interface MockDistrict {
-    id: string
-    name: string
-    code: string
-    description: string
-    leaderName: string
-    color: string
-    polygon: Polygon
-    createdAt: string
-}
-
-export interface MockZone {
-    id: string
-    districtId: string
-    name: string
-    code: string
-    description: string
-    leaderName: string
-    color: string
-    polygon: Polygon
-    createdAt: string
-}
-
-export interface MockTerritorySector {
-    id: string
-    zoneId: string
-    name: string
-    code: string
-    description: string
-    leaderName: string
-    color: string
-    polygon: Polygon
-    createdAt: string
-}
+export type MockDistrict = District
+export type MockZone = Zone
+export type MockTerritorySector = TerritorySector
 
 const NOW = '2026-01-01T00:00:00.000Z'
 
-export const districtPalette = ['#e9c176', '#9bc1bc', '#d39a9a', '#a3b18a', '#b4a7d6', '#f4a261', '#8ab0d9']
+export const districtPalette = [
+    '#e9c176',
+    '#9bc1bc',
+    '#d39a9a',
+    '#a3b18a',
+    '#b4a7d6',
+    '#f4a261',
+    '#8ab0d9',
+]
 export const zonePalette = ['#f4a261', '#9bc1bc', '#d39a9a', '#b4a7d6', '#8ab0d9']
 export const sectorPalette = ['#e9c176', '#a3b18a', '#9bc1bc', '#d39a9a', '#f4a261']
 
@@ -47,16 +28,19 @@ export const mockDistricts: MockDistrict[] = [
         id: 'dist-metro',
         name: 'Distrito Metropolitano',
         code: 'DM',
-        description: 'Área metropolitana de San Salvador. Concentra la mayor parte de la membresía y los ministerios centrales.',
+        description:
+            'Área metropolitana de San Salvador. Concentra la mayor parte de la membresía y los ministerios centrales.',
         leaderName: 'Pastor Daniel Hernández',
         color: '#e9c176',
         polygon: [
-            [13.78, -89.30],
+            [13.78, -89.3],
             [13.78, -89.15],
             [13.65, -89.15],
-            [13.65, -89.30],
+            [13.65, -89.3],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'dist-occidental',
@@ -66,12 +50,14 @@ export const mockDistricts: MockDistrict[] = [
         leaderName: 'Pastor Roberto Quintanilla',
         color: '#9bc1bc',
         polygon: [
-            [13.95, -89.70],
-            [13.95, -89.50],
-            [13.78, -89.50],
-            [13.78, -89.70],
+            [13.95, -89.7],
+            [13.95, -89.5],
+            [13.78, -89.5],
+            [13.78, -89.7],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
 ]
 
@@ -90,7 +76,9 @@ export const mockZones: MockZone[] = [
             [13.74, -89.18],
             [13.74, -89.25],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'zone-metro-centro',
@@ -103,10 +91,12 @@ export const mockZones: MockZone[] = [
         polygon: [
             [13.74, -89.25],
             [13.74, -89.18],
-            [13.70, -89.18],
-            [13.70, -89.25],
+            [13.7, -89.18],
+            [13.7, -89.25],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'zone-metro-sur',
@@ -117,12 +107,14 @@ export const mockZones: MockZone[] = [
         leaderName: 'Esteban Cruz',
         color: '#d39a9a',
         polygon: [
-            [13.70, -89.25],
-            [13.70, -89.18],
+            [13.7, -89.25],
+            [13.7, -89.18],
             [13.65, -89.18],
             [13.65, -89.25],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'zone-occidental-santa-ana',
@@ -138,7 +130,9 @@ export const mockZones: MockZone[] = [
             [13.86, -89.55],
             [13.86, -89.65],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'zone-occidental-sonsonate',
@@ -149,12 +143,14 @@ export const mockZones: MockZone[] = [
         leaderName: 'Patricia Fuentes',
         color: '#8ab0d9',
         polygon: [
-            [13.86, -89.70],
+            [13.86, -89.7],
             [13.86, -89.55],
             [13.78, -89.55],
-            [13.78, -89.70],
+            [13.78, -89.7],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
 ]
 
@@ -173,7 +169,9 @@ export const mockTerritorySectors: MockTerritorySector[] = [
             [13.76, -89.21],
             [13.76, -89.24],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'sec-centro',
@@ -189,7 +187,9 @@ export const mockTerritorySectors: MockTerritorySector[] = [
             [13.715, -89.205],
             [13.715, -89.225],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'sec-este',
@@ -205,7 +205,9 @@ export const mockTerritorySectors: MockTerritorySector[] = [
             [13.715, -89.185],
             [13.715, -89.205],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'sec-oeste',
@@ -221,7 +223,9 @@ export const mockTerritorySectors: MockTerritorySector[] = [
             [13.715, -89.225],
             [13.715, -89.245],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'sec-sur',
@@ -233,11 +237,13 @@ export const mockTerritorySectors: MockTerritorySector[] = [
         color: '#f4a261',
         polygon: [
             [13.69, -89.23],
-            [13.69, -89.20],
-            [13.66, -89.20],
+            [13.69, -89.2],
+            [13.66, -89.2],
             [13.66, -89.23],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'sec-santa-ana-c',
@@ -250,10 +256,12 @@ export const mockTerritorySectors: MockTerritorySector[] = [
         polygon: [
             [13.94, -89.62],
             [13.94, -89.58],
-            [13.90, -89.58],
-            [13.90, -89.62],
+            [13.9, -89.58],
+            [13.9, -89.62],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
     {
         id: 'sec-sonsonate',
@@ -265,13 +273,15 @@ export const mockTerritorySectors: MockTerritorySector[] = [
         color: '#8ab0d9',
         polygon: [
             [13.85, -89.68],
-            [13.85, -89.60],
-            [13.80, -89.60],
-            [13.80, -89.68],
+            [13.85, -89.6],
+            [13.8, -89.6],
+            [13.8, -89.68],
         ],
+        isActive: true,
         createdAt: NOW,
+        updatedAt: NOW,
     },
 ]
 
-export const ELSALVADOR_CENTER: LatLng = [13.80, -89.40]
+export const ELSALVADOR_CENTER: LatLng = [13.8, -89.4]
 export const DEFAULT_MAP_ZOOM = 9

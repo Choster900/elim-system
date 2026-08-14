@@ -1,3 +1,5 @@
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+
 export default [
     {
         name: 'member-create',
@@ -5,6 +7,8 @@ export default [
         component: () => import('~/presentation/members/view/MemberFormView.vue'),
         meta: {
             layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.membersCreate,
         },
     },
     {
@@ -13,6 +17,8 @@ export default [
         component: () => import('~/presentation/members/view/MembersView.vue'),
         meta: {
             layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.membersView,
         },
     },
 ]

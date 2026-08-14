@@ -45,28 +45,32 @@ function inactiveUserError() {
 function mapUserAuth(user: NonNullable<Awaited<ReturnType<typeof findUserByEmailWithAuthGraph>>>) {
     const permissionMap = new Map<string, AuthUserDto['permissions'][number]>()
 
-    const roles = user.userRoles.map(({ role }) => {
-        const rolePermissions = role.rolePermissions.map(({ permission }) => {
-            const mapped = {
-                id: permission.id,
-                name: permission.name,
-                code: permission.code,
-                resource: permission.resource,
-                action: permission.action,
-                description: permission.description,
-            }
-            permissionMap.set(permission.code, mapped)
-            return mapped
-        })
+    const roles = user.userRoles
+        .filter(({ role }) => role.status === 'ACTIVE')
+        .map(({ role }) => {
+            const rolePermissions = role.rolePermissions
+                .filter(({ permission }) => permission.status === 'ACTIVE')
+                .map(({ permission }) => {
+                    const mapped = {
+                        id: permission.id,
+                        name: permission.name,
+                        code: permission.code,
+                        resource: permission.resource,
+                        action: permission.action,
+                        description: permission.description,
+                    }
+                    permissionMap.set(permission.code, mapped)
+                    return mapped
+                })
 
-        return {
-            id: role.id,
-            name: role.name,
-            code: role.code,
-            description: role.description,
-            permissions: rolePermissions,
-        }
-    })
+            return {
+                id: role.id,
+                name: role.name,
+                code: role.code,
+                description: role.description,
+                permissions: rolePermissions,
+            }
+        })
 
     return {
         user: {
@@ -144,11 +148,23 @@ export async function login(dto: { email: string; password: string }) {
         throw invalidCredentialsError()
     }
 
-    if (!user.isActive) {
+    if (!user.isActive || user.status === 'BLOCKED') {
         throw inactiveUserError()
     }
 
     return issueTokensAndSession(user)
+}
+
+export async function getCurrentUser(userId: number) {
+    const user = await findUserByIdWithAuthGraph(userId)
+    if (!user) {
+        throw invalidCredentialsError()
+    }
+    if (!user.isActive || user.status === 'BLOCKED') {
+        throw inactiveUserError()
+    }
+
+    return mapUserAuth(user).user
 }
 
 export async function refreshAuth(refreshToken: string) {
@@ -174,7 +190,7 @@ export async function refreshAuth(refreshToken: string) {
         throw invalidRefreshTokenError()
     }
 
-    if (!user.isActive) {
+    if (!user.isActive || user.status === 'BLOCKED') {
         throw inactiveUserError()
     }
 

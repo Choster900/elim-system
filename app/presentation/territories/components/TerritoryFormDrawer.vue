@@ -1,41 +1,46 @@
 <script setup lang="ts">
 import { Eraser, LoaderCircle, LocateFixed, Undo2, X } from '@lucide/vue'
-import type { LatLng, Polygon } from '~/mock/territories.mock'
+import type {
+    LatLng,
+    Polygon,
+    TerritoryInput,
+} from '~/presentation/territories/interfaces/territory.interface'
 
 type Level = 'distrito' | 'zona' | 'sector'
-
-interface EntityInput {
-    name: string
-    code: string
-    leaderName: string
-    description: string
-    color: string
-    polygon: Polygon
-}
 
 const props = defineProps<{
     open: boolean
     level: Level
     mode: 'create' | 'edit'
-    entity: EntityInput | null
+    entity: TerritoryInput | null
     parentCentroid: LatLng | null
     parentLabel: string | null
     palette: string[]
     accent: string
     levelLabel: string
     leaderLabel: string
+    saving?: boolean
 }>()
 
 const emit = defineEmits<{
     (e: 'close'): void
-    (e: 'save', payload: EntityInput): void
+    (e: 'save', payload: TerritoryInput): void
 }>()
 
 const DEFAULT_CENTER: LatLng = [13.8, -89.4]
 
-const form = reactive({ name: '', code: '', leaderName: '', description: '', color: '' })
+const form = reactive({
+    name: '',
+    code: '',
+    leaderName: '',
+    description: '',
+    color: '',
+    isActive: true,
+})
 const tempPolygon = ref<LatLng[]>([])
 const nameError = ref(false)
+const codeError = ref(false)
+const polygonError = ref(false)
 const isLocating = ref(false)
 const locationError = ref('')
 
@@ -59,6 +64,8 @@ function defaultBox(center: LatLng): LatLng[] {
 
 function resetForm() {
     nameError.value = false
+    codeError.value = false
+    polygonError.value = false
     isLocating.value = false
     locationError.value = ''
     if (props.mode === 'edit' && props.entity) {
@@ -67,6 +74,7 @@ function resetForm() {
         form.leaderName = props.entity.leaderName
         form.description = props.entity.description
         form.color = props.entity.color
+        form.isActive = props.entity.isActive
         tempPolygon.value = props.entity.polygon.map((p) => [...p] as LatLng)
     } else {
         form.name = ''
@@ -74,6 +82,7 @@ function resetForm() {
         form.leaderName = ''
         form.description = ''
         form.color = props.palette[0] ?? '#e9c176'
+        form.isActive = true
         tempPolygon.value = defaultBox(props.parentCentroid ?? DEFAULT_CENTER)
     }
 }
@@ -228,17 +237,23 @@ function save() {
         nameError.value = true
         return
     }
-    const polygon: Polygon =
-        tempPolygon.value.length >= 3
-            ? tempPolygon.value.map((p) => [...p] as LatLng)
-            : (props.entity?.polygon ?? defaultBox(props.parentCentroid ?? DEFAULT_CENTER))
+    if (!form.code.trim()) {
+        codeError.value = true
+        return
+    }
+    if (tempPolygon.value.length < 3) {
+        polygonError.value = true
+        return
+    }
+    const polygon: Polygon = tempPolygon.value.map((p) => [...p] as LatLng)
     emit('save', {
         name: form.name.trim(),
-        code: form.code.trim(),
+        code: form.code.trim().toUpperCase(),
         leaderName: form.leaderName.trim(),
         description: form.description.trim(),
         color: form.color,
         polygon,
+        isActive: form.isActive,
     })
 }
 
@@ -296,6 +311,7 @@ const labelClass =
                             inputClass,
                             nameError ? 'border-destructive focus:border-destructive' : '',
                         ]"
+                        @input="nameError = false"
                     />
                     <p v-if="nameError" class="mt-1 text-xs text-destructive">
                         El nombre es obligatorio.
@@ -307,15 +323,22 @@ const labelClass =
                         <label
                             class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                             for="tf-code"
-                            >Código</label
+                            >Código *</label
                         >
                         <input
                             id="tf-code"
                             v-model="form.code"
                             type="text"
                             placeholder="Ej. DM"
-                            :class="inputClass"
+                            :class="[
+                                inputClass,
+                                codeError ? 'border-destructive focus:border-destructive' : '',
+                            ]"
+                            @input="codeError = false"
                         />
+                        <p v-if="codeError" class="mt-1 text-xs text-destructive">
+                            El código es obligatorio.
+                        </p>
                     </div>
                     <div>
                         <label
@@ -342,6 +365,24 @@ const labelClass =
                         placeholder="Cobertura, observaciones…"
                         :class="[inputClass, 'resize-none leading-relaxed']"
                     />
+                </div>
+
+                <div class="mb-5">
+                    <label
+                        class="flex cursor-pointer items-center justify-between rounded-lg border border-outline-variant bg-surface px-3 py-2.5"
+                    >
+                        <span>
+                            <span class="block text-sm font-semibold text-on-surface">Activo</span>
+                            <span class="block text-xs text-on-surface-variant">
+                                Disponible para asignaciones y consultas.
+                            </span>
+                        </span>
+                        <input
+                            v-model="form.isActive"
+                            type="checkbox"
+                            class="size-4 accent-primary"
+                        />
+                    </label>
                 </div>
 
                 <div class="mb-5">
@@ -376,7 +417,10 @@ const labelClass =
                                 type="button"
                                 class="inline-flex items-center gap-1 rounded-md border border-outline-variant px-2 py-1 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
                                 :disabled="tempPolygon.length === 0"
-                                @click="undoVertex"
+                                @click="
+                                    undoVertex()
+                                    polygonError = false
+                                "
                             >
                                 <Undo2 class="size-3" /> Deshacer
                             </button>
@@ -412,6 +456,9 @@ const labelClass =
                         <span class="text-on-surface">{{ tempPolygon.length }}</span> punto(s) ·
                         mínimo 3 para un área válida.
                     </p>
+                    <p v-if="polygonError" class="mt-1 text-xs text-destructive" role="alert">
+                        Debes definir al menos tres puntos para el área de cobertura.
+                    </p>
                 </div>
             </div>
 
@@ -420,16 +467,20 @@ const labelClass =
                     <button
                         type="button"
                         class="flex-1 rounded-lg border border-outline-variant px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high"
+                        :disabled="saving"
                         @click="emit('close')"
                     >
                         Cancelar
                     </button>
                     <button
                         type="button"
-                        class="flex-[2] rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                        class="flex-[2] rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+                        :disabled="saving"
                         @click="save"
                     >
-                        {{ mode === 'create' ? 'Crear' : 'Guardar cambios' }}
+                        {{
+                            saving ? 'Guardando…' : mode === 'create' ? 'Crear' : 'Guardar cambios'
+                        }}
                     </button>
                 </div>
             </div>

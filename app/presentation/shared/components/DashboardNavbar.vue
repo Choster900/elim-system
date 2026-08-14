@@ -9,6 +9,7 @@ import {
     DropdownMenuTrigger,
 } from 'radix-vue'
 import { useLogoutMutation } from '~/presentation/auth/composables/useLogoutMutation'
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import AppBrand from './AppBrand.vue'
@@ -17,6 +18,8 @@ type DashboardMenuItem = {
     label: string
     href?: string
     children?: DashboardMenuItem[]
+    requiredPermission?: string
+    requiredAnyPermissions?: string[]
 }
 
 const isOpen = ref(false)
@@ -42,11 +45,28 @@ async function handleLogout() {
 }
 
 const navItems: DashboardMenuItem[] = [
-    { label: 'Panel', href: '/dashboard' },
+    {
+        label: 'Panel',
+        href: '/dashboard',
+        requiredPermission: routePermissionCodes.dashboard,
+    },
     {
         label: 'Comunidad',
         children: [
-            { label: 'Miembros', href: '/comunidad/miembros' },
+            {
+                label: 'Miembros',
+                href: '/comunidad/miembros',
+                requiredPermission: routePermissionCodes.membersView,
+            },
+            {
+                label: 'Usuarios y accesos',
+                href: '/comunidad/usuarios',
+                requiredAnyPermissions: [
+                    routePermissionCodes.usersView,
+                    routePermissionCodes.rolesView,
+                    routePermissionCodes.permissionsView,
+                ],
+            },
             { label: 'Grupos Pequeños', href: '#' },
             { label: 'Voluntarios', href: '#' },
         ],
@@ -87,11 +107,53 @@ const navItems: DashboardMenuItem[] = [
     {
         label: 'Catálogos',
         children: [
-            { label: 'Reuniones', href: '/catalogos/reuniones' },
-            { label: 'Distritos', href: '/catalogos/distritos' },
+            {
+                label: 'Reuniones',
+                href: '/catalogos/reuniones',
+                requiredPermission: routePermissionCodes.meetingsView,
+            },
+            {
+                label: 'Distritos',
+                href: '/catalogos/distritos',
+                requiredPermission: routePermissionCodes.territoriesView,
+            },
         ],
     },
 ]
+
+function resolveAccessManagementHref() {
+    if (authStore.hasPermission(routePermissionCodes.usersView)) return '/comunidad/usuarios'
+    if (authStore.hasPermission(routePermissionCodes.rolesView)) {
+        return '/comunidad/usuarios?section=roles'
+    }
+    return '/comunidad/usuarios?section=permissions'
+}
+
+function filterMenuItem(item: DashboardMenuItem): DashboardMenuItem | null {
+    if (item.requiredPermission && !authStore.hasPermission(item.requiredPermission)) return null
+    if (
+        item.requiredAnyPermissions &&
+        !item.requiredAnyPermissions.some((permission) => authStore.hasPermission(permission))
+    ) {
+        return null
+    }
+
+    const children = item.children
+        ?.map(filterMenuItem)
+        .filter((child): child is DashboardMenuItem => child !== null)
+
+    if (item.children && !children?.length && !item.href) return null
+
+    return {
+        ...item,
+        href: item.href === '/comunidad/usuarios' ? resolveAccessManagementHref() : item.href,
+        children,
+    }
+}
+
+const visibleNavItems = computed(() =>
+    navItems.map(filterMenuItem).filter((item): item is DashboardMenuItem => item !== null),
+)
 </script>
 
 <template>
@@ -101,7 +163,7 @@ const navItems: DashboardMenuItem[] = [
                 <AppBrand to="/dashboard" />
 
                 <div class="hidden items-center gap-7 lg:flex">
-                    <div v-for="item in navItems" :key="item.label" class="relative group">
+                    <div v-for="item in visibleNavItems" :key="item.label" class="relative group">
                         <NuxtLink
                             v-if="item.href"
                             :to="item.href"
@@ -251,7 +313,7 @@ const navItems: DashboardMenuItem[] = [
                     </div>
                 </div>
 
-                <template v-for="item in navItems" :key="item.label">
+                <template v-for="item in visibleNavItems" :key="item.label">
                     <NuxtLink
                         v-if="item.href"
                         :to="item.href"

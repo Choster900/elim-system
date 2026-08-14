@@ -1,3 +1,5 @@
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+
 export default [
     {
         name: 'territories',
@@ -5,6 +7,8 @@ export default [
         component: () => import('~/presentation/territories/view/TerritoriesView.vue'),
         meta: {
             layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.territoriesView,
         },
     },
 ]

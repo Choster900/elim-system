@@ -1,3 +1,5 @@
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+
 export default [
     {
         name: 'meetings',
@@ -5,6 +7,8 @@ export default [
         component: () => import('~/presentation/meetings/view/MeetingsView.vue'),
         meta: {
             layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.meetingsView,
         },
     },
     {
@@ -13,6 +17,8 @@ export default [
         component: () => import('~/presentation/meetings/view/MeetingFormView.vue'),
         meta: {
             layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.meetingsManage,
         },
     },
     {
@@ -21,6 +27,8 @@ export default [
         component: () => import('~/presentation/meetings/view/MeetingFormView.vue'),
         meta: {
             layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.meetingsManage,
         },
     },
 ]
