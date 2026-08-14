@@ -1,5 +1,5 @@
 export interface AuthPermission {
-    id: string
+    id: number
     name: string
     code: string
     resource: string
@@ -8,7 +8,7 @@ export interface AuthPermission {
 }
 
 export interface AuthRole {
-    id: string
+    id: number
     name: string
     code: string
     description: string | null
@@ -16,7 +16,7 @@ export interface AuthRole {
 }
 
 export interface AuthUser {
-    id: string
+    id: number
     email: string
     username: string | null
     roles: AuthRole[]

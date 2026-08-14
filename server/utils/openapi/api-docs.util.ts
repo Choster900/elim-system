@@ -94,7 +94,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             name: 'id',
                             in: 'path',
                             required: true,
-                            schema: { type: 'string', format: 'uuid' },
+                            schema: { type: 'integer', format: 'int32', minimum: 1 },
                         },
                     ],
                     responses: {
@@ -124,7 +124,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             name: 'id',
                             in: 'path',
                             required: true,
-                            schema: { type: 'string', format: 'uuid' },
+                            schema: { type: 'integer', format: 'int32', minimum: 1 },
                         },
                     ],
                     requestBody: {
@@ -164,7 +164,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             name: 'id',
                             in: 'path',
                             required: true,
-                            schema: { type: 'string', format: 'uuid' },
+                            schema: { type: 'integer', format: 'int32', minimum: 1 },
                         },
                     ],
                     responses: {
@@ -265,7 +265,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 Permission: {
                     type: 'object',
                     properties: {
-                        id: { type: 'string', format: 'uuid' },
+                        id: { type: 'integer', format: 'int32' },
                         name: { type: 'string' },
                         code: { type: 'string' },
                         resource: { type: 'string' },
@@ -313,7 +313,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 AuthPermission: {
                     type: 'object',
                     properties: {
-                        id: { type: 'string', format: 'uuid' },
+                        id: { type: 'integer', format: 'int32' },
                         name: { type: 'string' },
                         code: { type: 'string' },
                         resource: { type: 'string' },
@@ -324,7 +324,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 AuthRole: {
                     type: 'object',
                     properties: {
-                        id: { type: 'string', format: 'uuid' },
+                        id: { type: 'integer', format: 'int32' },
                         name: { type: 'string' },
                         code: { type: 'string' },
                         description: { type: 'string', nullable: true },
@@ -337,7 +337,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 AuthUser: {
                     type: 'object',
                     properties: {
-                        id: { type: 'string', format: 'uuid' },
+                        id: { type: 'integer', format: 'int32' },
                         email: { type: 'string', format: 'email' },
                         username: { type: 'string', nullable: true },
                         roles: {

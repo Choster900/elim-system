@@ -6,95 +6,240 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  username     String?    @unique
-  passwordHash String     @map("password_hash")
-  isActive     Boolean    @default(true) @map("is_active")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  authSessions AuthSession[]
-  userRoles    UserRole[]
+enum MemberStatus {
+  ACTIVE      @map("activo")
+  INACTIVE    @map("inactivo")
+  VISITOR     @map("visitante")
+  TRANSFERRED @map("trasladado")
+  DECEASED    @map("fallecido")
 
-  @@index([isActive])
-  @@map("user")
+  @@map("eme_estado_miembro")
+}
+
+enum MemberGender {
+  FEMALE      @map("femenino")
+  MALE        @map("masculino")
+  OTHER       @map("otro")
+  UNSPECIFIED @map("sin_especificar")
+
+  @@map("gmi_genero_miembro")
+}
+
+enum MemberMaritalStatus {
+  SINGLE      @map("soltero")
+  MARRIED     @map("casado")
+  DIVORCED    @map("divorciado")
+  WIDOWED     @map("viudo")
+  UNION       @map("union_estable")
+  UNSPECIFIED @map("sin_especificar")
+
+  @@map("eci_estado_civil_miembro")
+}
+
+model Member {
+  id                    Int                   @id(map: "pk_mie_miembro") @default(autoincrement()) @map("mie_id")
+  code                  String                @unique(map: "uk_mie_codigo") @map("mie_codigo") @db.VarChar(100)
+  firstName             String                @map("mie_primer_nombre") @db.VarChar(100)
+  middleName            String?               @map("mie_segundo_nombre") @db.VarChar(100)
+  lastName              String                @map("mie_primer_apellido") @db.VarChar(100)
+  secondLastName        String?               @map("mie_segundo_apellido") @db.VarChar(100)
+  preferredName         String?               @map("mie_nombre_preferido") @db.VarChar(100)
+  documentNumber        String?               @unique(map: "uk_mie_numero_documento") @map("mie_numero_documento") @db.VarChar(100)
+  birthDate             DateTime?             @map("mie_fecha_nacimiento") @db.Date
+  gender                MemberGender          @default(UNSPECIFIED) @map("mie_genero")
+  maritalStatus         MemberMaritalStatus   @default(UNSPECIFIED) @map("mie_estado_civil")
+  phone                 String?               @map("mie_telefono") @db.VarChar(100)
+  alternatePhone        String?               @map("mie_telefono_alterno") @db.VarChar(100)
+  email                 String?               @map("mie_correo") @db.VarChar(100)
+  address               String?               @map("mie_direccion") @db.VarChar(300)
+  municipality          String?               @map("mie_municipio") @db.VarChar(100)
+  department            String?               @map("mie_departamento") @db.VarChar(100)
+  occupation            String?               @map("mie_ocupacion") @db.VarChar(100)
+  status                MemberStatus          @default(ACTIVE) @map("mie_estado")
+  joinedAt              DateTime?             @map("mie_fecha_ingreso") @db.Date
+  conversionDate        DateTime?             @map("mie_fecha_conversion") @db.Date
+  baptismDate           DateTime?             @map("mie_fecha_bautismo") @db.Date
+  district              String?               @map("mie_distrito") @db.VarChar(100)
+  zone                  String?               @map("mie_zona") @db.VarChar(100)
+  sector                String?               @map("mie_sector") @db.VarChar(100)
+  smallGroup            String?               @map("mie_grupo_pequeno") @db.VarChar(100)
+  emergencyContactName  String?               @map("mie_contacto_emergencia") @db.VarChar(100)
+  emergencyContactPhone String?               @map("mie_telefono_emergencia") @db.VarChar(100)
+  notes                 String?               @map("mie_nota") @db.VarChar(600)
+  createdAt             DateTime              @default(now()) @map("mie_fecha_creacion")
+  updatedAt             DateTime              @updatedAt @map("mie_fecha_modificacion")
+  user                  User?
+  communityRoles        MemberCommunityRole[]
+  ministries            MemberMinistry[]
+
+  @@index([status], map: "ix_mie_estado")
+  @@index([lastName, firstName], map: "ix_mie_nombre")
+  @@index([birthDate], map: "ix_mie_fecha_nacimiento")
+  @@index([joinedAt], map: "ix_mie_fecha_ingreso")
+  @@index([district, zone, sector], map: "ix_mie_territorio")
+  @@map("mie_miembro")
+}
+
+model CommunityRole {
+  id          Int                   @id(map: "pk_roc_rol_comunidad") @default(autoincrement()) @map("roc_id")
+  code        String                @unique(map: "uk_roc_codigo") @map("roc_codigo") @db.VarChar(100)
+  name        String                @unique(map: "uk_roc_nombre") @map("roc_nombre") @db.VarChar(100)
+  description String?               @map("roc_descripcion") @db.VarChar(300)
+  isActive    Boolean               @default(true) @map("roc_activo")
+  isSystem    Boolean               @default(false) @map("roc_sistema")
+  createdAt   DateTime              @default(now()) @map("roc_fecha_creacion")
+  updatedAt   DateTime              @updatedAt @map("roc_fecha_modificacion")
+  members     MemberCommunityRole[]
+
+  @@index([isActive], map: "ix_roc_activo")
+  @@map("roc_rol_comunidad")
+}
+
+model MemberCommunityRole {
+  id        Int           @id(map: "pk_mxr_miembro_rol") @default(autoincrement()) @map("mxr_id")
+  memberId  Int           @map("mxr_miembro")
+  roleId    Int           @map("mxr_rol")
+  startedAt DateTime?     @map("mxr_fecha_inicio") @db.Date
+  endedAt   DateTime?     @map("mxr_fecha_fin") @db.Date
+  notes     String?       @map("mxr_nota") @db.VarChar(300)
+  createdAt DateTime      @default(now()) @map("mxr_fecha_creacion")
+  updatedAt DateTime      @updatedAt @map("mxr_fecha_modificacion")
+  member    Member        @relation(fields: [memberId], references: [id], onDelete: Cascade, map: "fk_mxr_miembro")
+  role      CommunityRole @relation(fields: [roleId], references: [id], onDelete: Restrict, map: "fk_mxr_rol")
+
+  @@unique([memberId, roleId], map: "uk_mxr_miembro_rol")
+  @@index([roleId], map: "ix_mxr_rol")
+  @@map("mxr_miembro_rol")
+}
+
+model Ministry {
+  id          Int              @id(map: "pk_min_ministerio") @default(autoincrement()) @map("min_id")
+  code        String           @unique(map: "uk_min_codigo") @map("min_codigo") @db.VarChar(100)
+  name        String           @unique(map: "uk_min_nombre") @map("min_nombre") @db.VarChar(100)
+  description String?          @map("min_descripcion") @db.VarChar(300)
+  isActive    Boolean          @default(true) @map("min_activo")
+  createdAt   DateTime         @default(now()) @map("min_fecha_creacion")
+  updatedAt   DateTime         @updatedAt @map("min_fecha_modificacion")
+  members     MemberMinistry[]
+
+  @@index([isActive], map: "ix_min_activo")
+  @@map("min_ministerio")
+}
+
+model MemberMinistry {
+  id          Int       @id(map: "pk_mxm_miembro_ministerio") @default(autoincrement()) @map("mxm_id")
+  memberId    Int       @map("mxm_miembro")
+  ministryId  Int       @map("mxm_ministerio")
+  serviceRole String?   @map("mxm_funcion") @db.VarChar(100)
+  startedAt   DateTime? @map("mxm_fecha_inicio") @db.Date
+  endedAt     DateTime? @map("mxm_fecha_fin") @db.Date
+  notes       String?   @map("mxm_nota") @db.VarChar(300)
+  createdAt   DateTime  @default(now()) @map("mxm_fecha_creacion")
+  updatedAt   DateTime  @updatedAt @map("mxm_fecha_modificacion")
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade, map: "fk_mxm_miembro")
+  ministry    Ministry  @relation(fields: [ministryId], references: [id], onDelete: Restrict, map: "fk_mxm_ministerio")
+
+  @@unique([memberId, ministryId], map: "uk_mxm_miembro_ministerio")
+  @@index([ministryId], map: "ix_mxm_ministerio")
+  @@map("mxm_miembro_ministerio")
+}
+
+model User {
+  id                     Int              @id(map: "pk_usu_usuario") @default(autoincrement()) @map("usu_id")
+  memberId               Int?             @unique(map: "uk_usu_id_mie") @map("usu_id_mie")
+  email                  String           @unique(map: "uk_usu_correo") @map("usu_correo") @db.VarChar(100)
+  username               String?          @unique(map: "uk_usu_nombre_usuario") @map("usu_nombre_usuario") @db.VarChar(100)
+  passwordHash           String           @map("usu_resumen_clave") @db.VarChar(100)
+  isActive               Boolean          @default(true) @map("usu_activo")
+  createdAt              DateTime         @default(now()) @map("usu_fecha_creacion")
+  updatedAt              DateTime         @updatedAt @map("usu_fecha_modificacion")
+  member                 Member?          @relation(fields: [memberId], references: [id], onDelete: SetNull, map: "fk_usu_id_mie")
+  authSessions           AuthSession[]
+  userRoles              UserRole[]       @relation("UserRoleUser")
+  assignedUserRoles      UserRole[]       @relation("UserRoleAssigner")
+  grantedRolePermissions RolePermission[] @relation("RolePermissionGranter")
+
+  @@index([isActive], map: "ix_usu_activo")
+  @@map("usu_usuario")
 }
 
 model AuthSession {
-  id               String    @id @default(uuid())
-  userId           String    @map("user_id")
-  refreshTokenHash String    @map("refresh_token_hash")
-  expiresAt        DateTime  @map("expires_at")
-  revokedAt        DateTime? @map("revoked_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               Int       @id(map: "pk_ses_sesion_autenticacion") @default(autoincrement()) @map("ses_id")
+  tokenId          String    @unique(map: "uk_ses_identificador") @default(uuid()) @map("ses_identificador") @db.VarChar(100)
+  userId           Int       @map("ses_id_usu")
+  refreshTokenHash String    @map("ses_resumen_token_refresco") @db.VarChar(100)
+  expiresAt        DateTime  @map("ses_fecha_expiracion")
+  revokedAt        DateTime? @map("ses_fecha_revocacion")
+  createdAt        DateTime  @default(now()) @map("ses_fecha_creacion")
+  updatedAt        DateTime  @updatedAt @map("ses_fecha_modificacion")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_ses_id_usu")
 
-  @@index([userId])
-  @@index([expiresAt])
-  @@index([revokedAt])
-  @@map("auth_session")
+  @@index([userId], map: "ix_ses_usuario")
+  @@index([expiresAt], map: "ix_ses_fecha_expiracion")
+  @@index([revokedAt], map: "ix_ses_fecha_revocacion")
+  @@map("ses_sesion_autenticacion")
 }
 
 model Role {
-  id              String           @id @default(uuid())
-  name            String           @unique
-  code            String           @unique
-  description     String?
-  isSystem        Boolean          @default(false) @map("is_system")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  id              Int              @id(map: "pk_rol_rol") @default(autoincrement()) @map("rol_id")
+  name            String           @unique(map: "uk_rol_nombre") @map("rol_nombre") @db.VarChar(100)
+  code            String           @unique(map: "uk_rol_codigo") @map("rol_codigo") @db.VarChar(100)
+  description     String?          @map("rol_descripcion") @db.VarChar(300)
+  isSystem        Boolean          @default(false) @map("rol_sistema")
+  createdAt       DateTime         @default(now()) @map("rol_fecha_creacion")
+  updatedAt       DateTime         @updatedAt @map("rol_fecha_modificacion")
   userRoles       UserRole[]
   rolePermissions RolePermission[]
 
-  @@index([isSystem])
-  @@map("role")
+  @@index([isSystem], map: "ix_rol_sistema")
+  @@map("rol_rol")
 }
 
 model Permission {
-  id              String           @id @default(uuid())
-  name            String
-  code            String           @unique
-  resource        String
-  action          String
-  description     String?
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  id              Int              @id(map: "pk_per_permiso") @default(autoincrement()) @map("per_id")
+  name            String           @map("per_nombre") @db.VarChar(100)
+  code            String           @unique(map: "uk_per_codigo") @map("per_codigo") @db.VarChar(100)
+  resource        String           @map("per_recurso") @db.VarChar(100)
+  action          String           @map("per_accion") @db.VarChar(100)
+  description     String?          @map("per_descripcion") @db.VarChar(300)
+  createdAt       DateTime         @default(now()) @map("per_fecha_creacion")
+  updatedAt       DateTime         @updatedAt @map("per_fecha_modificacion")
   rolePermissions RolePermission[]
 
-  @@unique([resource, action])
-  @@index([resource])
-  @@index([action])
-  @@map("permission")
+  @@unique([resource, action], map: "uk_per_recurso_accion")
+  @@index([resource], map: "ix_per_recurso")
+  @@index([action], map: "ix_per_accion")
+  @@map("per_permiso")
 }
 
 model UserRole {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  roleId     String   @map("role_id")
-  assignedAt DateTime @default(now()) @map("assigned_at")
-  assignedBy String?  @map("assigned_by")
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  id             Int      @id(map: "pk_uxr_usuario_rol") @default(autoincrement()) @map("uxr_id")
+  userId         Int      @map("uxr_usuario")
+  roleId         Int      @map("uxr_rol")
+  assignedAt     DateTime @default(now()) @map("uxr_fecha_asignacion")
+  assignedBy     Int?     @map("uxr_id_usu_asignador")
+  user           User     @relation("UserRoleUser", fields: [userId], references: [id], onDelete: Cascade, map: "fk_uxr_usuario")
+  role           Role     @relation(fields: [roleId], references: [id], onDelete: Cascade, map: "fk_uxr_rol")
+  assignedByUser User?    @relation("UserRoleAssigner", fields: [assignedBy], references: [id], onDelete: SetNull, map: "fk_uxr_id_usu_asignador")
 
-  @@unique([userId, roleId])
-  @@index([roleId])
-  @@index([assignedBy])
-  @@map("user_role")
+  @@unique([userId, roleId], map: "uk_uxr_usuario_rol")
+  @@index([roleId], map: "ix_uxr_rol")
+  @@index([assignedBy], map: "ix_uxr_asignador")
+  @@map("uxr_usuario_rol")
 }
 
 model RolePermission {
-  id           String     @id @default(uuid())
-  roleId       String     @map("role_id")
-  permissionId String     @map("permission_id")
-  grantedAt    DateTime   @default(now()) @map("granted_at")
-  grantedBy    String?    @map("granted_by")
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  id            Int        @id(map: "pk_rxp_rol_permiso") @default(autoincrement()) @map("rxp_id")
+  roleId        Int        @map("rxp_rol")
+  permissionId  Int        @map("rxp_permiso")
+  grantedAt     DateTime   @default(now()) @map("rxp_fecha_asignacion")
+  grantedBy     Int?       @map("rxp_id_usu_otorgante")
+  role          Role       @relation(fields: [roleId], references: [id], onDelete: Cascade, map: "fk_rxp_rol")
+  permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade, map: "fk_rxp_permiso")
+  grantedByUser User?      @relation("RolePermissionGranter", fields: [grantedBy], references: [id], onDelete: SetNull, map: "fk_rxp_id_usu_otorgante")
 
-  @@unique([roleId, permissionId])
-  @@index([permissionId])
-  @@index([grantedBy])
-  @@map("role_permission")
+  @@unique([roleId, permissionId], map: "uk_rxp_rol_permiso")
+  @@index([permissionId], map: "ix_rxp_permiso")
+  @@index([grantedBy], map: "ix_rxp_otorgante")
+  @@map("rxp_rol_permiso")
 }

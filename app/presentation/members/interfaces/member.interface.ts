@@ -21,7 +21,7 @@ export type MemberCommunityRole =
     | 'CHILDREN_LEADER'
 
 export interface Member {
-    id: string
+    id: number
     code: string
     firstName: string
     middleName: string | null

@@ -26,14 +26,14 @@ export async function createMember(apiClient: AxiosInstance, payload: MemberInpu
 
 export async function updateMember(
     apiClient: AxiosInstance,
-    id: string,
+    id: number,
     payload: Partial<MemberInput>,
 ) {
     const response = await apiClient.put<ApiResponse<Member>>(`/members/${id}`, payload)
     return response.data.data
 }
 
-export async function deleteMember(apiClient: AxiosInstance, id: string) {
+export async function deleteMember(apiClient: AxiosInstance, id: number) {
     await apiClient.delete(`/members/${id}`)
 }
 

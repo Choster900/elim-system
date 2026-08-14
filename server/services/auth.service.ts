@@ -6,7 +6,7 @@ import { REFRESH_TOKEN_TTL_SECONDS } from '../constants/auth.constants'
 import {
     createAuthSession,
     deleteExpiredOrRevokedAuthSessions,
-    findAuthSessionById,
+    findAuthSessionByTokenId,
     findUserByEmailWithAuthGraph,
     findUserByIdWithAuthGraph,
     revokeAuthSessionById,
@@ -85,6 +85,14 @@ function buildRefreshTokenExpiresAt() {
     return new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000)
 }
 
+function parseTokenUserId(value: string) {
+    const userId = Number(value)
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+        throw invalidRefreshTokenError()
+    }
+    return userId
+}
+
 async function issueTokensAndSession(
     user: NonNullable<Awaited<ReturnType<typeof findUserByEmailWithAuthGraph>>>,
 ): Promise<AuthTokensResult> {
@@ -96,15 +104,15 @@ async function issueTokensAndSession(
         permissions: permissionCodes,
     })
 
-    const sessionId = randomUUID()
+    const sessionTokenId = randomUUID()
     const refreshToken = signRefreshToken({
         userId: user.id,
-        sessionId,
+        sessionId: sessionTokenId,
     })
     const refreshTokenHash = await hashPassword(refreshToken.token)
 
     await createAuthSession({
-        id: sessionId,
+        tokenId: sessionTokenId,
         userId: user.id,
         refreshTokenHash,
         expiresAt: buildRefreshTokenExpiresAt(),
@@ -145,9 +153,10 @@ export async function login(dto: { email: string; password: string }) {
 
 export async function refreshAuth(refreshToken: string) {
     const payload = verifyRefreshToken(refreshToken)
+    const userId = parseTokenUserId(payload.sub)
 
-    const session = await findAuthSessionById(payload.sid)
-    if (!session || session.userId !== payload.sub) {
+    const session = await findAuthSessionByTokenId(payload.sid)
+    if (!session || session.userId !== userId) {
         throw invalidRefreshTokenError()
     }
 
@@ -160,7 +169,7 @@ export async function refreshAuth(refreshToken: string) {
         throw invalidRefreshTokenError()
     }
 
-    const user = await findUserByIdWithAuthGraph(payload.sub)
+    const user = await findUserByIdWithAuthGraph(userId)
     if (!user) {
         throw invalidRefreshTokenError()
     }
@@ -177,7 +186,7 @@ export async function refreshAuth(refreshToken: string) {
 export async function logout(refreshToken: string) {
     try {
         const payload = verifyRefreshToken(refreshToken)
-        const session = await findAuthSessionById(payload.sid)
+        const session = await findAuthSessionByTokenId(payload.sid)
         if (session && !session.revokedAt) {
             await revokeAuthSessionById(session.id)
         }

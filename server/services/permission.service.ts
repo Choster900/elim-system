@@ -8,7 +8,7 @@ export function getAllPermissions(skip: number, take: number) {
     return repo.findAllPermissions(skip, take)
 }
 
-export async function getPermissionById(id: string) {
+export async function getPermissionById(id: number) {
     const permission = await repo.findPermissionById(id)
     if (!permission) {
         throw createError({
@@ -24,12 +24,12 @@ export function createPermission(dto: CreatePermissionDto) {
     return repo.createPermission(dto)
 }
 
-export async function updatePermission(id: string, dto: UpdatePermissionDto) {
+export async function updatePermission(id: number, dto: UpdatePermissionDto) {
     await getPermissionById(id)
     return repo.updatePermission(id, dto)
 }
 
-export async function deletePermission(id: string) {
+export async function deletePermission(id: number) {
     await getPermissionById(id)
     return repo.deletePermission(id)
 }

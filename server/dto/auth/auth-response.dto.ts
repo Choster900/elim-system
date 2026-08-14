@@ -1,5 +1,5 @@
 export interface AuthPermissionDto {
-    id: string
+    id: number
     name: string
     code: string
     resource: string
@@ -8,7 +8,7 @@ export interface AuthPermissionDto {
 }
 
 export interface AuthRoleDto {
-    id: string
+    id: number
     name: string
     code: string
     description: string | null
@@ -16,7 +16,7 @@ export interface AuthRoleDto {
 }
 
 export interface AuthUserDto {
-    id: string
+    id: number
     email: string
     username: string | null
     roles: AuthRoleDto[]

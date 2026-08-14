@@ -1,5 +1,5 @@
 export interface PermissionResponseDto {
-    id: string
+    id: number
     name: string
     code: string
     resource: string

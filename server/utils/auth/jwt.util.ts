@@ -7,14 +7,14 @@ import { ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from '../../const
 const JWT_ALGORITHM = 'HS256'
 
 interface SignAccessTokenInput {
-    userId: string
+    userId: number
     email: string
     roles: string[]
     permissions: string[]
 }
 
 interface SignRefreshTokenInput {
-    userId: string
+    userId: number
     sessionId: string
 }
 
@@ -44,7 +44,7 @@ function buildTokenError(error: unknown) {
 
 export function signAccessToken(input: SignAccessTokenInput) {
     const payload: AccessTokenPayload = {
-        sub: input.userId,
+        sub: String(input.userId),
         email: input.email,
         roles: input.roles,
         permissions: input.permissions,
@@ -61,7 +61,7 @@ export function signAccessToken(input: SignAccessTokenInput) {
 
 export function signRefreshToken(input: SignRefreshTokenInput) {
     const payload: RefreshTokenPayload = {
-        sub: input.userId,
+        sub: String(input.userId),
         sid: input.sessionId,
         type: 'refresh',
     }

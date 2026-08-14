@@ -24,7 +24,7 @@ export function findUserByEmailWithAuthGraph(email: string) {
     })
 }
 
-export function findUserByIdWithAuthGraph(userId: string) {
+export function findUserByIdWithAuthGraph(userId: number) {
     return prisma.user.findUnique({
         where: { id: userId },
         include: authGraphInclude,
@@ -32,8 +32,8 @@ export function findUserByIdWithAuthGraph(userId: string) {
 }
 
 interface CreateAuthSessionInput {
-    id: string
-    userId: string
+    tokenId: string
+    userId: number
     refreshTokenHash: string
     expiresAt: Date
 }
@@ -42,7 +42,7 @@ export function createAuthSession(input: CreateAuthSessionInput) {
     return prisma.authSession
         .create({
             data: {
-                id: input.id,
+                tokenId: input.tokenId,
                 userId: input.userId,
                 refreshTokenHash: input.refreshTokenHash,
                 expiresAt: input.expiresAt,
@@ -51,11 +51,11 @@ export function createAuthSession(input: CreateAuthSessionInput) {
         .catch(mapPrismaError)
 }
 
-export function findAuthSessionById(id: string) {
-    return prisma.authSession.findUnique({ where: { id } })
+export function findAuthSessionByTokenId(tokenId: string) {
+    return prisma.authSession.findUnique({ where: { tokenId } })
 }
 
-export function revokeAuthSessionById(id: string) {
+export function revokeAuthSessionById(id: number) {
     return prisma.authSession
         .update({
             where: { id },
@@ -64,7 +64,7 @@ export function revokeAuthSessionById(id: string) {
         .catch(mapPrismaError)
 }
 
-export function deleteExpiredOrRevokedAuthSessions(userId: string) {
+export function deleteExpiredOrRevokedAuthSessions(userId: number) {
     return prisma.authSession.deleteMany({
         where: {
             userId,

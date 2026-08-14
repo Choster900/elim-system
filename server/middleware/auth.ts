@@ -33,9 +33,14 @@ export default defineEventHandler((event) => {
 
     const token = extractAccessToken(event)
     const payload = verifyAccessToken(token)
+    const userId = Number(payload.sub)
+
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+        throw createError({ statusCode: 401, message: 'Token inválido' })
+    }
 
     event.context.auth = {
-        userId: payload.sub,
+        userId,
         email: payload.email,
         roles: payload.roles,
         permissions: payload.permissions,

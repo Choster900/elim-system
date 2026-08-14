@@ -1,0 +1,4 @@
+interface:
+    display_name: 'Database Standards'
+    short_description: 'Prisma and SQL naming conventions'
+    default_prompt: 'Use $database-standards to design or review this database change using the project conventions.'

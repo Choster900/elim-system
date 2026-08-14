@@ -17,7 +17,7 @@ export interface RefreshTokenPayload {
 }
 
 export interface AuthenticatedUserContext {
-    userId: string
+    userId: number
     email: string
     roles: string[]
     permissions: string[]
