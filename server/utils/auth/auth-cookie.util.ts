@@ -21,7 +21,12 @@ export function setAccessTokenCookie(event: H3Event, token: string) {
 }
 
 export function setRefreshTokenCookie(event: H3Event, token: string) {
-    setCookie(event, REFRESH_TOKEN_COOKIE_NAME, token, buildCookieOptions(REFRESH_TOKEN_TTL_SECONDS))
+    setCookie(
+        event,
+        REFRESH_TOKEN_COOKIE_NAME,
+        token,
+        buildCookieOptions(REFRESH_TOKEN_TTL_SECONDS),
+    )
 }
 
 export function clearAuthCookies(event: H3Event) {

@@ -31,6 +31,15 @@ export function findUserByIdWithAuthGraph(userId: number) {
     })
 }
 
+export function findLedSectorIdsByUserId(userId: number) {
+    return prisma.territorySector
+        .findMany({
+            where: { leader: { user: { id: userId } } },
+            select: { id: true },
+        })
+        .then((sectors) => sectors.map((sector) => sector.id))
+}
+
 interface CreateAuthSessionInput {
     tokenId: string
     userId: number

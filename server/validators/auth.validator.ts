@@ -3,7 +3,11 @@ import type { LoginRequestDto } from '../dto/auth/login-request.dto'
 import type { RefreshRequestDto } from '../dto/auth/refresh-request.dto'
 
 export const loginSchema = Joi.object<LoginRequestDto>({
-    email: Joi.string().email({ tlds: { allow: false } }).trim().lowercase().required(),
+    email: Joi.string()
+        .email({ tlds: { allow: false } })
+        .trim()
+        .lowercase()
+        .required(),
     password: Joi.string().min(8).max(128).required(),
 })
 
