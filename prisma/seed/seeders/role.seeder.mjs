@@ -55,6 +55,18 @@ export const ROLE_SEEDS = [
         permissionCodes: ['dashboard.view', 'finance.view', 'finance.manage', 'reports.export'],
     },
     {
+        name: 'Supervisor de sector',
+        code: 'SUPERVISOR',
+        description: 'Registra ofrendas de las reuniones de los sectores que lidera.',
+        permissionCodes: ['dashboard.view', 'finance.view', 'finance.manage', 'reports.export'],
+    },
+    {
+        name: 'Líder de reunión',
+        code: 'LEADER',
+        description: 'Registra ofrendas de las reuniones donde está asignado.',
+        permissionCodes: ['dashboard.view', 'finance.view', 'finance.manage'],
+    },
+    {
         name: 'Solo lectura',
         code: 'READ_ONLY',
         description: 'Consulta información sin realizar cambios.',
