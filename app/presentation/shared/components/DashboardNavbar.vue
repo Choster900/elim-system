@@ -91,7 +91,11 @@ const navItems: DashboardMenuItem[] = [
     {
         label: 'Finanzas',
         children: [
-            { label: 'Ofrendas', href: '#' },
+            {
+                label: 'Ofrendas',
+                href: '/finanzas/ofrendas',
+                requiredPermission: routePermissionCodes.financeView,
+            },
             { label: 'Gastos', href: '#' },
             {
                 label: 'Reportes',

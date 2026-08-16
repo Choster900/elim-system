@@ -11,54 +11,76 @@ import {
     Trash2,
     Users,
 } from '@lucide/vue'
+import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
-import { formatMeetingPreviewDate } from '~/presentation/meetings/utils/meeting-format.util'
-import { toIsoDate } from '~/utils/date/date-format.util'
-import { readJsonStorage, writeJsonStorage } from '~/utils/storage/json-storage.util'
 import {
-    type LatLng,
-    type MockMeeting,
-    colorPalette,
-    frequencyOptions,
-    getMockMeetings,
-    mockMeetingTypes,
-    mockSectors,
-    mockSupervisors,
-    statusOptions,
-} from '~/mock/meetings.mock'
-import { ELSALVADOR_CENTER, mockTerritorySectors } from '~/mock/territories.mock'
+    createMeeting,
+    getMeeting,
+    getMeetingTypes,
+    getMembers,
+    getSectors,
+    updateMeeting,
+} from '~/presentation/meetings/services/meeting.service'
+import type {
+    MeetingFrequency,
+    MeetingInput,
+    MeetingStatus,
+    MeetingTypeOption,
+    MemberOption,
+    SectorOption,
+} from '~/presentation/meetings/interfaces/meeting.interface'
+import { colorPalette, frequencyOptions, statusOptions } from '~/mock/meetings.mock'
+import { ELSALVADOR_CENTER } from '~/mock/territories.mock'
+
+type LatLng = [number, number]
 
 defineOptions({ name: 'MeetingFormView' })
 
 const route = useRoute()
+const apiClient = useApiClient()
 const toast = useAppToast()
 
-const STORAGE_KEY = 'meetings-catalog-v2'
-
-const meetingId = computed(() => (route.params.id as string | undefined) ?? null)
-const isEditing = computed(() => !!meetingId.value)
+const meetingId = computed(() => {
+    const raw = route.params.id as string | undefined
+    return raw ? Number(raw) : null
+})
+const isEditing = computed(() => meetingId.value !== null)
 
 useHead({
     title: () => (isEditing.value ? 'Editar reunión · Sistema' : 'Nueva reunión · Sistema'),
 })
 
-function loadMeetings(): MockMeeting[] {
-    if (!import.meta.client) return getMockMeetings()
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        return raw ? (JSON.parse(raw) as MockMeeting[]) : getMockMeetings()
-    } catch {
-        return getMockMeetings()
-    }
+const meetingTypes = ref<MeetingTypeOption[]>([])
+const sectors = ref<SectorOption[]>([])
+const members = ref<MemberOption[]>([])
+
+interface MeetingForm {
+    title: string
+    description: string
+    typeId: number
+    sectorId: number
+    supervisorId: number
+    coSupervisorIds: number[]
+    date: string
+    startTime: string
+    endTime: string
+    location: string
+    frequency: MeetingFrequency
+    expectedAttendees: number
+    status: MeetingStatus
+    isPublic: boolean
+    notes: string
+    color: string
+    position: LatLng | null
 }
 
-function emptyForm(): Omit<MockMeeting, 'id' | 'createdAt'> {
+function emptyForm(): MeetingForm {
     return {
         title: '',
         description: '',
-        typeId: mockMeetingTypes[0]!.id,
-        sectorId: mockSectors[0]!.id,
-        supervisorId: mockSupervisors[0]!.id,
+        typeId: 0,
+        sectorId: 0,
+        supervisorId: 0,
         coSupervisorIds: [],
         date: new Date().toISOString().slice(0, 10),
         startTime: '19:00',
@@ -85,8 +107,8 @@ let L: typeof import('leaflet') | null = null
 const isLocating = ref(false)
 const locationError = ref('')
 
-function sectorCentroid(sectorId: string): LatLng | null {
-    const polygon = mockTerritorySectors.find((s) => s.id === sectorId)?.polygon
+function sectorCentroid(sectorId: number): LatLng | null {
+    const polygon = sectors.value.find((s) => s.id === sectorId)?.polygon
     if (!polygon || polygon.length === 0) return null
     const sum = polygon.reduce((acc, [lat, lng]) => [acc[0] + lat, acc[1] + lng], [0, 0])
     return [sum[0]! / polygon.length, sum[1]! / polygon.length]
@@ -215,34 +237,57 @@ watch(
     },
 )
 
+async function loadCatalogs() {
+    const [typeList, sectorList, memberList] = await Promise.all([
+        getMeetingTypes(apiClient),
+        getSectors(apiClient),
+        getMembers(apiClient),
+    ])
+    meetingTypes.value = typeList
+    sectors.value = sectorList
+    members.value = memberList
+}
+
 onMounted(async () => {
-    if (isEditing.value) {
-        const meetings = loadMeetings()
-        const existing = meetings.find((m) => m.id === meetingId.value)
-        if (!existing) {
-            notFound.value = true
-            return
+    try {
+        await loadCatalogs()
+
+        if (isEditing.value && meetingId.value !== null) {
+            const existing = await getMeeting(apiClient, meetingId.value)
+            Object.assign(form, {
+                title: existing.title,
+                description: existing.description ?? '',
+                typeId: existing.typeId,
+                sectorId: existing.sectorId,
+                supervisorId: existing.supervisorId,
+                coSupervisorIds: [...existing.coSupervisorIds],
+                date: existing.date,
+                startTime: existing.startTime,
+                endTime: existing.endTime,
+                location: existing.location,
+                frequency: existing.frequency,
+                expectedAttendees: existing.expectedAttendees,
+                status: existing.status,
+                isPublic: existing.isPublic,
+                notes: existing.notes ?? '',
+                color: existing.color,
+                position:
+                    existing.latitude !== null && existing.longitude !== null
+                        ? [existing.latitude, existing.longitude]
+                        : null,
+            })
+        } else {
+            form.typeId = meetingTypes.value[0]?.id ?? 0
+            form.sectorId = sectors.value[0]?.id ?? 0
+            form.supervisorId = members.value[0]?.id ?? 0
         }
-        Object.assign(form, {
-            title: existing.title,
-            description: existing.description,
-            typeId: existing.typeId,
-            sectorId: existing.sectorId,
-            supervisorId: existing.supervisorId,
-            coSupervisorIds: [...existing.coSupervisorIds],
-            date: existing.date,
-            startTime: existing.startTime,
-            endTime: existing.endTime,
-            location: existing.location,
-            frequency: existing.frequency,
-            expectedAttendees: existing.expectedAttendees,
-            status: existing.status,
-            isPublic: existing.isPublic,
-            notes: existing.notes,
-            color: existing.color,
-            position: existing.position ?? null,
-        })
+    } catch (error) {
+        if (isEditing.value) {
+            notFound.value = true
+        }
+        toast.error(error instanceof Error ? error.message : 'No fue posible cargar la reunión')
     }
+
     await nextTick()
     await initMap()
 })
@@ -303,6 +348,29 @@ function validateForm() {
 
 const isSaving = ref(false)
 
+function buildInput(): MeetingInput {
+    return {
+        typeId: form.typeId,
+        sectorId: form.sectorId,
+        supervisorId: form.supervisorId,
+        coSupervisorIds: [...form.coSupervisorIds],
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        date: form.date,
+        startTime: form.startTime,
+        endTime: form.endTime,
+        location: form.location.trim(),
+        latitude: form.position ? form.position[0] : null,
+        longitude: form.position ? form.position[1] : null,
+        frequency: form.frequency,
+        expectedAttendees: form.expectedAttendees,
+        status: form.status,
+        isPublic: form.isPublic,
+        notes: form.notes.trim() || null,
+        color: form.color,
+    }
+}
+
 async function saveMeeting() {
     if (!validateForm()) {
         toast.error('Revisa los campos marcados en rojo')
@@ -311,25 +379,16 @@ async function saveMeeting() {
 
     isSaving.value = true
     try {
-        const meetings = loadMeetings()
-        if (isEditing.value) {
-            const idx = meetings.findIndex((m) => m.id === meetingId.value)
-            if (idx === -1) {
-                toast.error('Reunión no encontrada')
-                return
-            }
-            meetings[idx] = { ...meetings[idx]!, ...form }
+        if (isEditing.value && meetingId.value !== null) {
+            await updateMeeting(apiClient, meetingId.value, buildInput())
             toast.success('Reunión actualizada')
         } else {
-            meetings.unshift({
-                ...form,
-                id: crypto.randomUUID(),
-                createdAt: new Date().toISOString(),
-            })
+            await createMeeting(apiClient, buildInput())
             toast.success('Reunión creada')
         }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(meetings))
         await navigateTo('/catalogos/reuniones')
+    } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No fue posible guardar la reunión')
     } finally {
         isSaving.value = false
     }
@@ -339,9 +398,12 @@ function cancel() {
     navigateTo('/catalogos/reuniones')
 }
 
-const selectedType = computed(() => mockMeetingTypes.find((t) => t.id === form.typeId))
-const selectedSector = computed(() => mockSectors.find((s) => s.id === form.sectorId))
-const selectedSupervisor = computed(() => mockSupervisors.find((s) => s.id === form.supervisorId))
+const selectedType = computed(() => meetingTypes.value.find((t) => t.id === form.typeId))
+const selectedSector = computed(() => sectors.value.find((s) => s.id === form.sectorId))
+const selectedSupervisor = computed(() => members.value.find((s) => s.id === form.supervisorId))
+const coSupervisorOptions = computed(() =>
+    members.value.filter((member) => member.id !== form.supervisorId),
+)
 
 function formatPreviewDate(iso: string) {
     if (!iso) return '—'
@@ -472,9 +534,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.typeId"
-                                        :options="mockMeetingTypes"
+                                        :options="meetingTypes"
                                         option-value="id"
-                                        option-label="label"
+                                        option-label="name"
                                         placeholder="Selecciona un tipo"
                                         search-placeholder="Buscar tipo..."
                                     />
@@ -676,7 +738,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.sectorId"
-                                        :options="mockSectors"
+                                        :options="sectors"
                                         option-value="id"
                                         option-label="name"
                                         placeholder="Selecciona un sector"
@@ -693,12 +755,11 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.supervisorId"
-                                        :options="mockSupervisors"
+                                        :options="members"
                                         option-value="id"
-                                        option-label="name"
-                                        option-description="role"
+                                        option-label="fullName"
                                         placeholder="Selecciona un supervisor"
-                                        search-placeholder="Buscar por nombre o rol..."
+                                        search-placeholder="Buscar por nombre..."
                                         :invalid="!!formErrors.supervisorId"
                                     />
                                 </div>
@@ -714,14 +775,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.coSupervisorIds"
-                                        :options="
-                                            mockSupervisors.filter(
-                                                (x) => x.id !== form.supervisorId,
-                                            )
-                                        "
+                                        :options="coSupervisorOptions"
                                         option-value="id"
-                                        option-label="name"
-                                        option-description="role"
+                                        option-label="fullName"
                                         multiple
                                         clearable
                                         placeholder="Añade uno o varios"
@@ -838,9 +894,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             <p
                                 v-if="selectedType"
                                 class="mt-1 text-xs"
-                                :style="{ color: selectedType.accent }"
+                                :style="{ color: selectedType.color }"
                             >
-                                {{ selectedType.label }}
+                                {{ selectedType.name }}
                             </p>
 
                             <div
@@ -910,10 +966,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                             Supervisor
                                         </p>
                                         <p class="text-on-surface">
-                                            {{ selectedSupervisor.name }}
-                                        </p>
-                                        <p class="text-on-surface-variant">
-                                            {{ selectedSupervisor.role }}
+                                            {{ selectedSupervisor.fullName }}
                                         </p>
                                     </div>
                                 </div>
@@ -936,8 +989,8 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                                 form.coSupervisorIds
                                                     .map(
                                                         (id) =>
-                                                            mockSupervisors.find((s) => s.id === id)
-                                                                ?.name,
+                                                            members.find((s) => s.id === id)
+                                                                ?.fullName,
                                                     )
                                                     .filter(Boolean)
                                                     .join(', ')

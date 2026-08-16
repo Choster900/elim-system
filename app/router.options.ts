@@ -2,6 +2,7 @@ import type { RouterConfig } from '@nuxt/schema'
 import accessControlRoutes from '~/presentation/access-control/router.index'
 import authRoutes from '~/presentation/auth/router.index'
 import dashboardRoutes from '~/presentation/dashboard/router.index'
+import financeRoutes from '~/presentation/finance/router.index'
 import landingRoutes from '~/presentation/landing/router.index'
 import memberRoutes from '~/presentation/members/router.index'
 import meetingsRoutes from '~/presentation/meetings/router.index'
@@ -17,6 +18,7 @@ export default <RouterConfig>{
         ...dashboardRoutes,
         ...memberRoutes,
         ...meetingsRoutes,
+        ...financeRoutes,
         ...territoriesRoutes,
         ...userRoutes,
         ...accessControlRoutes,

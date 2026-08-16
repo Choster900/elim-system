@@ -6,6 +6,8 @@ export const routePermissionCodes = {
     membersCreate: 'members.create',
     meetingsView: 'meetings.view',
     meetingsManage: 'meetings.manage',
+    financeView: 'finance.view',
+    financeManage: 'finance.manage',
     territoriesView: 'territories.view',
     usersView: 'users.view',
     rolesView: 'roles.view',

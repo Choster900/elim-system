@@ -13,7 +13,6 @@ import {
     Plus,
     Trash2,
     Users,
-    X,
 } from '@lucide/vue'
 import {
     DialogClose,
@@ -32,6 +31,7 @@ import {
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
+import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
     formatMeetingDate,
@@ -41,18 +41,22 @@ import {
     getMeetingFrequencyLabel,
     getMeetingStatusLabel,
 } from '~/presentation/meetings/utils/meeting-format.util'
-import { formatInitials } from '~/utils/string/text-format.util'
-import { readJsonStorage, writeJsonStorage } from '~/utils/storage/json-storage.util'
 import {
-    type MeetingStatus,
-    type MockMeeting,
-    colorPalette,
-    getMockMeetings,
-    mockMeetingTypes,
-    mockSectors,
-    mockSupervisors,
-    statusOptions,
-} from '~/mock/meetings.mock'
+    createMeeting,
+    deleteMeeting as deleteMeetingRequest,
+    getMeetings,
+    getMeetingTypes,
+    getSectors,
+    updateMeeting,
+} from '~/presentation/meetings/services/meeting.service'
+import type {
+    MeetingInput,
+    MeetingRecord,
+    MeetingTypeOption,
+    SectorOption,
+} from '~/presentation/meetings/interfaces/meeting.interface'
+import { formatInitials } from '~/utils/string/text-format.util'
+import { type MeetingStatus, statusOptions } from '~/mock/meetings.mock'
 
 defineOptions({ name: 'MeetingsView' })
 
@@ -60,22 +64,34 @@ useHead({
     title: 'Reuniones · Sistema',
 })
 
-const STORAGE_KEY = 'meetings-catalog-v2'
+const apiClient = useApiClient()
+const toast = useAppToast()
 
-const meetings = ref<MockMeeting[]>(getMockMeetings())
+const meetings = ref<MeetingRecord[]>([])
+const meetingTypes = ref<MeetingTypeOption[]>([])
+const sectors = ref<SectorOption[]>([])
+const isLoading = ref(true)
 
-onMounted(() => {
-    const storedMeetings = readJsonStorage<MockMeeting[] | null>(STORAGE_KEY, null)
-    if (storedMeetings) {
-        meetings.value = storedMeetings
-    } else {
-        writeJsonStorage(STORAGE_KEY, meetings.value)
+async function loadMeetings() {
+    meetings.value = await getMeetings(apiClient)
+}
+
+onMounted(async () => {
+    try {
+        const [meetingList, typeList, sectorList] = await Promise.all([
+            getMeetings(apiClient),
+            getMeetingTypes(apiClient),
+            getSectors(apiClient),
+        ])
+        meetings.value = meetingList
+        meetingTypes.value = typeList
+        sectors.value = sectorList
+    } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No fue posible cargar las reuniones')
+    } finally {
+        isLoading.value = false
     }
 })
-
-function persist() {
-    writeJsonStorage(STORAGE_KEY, meetings.value)
-}
 
 function isWithinNextDays(dateStr: string, days: number) {
     const target = new Date(dateStr)
@@ -97,15 +113,6 @@ const stats = computed(() => {
     return { total, upcoming, thisWeek, completed }
 })
 
-function sectorOf(id: string) {
-    return mockSectors.find((s) => s.id === id)
-}
-function supervisorOf(id: string | null) {
-    return id ? mockSupervisors.find((s) => s.id === id) : null
-}
-function typeOf(id: string) {
-    return mockMeetingTypes.find((t) => t.id === id)
-}
 function statusTone(status: MeetingStatus) {
     switch (status) {
         case 'programada':
@@ -119,7 +126,7 @@ function statusTone(status: MeetingStatus) {
     }
 }
 
-const columns: DataTableColumn<MockMeeting>[] = [
+const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
     {
         key: 'date',
         label: 'Fecha',
@@ -144,7 +151,7 @@ const columns: DataTableColumn<MockMeeting>[] = [
         sortable: true,
         filterable: true,
         filterType: 'select',
-        filterOptions: mockMeetingTypes.map((t) => ({ value: t.id, label: t.label })),
+        filterOptions: meetingTypes.value.map((t) => ({ value: t.id, label: t.name })),
         accessor: (row) => row.typeId,
         width: '180px',
     },
@@ -154,7 +161,7 @@ const columns: DataTableColumn<MockMeeting>[] = [
         sortable: true,
         filterable: true,
         filterType: 'select',
-        filterOptions: mockSectors.map((s) => ({ value: s.id, label: s.name })),
+        filterOptions: sectors.value.map((s) => ({ value: s.id, label: s.name })),
         accessor: (row) => row.sectorId,
         width: '180px',
     },
@@ -164,7 +171,7 @@ const columns: DataTableColumn<MockMeeting>[] = [
         sortable: true,
         filterable: true,
         filterType: 'text',
-        accessor: (row) => supervisorOf(row.supervisorId)?.name ?? '',
+        accessor: (row) => row.supervisorName ?? '',
         width: '120px',
     },
     {
@@ -183,49 +190,78 @@ const columns: DataTableColumn<MockMeeting>[] = [
         width: '72px',
         align: 'right',
     },
-]
+])
 
-const toast = useAppToast()
-
-function openEdit(m: MockMeeting) {
+function openEdit(m: MeetingRecord) {
     navigateTo(`/catalogos/reuniones/${m.id}/editar`)
 }
 
-const deleteTargetId = ref<string | null>(null)
+const deleteTargetId = ref<number | null>(null)
 const deleteDialogOpen = ref(false)
 
-function askDelete(m: MockMeeting) {
+function askDelete(m: MeetingRecord) {
     deleteTargetId.value = m.id
     deleteDialogOpen.value = true
 }
 
-function confirmDelete() {
+async function confirmDelete() {
     if (!deleteTargetId.value) return
-    meetings.value = meetings.value.filter((m) => m.id !== deleteTargetId.value)
-    persist()
-    toast.success('Reunión eliminada')
-    deleteDialogOpen.value = false
-    deleteTargetId.value = null
+    try {
+        await deleteMeetingRequest(apiClient, deleteTargetId.value)
+        await loadMeetings()
+        toast.success('Reunión eliminada')
+    } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No fue posible eliminar la reunión')
+    } finally {
+        deleteDialogOpen.value = false
+        deleteTargetId.value = null
+    }
 }
 
-function duplicateMeeting(m: MockMeeting) {
-    meetings.value.unshift({
-        ...m,
-        id: crypto.randomUUID(),
-        title: `${m.title} (copia)`,
-        status: 'programada',
-        createdAt: new Date().toISOString(),
-    })
-    persist()
-    toast.success('Reunión duplicada')
+function toInput(m: MeetingRecord): MeetingInput {
+    return {
+        typeId: m.typeId,
+        sectorId: m.sectorId,
+        supervisorId: m.supervisorId,
+        coSupervisorIds: [...m.coSupervisorIds],
+        title: m.title,
+        description: m.description,
+        date: m.date,
+        startTime: m.startTime,
+        endTime: m.endTime,
+        location: m.location,
+        latitude: m.latitude,
+        longitude: m.longitude,
+        frequency: m.frequency,
+        expectedAttendees: m.expectedAttendees,
+        status: m.status,
+        isPublic: m.isPublic,
+        notes: m.notes,
+        color: m.color,
+    }
 }
 
-function changeStatus(m: MockMeeting, next: MeetingStatus) {
-    const idx = meetings.value.findIndex((x) => x.id === m.id)
-    if (idx !== -1) {
-        meetings.value[idx] = { ...meetings.value[idx]!, status: next }
-        persist()
+async function duplicateMeeting(m: MeetingRecord) {
+    try {
+        await createMeeting(apiClient, {
+            ...toInput(m),
+            title: `${m.title} (copia)`,
+            status: 'programada',
+        })
+        await loadMeetings()
+        toast.success('Reunión duplicada')
+    } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No fue posible duplicar la reunión')
+    }
+}
+
+async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
+    try {
+        await updateMeeting(apiClient, m.id, { status: next })
+        await loadMeetings()
         toast.success(`Estado: ${getMeetingStatusLabel(next)}`)
+    } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No fue posible cambiar el estado')
     }
 }
 </script>
@@ -314,6 +350,7 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                 :columns="columns"
                 row-key="id"
                 :page-size="10"
+                :loading="isLoading"
                 empty-title="Sin reuniones"
                 empty-message="No hay reuniones que coincidan con los filtros aplicados."
             >
@@ -322,31 +359,31 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                         <div
                             class="flex size-12 flex-col items-center justify-center rounded text-on-surface"
                             :style="{
-                                backgroundColor: (row as MockMeeting).color + '22',
-                                border: `1px solid ${(row as MockMeeting).color}55`,
+                                backgroundColor: (row as MeetingRecord).color + '22',
+                                border: `1px solid ${(row as MeetingRecord).color}55`,
                             }"
                         >
                             <span
                                 class="font-display text-base font-semibold leading-none"
-                                :style="{ color: (row as MockMeeting).color }"
+                                :style="{ color: (row as MeetingRecord).color }"
                             >
-                                {{ getMeetingDateDay((row as MockMeeting).date) }}
+                                {{ getMeetingDateDay((row as MeetingRecord).date) }}
                             </span>
                             <span
                                 class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant"
                             >
-                                {{ formatMeetingMonth((row as MockMeeting).date) }}
+                                {{ formatMeetingMonth((row as MeetingRecord).date) }}
                             </span>
                         </div>
                         <div>
                             <p class="text-xs font-semibold uppercase text-on-surface-variant">
-                                {{ formatMeetingDate((row as MockMeeting).date) }}
+                                {{ formatMeetingDate((row as MeetingRecord).date) }}
                             </p>
                             <p class="text-[11px] text-on-surface-variant">
                                 {{
                                     formatMeetingTimeRange(
-                                        (row as MockMeeting).startTime,
-                                        (row as MockMeeting).endTime,
+                                        (row as MeetingRecord).startTime,
+                                        (row as MeetingRecord).endTime,
                                     )
                                 }}
                             </p>
@@ -357,34 +394,36 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                 <template #cell-title="{ row }">
                     <div class="min-w-0">
                         <p class="font-display text-sm font-semibold text-on-surface">
-                            {{ (row as MockMeeting).title }}
+                            {{ (row as MeetingRecord).title }}
                         </p>
                         <p
-                            v-if="(row as MockMeeting).description"
+                            v-if="(row as MeetingRecord).description"
                             class="mt-0.5 line-clamp-1 text-xs text-on-surface-variant"
                         >
-                            {{ (row as MockMeeting).description }}
+                            {{ (row as MeetingRecord).description }}
                         </p>
                         <div
                             class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant"
                         >
                             <span
-                                v-if="(row as MockMeeting).location"
+                                v-if="(row as MeetingRecord).location"
                                 class="inline-flex items-center gap-1"
                             >
                                 <MapPin class="size-3" />
-                                {{ (row as MockMeeting).location }}
+                                {{ (row as MeetingRecord).location }}
                             </span>
                             <span class="inline-flex items-center gap-1">
                                 <Users class="size-3" />
-                                {{ (row as MockMeeting).expectedAttendees }} esperados
+                                {{ (row as MeetingRecord).expectedAttendees }} esperados
                             </span>
                             <span
                                 >·
-                                {{ getMeetingFrequencyLabel((row as MockMeeting).frequency) }}</span
+                                {{
+                                    getMeetingFrequencyLabel((row as MeetingRecord).frequency)
+                                }}</span
                             >
                             <span
-                                v-if="(row as MockMeeting).isPublic"
+                                v-if="(row as MeetingRecord).isPublic"
                                 class="inline-flex items-center gap-1"
                             >
                                 <Eye class="size-3" /> Pública
@@ -400,11 +439,11 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                     <span
                         class="inline-flex rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
                         :style="{
-                            color: typeOf((row as MockMeeting).typeId)?.accent,
-                            borderColor: (typeOf((row as MockMeeting).typeId)?.accent ?? '') + '55',
+                            color: (row as MeetingRecord).typeColor ?? undefined,
+                            borderColor: ((row as MeetingRecord).typeColor ?? '') + '55',
                         }"
                     >
-                        {{ typeOf((row as MockMeeting).typeId)?.label }}
+                        {{ (row as MeetingRecord).typeName }}
                     </span>
                 </template>
 
@@ -413,10 +452,10 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                         <span
                             class="flex size-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
                         >
-                            {{ sectorOf((row as MockMeeting).sectorId)?.code }}
+                            {{ formatInitials((row as MeetingRecord).sectorName) }}
                         </span>
                         <span class="text-sm text-on-surface">{{
-                            sectorOf((row as MockMeeting).sectorId)?.name
+                            (row as MeetingRecord).sectorName
                         }}</span>
                     </div>
                 </template>
@@ -426,18 +465,11 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                         <div
                             class="flex size-9 items-center justify-center rounded-full border border-outline-variant bg-surface-container-high text-xs font-semibold text-on-surface"
                         >
-                            {{
-                                formatInitials(
-                                    supervisorOf((row as MockMeeting).supervisorId)?.name,
-                                )
-                            }}
+                            {{ formatInitials((row as MeetingRecord).supervisorName) }}
                         </div>
                         <div class="min-w-0">
                             <p class="truncate text-sm font-medium text-on-surface">
-                                {{ supervisorOf((row as MockMeeting).supervisorId)?.name }}
-                            </p>
-                            <p class="truncate text-[11px] text-on-surface-variant">
-                                {{ supervisorOf((row as MockMeeting).supervisorId)?.role }}
+                                {{ (row as MeetingRecord).supervisorName }}
                             </p>
                         </div>
                     </div>
@@ -446,9 +478,9 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                 <template #cell-status="{ row }">
                     <span
                         class="inline-flex items-center rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider"
-                        :class="statusTone((row as MockMeeting).status)"
+                        :class="statusTone((row as MeetingRecord).status)"
                     >
-                        {{ getMeetingStatusLabel((row as MockMeeting).status) }}
+                        {{ getMeetingStatusLabel((row as MeetingRecord).status) }}
                     </span>
                 </template>
 
@@ -468,31 +500,31 @@ function changeStatus(m: MockMeeting, next: MeetingStatus) {
                             >
                                 <DropdownMenuItem
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
-                                    @select="openEdit(row as MockMeeting)"
+                                    @select="openEdit(row as MeetingRecord)"
                                 >
                                     <Pencil class="size-3.5" /> Editar
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
-                                    @select="duplicateMeeting(row as MockMeeting)"
+                                    @select="duplicateMeeting(row as MeetingRecord)"
                                 >
                                     <Plus class="size-3.5" /> Duplicar
                                 </DropdownMenuItem>
                                 <div class="my-1 h-px bg-outline-variant" />
                                 <DropdownMenuItem
                                     v-for="s in statusOptions.filter(
-                                        (o) => o.value !== (row as MockMeeting).status,
+                                        (o) => o.value !== (row as MeetingRecord).status,
                                     )"
                                     :key="s.value"
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2 text-[11px] text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
-                                    @select="changeStatus(row as MockMeeting, s.value)"
+                                    @select="changeStatus(row as MeetingRecord, s.value)"
                                 >
                                     Marcar como {{ s.label.toLowerCase() }}
                                 </DropdownMenuItem>
                                 <div class="my-1 h-px bg-outline-variant" />
                                 <DropdownMenuItem
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-destructive outline-none data-[highlighted]:bg-destructive/10"
-                                    @select="askDelete(row as MockMeeting)"
+                                    @select="askDelete(row as MeetingRecord)"
                                 >
                                     <Trash2 class="size-3.5" /> Eliminar
                                 </DropdownMenuItem>
