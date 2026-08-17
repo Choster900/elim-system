@@ -1,31 +1,40 @@
 <script setup lang="ts">
 import { ArrowLeft, HandCoins, Plus, Save, Trash2, Users } from '@lucide/vue'
-import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import {
-    createOffering,
-    getMeetingOptions,
-    getOffering,
-    getOfferingCategories,
-    updateOffering,
-} from '~/presentation/finance/services/offering.service'
-import type {
-    MeetingOption,
-    OfferingCategoryOption,
-    OfferingInput,
-} from '~/presentation/finance/interfaces/offering.interface'
+    useOfferingCategoriesQuery,
+    useOfferingMeetingOptionsQuery,
+} from '~/presentation/finance/composables/useOfferingCatalogQueries'
+import {
+    useCreateOfferingMutation,
+    useUpdateOfferingMutation,
+} from '~/presentation/finance/composables/useOfferingMutations'
+import { useOfferingQuery } from '~/presentation/finance/composables/useOfferingQuery'
+import type { OfferingInput } from '~/presentation/finance/interfaces/offering.interface'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
 defineOptions({ name: 'OfferingFormView' })
 
 const route = useRoute()
-const apiClient = useApiClient()
 const toast = useAppToast()
+const authStore = useAuthStore()
 
 const offeringId = computed(() => {
     const raw = route.params.id as string | undefined
     return raw ? Number(raw) : null
 })
 const isEditing = computed(() => offeringId.value !== null)
+const requestedMeetingId = computed(() => {
+    if (isEditing.value) return null
+
+    const raw = Array.isArray(route.query.meetingId)
+        ? route.query.meetingId[0]
+        : route.query.meetingId
+    const value = raw ? Number(raw) : NaN
+
+    return Number.isSafeInteger(value) && value > 0 ? value : null
+})
 
 useHead({
     title: () => (isEditing.value ? 'Editar ofrenda · Sistema' : 'Registrar ofrenda · Sistema'),
@@ -62,13 +71,96 @@ function emptyForm(): FormState {
 }
 
 const form = reactive<FormState>(emptyForm())
-const errors = reactive({ meetingId: false, date: false, details: false })
+const errors = reactive({
+    districtId: false,
+    zoneId: false,
+    sectorId: false,
+    meetingId: false,
+    date: false,
+    details: false,
+})
+const offeringQuery = useOfferingQuery(offeringId)
+const meetingsQuery = useOfferingMeetingOptionsQuery()
+const categoriesQuery = useOfferingCategoriesQuery()
+const createOfferingMutation = useCreateOfferingMutation()
+const updateOfferingMutation = useUpdateOfferingMutation()
 
-const meetings = ref<MeetingOption[]>([])
-const categories = ref<OfferingCategoryOption[]>([])
-const notFound = ref(false)
-const isLoading = ref(true)
-const isSaving = ref(false)
+const meetings = computed(() => meetingsQuery.data.value ?? [])
+const categories = computed(() => categoriesQuery.data.value ?? [])
+const isLoading = computed(
+    () =>
+        meetingsQuery.isPending.value ||
+        categoriesQuery.isPending.value ||
+        (isEditing.value && offeringQuery.isPending.value),
+)
+const isSaving = computed(
+    () => createOfferingMutation.isPending.value || updateOfferingMutation.isPending.value,
+)
+const loadError = computed(
+    () => meetingsQuery.error.value ?? categoriesQuery.error.value ?? offeringQuery.error.value,
+)
+const notFound = computed(() => isEditing.value && offeringQuery.isError.value)
+const formInitialized = ref(false)
+const isAdmin = computed(() =>
+    authStore.user?.roles.some((role) => ['SUPER_ADMIN', 'ADMINISTRATOR'].includes(role.code)),
+)
+const selectedDistrictId = ref<number | null>(null)
+const selectedZoneId = ref<number | null>(null)
+const selectedSectorId = ref<number | null>(null)
+const isPrefillingMeeting = ref(false)
+const districtOptions = computed(() => {
+    const districts = new Map<number, string>()
+    for (const meeting of meetings.value) {
+        districts.set(meeting.districtId, meeting.districtName)
+    }
+
+    return [...districts]
+        .map(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es'))
+})
+const zoneOptions = computed(() => {
+    if (selectedDistrictId.value === null) return []
+
+    const zones = new Map<number, string>()
+    for (const meeting of meetings.value) {
+        if (meeting.districtId === selectedDistrictId.value) {
+            zones.set(meeting.zoneId, meeting.zoneName)
+        }
+    }
+
+    return [...zones]
+        .map(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es'))
+})
+const sectorOptions = computed(() => {
+    if (selectedZoneId.value === null) return []
+
+    const sectors = new Map<number, string>()
+    for (const meeting of meetings.value) {
+        if (meeting.zoneId === selectedZoneId.value && meeting.sectorName) {
+            sectors.set(meeting.sectorId, meeting.sectorName)
+        }
+    }
+
+    return [...sectors]
+        .map(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es'))
+})
+const filteredMeetings = computed(() => {
+    if (!isAdmin.value || isEditing.value) return meetings.value
+    if (selectedSectorId.value === null) return []
+    return meetings.value.filter((meeting) => meeting.sectorId === selectedSectorId.value)
+})
+
+if (import.meta.server) {
+    onServerPrefetch(() =>
+        Promise.allSettled([
+            meetingsQuery.suspense(),
+            categoriesQuery.suspense(),
+            ...(isEditing.value ? [offeringQuery.suspense()] : []),
+        ]),
+    )
+}
 
 // On create, default the date to the selected meeting's date.
 watch(
@@ -79,6 +171,27 @@ watch(
         if (meeting && !form.date) form.date = meeting.date
     },
 )
+
+watch(selectedDistrictId, () => {
+    if (isEditing.value || isPrefillingMeeting.value) return
+    selectedZoneId.value = null
+    selectedSectorId.value = null
+    form.meetingId = null
+    form.date = null
+})
+
+watch(selectedZoneId, () => {
+    if (isEditing.value || isPrefillingMeeting.value) return
+    selectedSectorId.value = null
+    form.meetingId = null
+    form.date = null
+})
+
+watch(selectedSectorId, () => {
+    if (isEditing.value || isPrefillingMeeting.value) return
+    form.meetingId = null
+    form.date = null
+})
 
 const total = computed(() =>
     form.details.reduce((sum, detail) => sum + (Number(detail.amount) || 0), 0),
@@ -111,17 +224,15 @@ function formatMoney(value: number) {
     return value.toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-onMounted(async () => {
-    try {
-        const [meetingList, categoryList] = await Promise.all([
-            getMeetingOptions(apiClient),
-            getOfferingCategories(apiClient),
-        ])
-        meetings.value = meetingList
-        categories.value = categoryList
+watch(
+    [isLoading, loadError, () => offeringQuery.data.value, meetings, categories],
+    () => {
+        if (formInitialized.value || isLoading.value || loadError.value) return
 
-        if (isEditing.value && offeringId.value !== null) {
-            const existing = await getOffering(apiClient, offeringId.value)
+        if (isEditing.value) {
+            const existing = offeringQuery.data.value
+            if (!existing) return
+
             Object.assign(form, {
                 meetingId: existing.meetingId,
                 date: existing.date,
@@ -136,16 +247,46 @@ onMounted(async () => {
                       }))
                     : [emptyDetail()],
             })
+        } else if (requestedMeetingId.value !== null) {
+            const requestedMeeting = meetings.value.find(
+                (meeting) => meeting.id === requestedMeetingId.value,
+            )
+
+            if (requestedMeeting) {
+                isPrefillingMeeting.value = true
+                selectedDistrictId.value = requestedMeeting.districtId
+                selectedZoneId.value = requestedMeeting.zoneId
+                selectedSectorId.value = requestedMeeting.sectorId
+                form.meetingId = requestedMeeting.id
+                form.date = requestedMeeting.date
+                nextTick(() => {
+                    isPrefillingMeeting.value = false
+                })
+            }
         }
-    } catch (error) {
-        if (isEditing.value) notFound.value = true
-        toast.error(error instanceof Error ? error.message : 'No fue posible cargar la ofrenda')
-    } finally {
-        isLoading.value = false
-    }
-})
+
+        formInitialized.value = true
+    },
+    { immediate: true },
+)
+
+if (import.meta.client) {
+    watch(
+        loadError,
+        (error) => {
+            if (error) {
+                toast.error(resolveHttpErrorMessage(error, 'No fue posible cargar la ofrenda'))
+            }
+        },
+        { immediate: true },
+    )
+}
 
 async function submit() {
+    const requiresTerritorySelection = isAdmin.value && !isEditing.value
+    errors.districtId = requiresTerritorySelection && selectedDistrictId.value === null
+    errors.zoneId = requiresTerritorySelection && selectedZoneId.value === null
+    errors.sectorId = requiresTerritorySelection && selectedSectorId.value === null
     errors.meetingId = form.meetingId === null
     errors.date = !form.date
     const validDetails = form.details.filter(
@@ -153,7 +294,14 @@ async function submit() {
     )
     errors.details = validDetails.length === 0
 
-    if (errors.meetingId || errors.date || errors.details) {
+    if (
+        errors.districtId ||
+        errors.zoneId ||
+        errors.sectorId ||
+        errors.meetingId ||
+        errors.date ||
+        errors.details
+    ) {
         toast.error('Revisa los campos marcados en rojo')
         return
     }
@@ -171,20 +319,17 @@ async function submit() {
         })),
     }
 
-    isSaving.value = true
     try {
         if (isEditing.value && offeringId.value !== null) {
-            await updateOffering(apiClient, offeringId.value, payload)
+            await updateOfferingMutation.mutateAsync({ id: offeringId.value, input: payload })
             toast.success('Ofrenda actualizada')
         } else {
-            await createOffering(apiClient, payload)
+            await createOfferingMutation.mutateAsync(payload)
             toast.success('Ofrenda registrada')
         }
         await navigateTo('/finanzas/ofrendas')
     } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible guardar la ofrenda')
-    } finally {
-        isSaving.value = false
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar la ofrenda'))
     }
 }
 
@@ -237,7 +382,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                         type="button"
                         class="h-10 rounded px-5 text-xs uppercase tracking-wider"
                         :loading="isSaving"
-                        :disabled="isSaving"
+                        :disabled="isSaving || isLoading || !!loadError"
                         @click="submit"
                     >
                         <Save class="mr-2 size-4" />
@@ -249,7 +394,14 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
 
         <main class="mx-auto w-full max-w-system px-6 py-8 lg:px-10">
             <div
-                v-if="notFound"
+                v-if="isLoading"
+                class="rounded-lg border border-outline-variant bg-surface-container p-8 text-center text-sm text-on-surface-variant"
+            >
+                Cargando información de la ofrenda…
+            </div>
+
+            <div
+                v-else-if="notFound"
                 class="mx-auto max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center"
             >
                 <p class="font-display text-lg font-semibold text-destructive">
@@ -264,6 +416,18 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                 >
                     Volver al listado
                 </NuxtLink>
+            </div>
+
+            <div
+                v-else-if="loadError"
+                class="mx-auto max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center"
+            >
+                <p class="font-display text-lg font-semibold text-destructive">
+                    No fue posible cargar el formulario
+                </p>
+                <p class="mt-2 text-sm text-on-surface-variant">
+                    Regresa al listado e inténtalo nuevamente.
+                </p>
             </div>
 
             <form v-else class="mx-auto grid max-w-3xl gap-6" novalidate @submit.prevent="submit">
@@ -282,20 +446,88 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
+                        <div
+                            v-if="isAdmin && !isEditing"
+                            class="grid gap-4 sm:col-span-2 md:grid-cols-3"
+                        >
+                            <div>
+                                <label :class="labelClass">Distrito *</label>
+                                <div class="mt-1">
+                                    <UiSearchSelect
+                                        v-model="selectedDistrictId"
+                                        :options="districtOptions"
+                                        placeholder="Selecciona distrito"
+                                        search-placeholder="Buscar distrito..."
+                                        :invalid="errors.districtId"
+                                    />
+                                </div>
+                                <p v-if="errors.districtId" class="mt-1 text-xs text-destructive">
+                                    Selecciona un distrito
+                                </p>
+                            </div>
+                            <div>
+                                <label :class="labelClass">Zona *</label>
+                                <div class="mt-1">
+                                    <UiSearchSelect
+                                        v-model="selectedZoneId"
+                                        :options="zoneOptions"
+                                        placeholder="Selecciona zona"
+                                        search-placeholder="Buscar zona..."
+                                        :invalid="errors.zoneId"
+                                        :disabled="selectedDistrictId === null"
+                                    />
+                                </div>
+                                <p v-if="errors.zoneId" class="mt-1 text-xs text-destructive">
+                                    Selecciona una zona
+                                </p>
+                            </div>
+                            <div>
+                                <label :class="labelClass">Sector *</label>
+                                <div class="mt-1">
+                                    <UiSearchSelect
+                                        v-model="selectedSectorId"
+                                        :options="sectorOptions"
+                                        placeholder="Selecciona sector"
+                                        search-placeholder="Buscar sector..."
+                                        :invalid="errors.sectorId"
+                                        :disabled="selectedZoneId === null"
+                                    />
+                                </div>
+                                <p v-if="errors.sectorId" class="mt-1 text-xs text-destructive">
+                                    Selecciona un sector
+                                </p>
+                            </div>
+                        </div>
                         <div class="sm:col-span-2">
                             <label :class="labelClass">Reunión *</label>
                             <div class="mt-1">
                                 <UiSearchSelect
                                     v-model="form.meetingId"
-                                    :options="meetings"
+                                    :options="filteredMeetings"
                                     option-value="id"
                                     option-label="title"
                                     option-description="date"
-                                    placeholder="Selecciona la reunión"
+                                    :placeholder="
+                                        isAdmin && !isEditing && selectedSectorId === null
+                                            ? 'Selecciona distrito, zona y sector primero'
+                                            : 'Selecciona la reunión'
+                                    "
                                     search-placeholder="Buscar reunión..."
                                     :invalid="errors.meetingId"
-                                    :disabled="isEditing"
-                                />
+                                    :disabled="
+                                        isEditing ||
+                                        (isAdmin && !isEditing && selectedSectorId === null)
+                                    "
+                                >
+                                    <template #item="{ option, label }">
+                                        <p class="truncate">{{ label }}</p>
+                                        <p class="truncate text-[11px] text-on-surface-variant">
+                                            {{ option.date }} · {{ option.districtName }} ·
+                                            {{ option.zoneName }} ·
+                                            {{ option.sectorName ?? 'Sin sector' }}
+                                        </p>
+                                    </template>
+                                </UiSearchSelect>
                             </div>
                             <p v-if="errors.meetingId" class="mt-1 text-xs text-destructive">
                                 Selecciona una reunión

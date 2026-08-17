@@ -10,6 +10,8 @@ export interface OfferingRecord {
     id: number
     meetingId: number
     meetingTitle: string | null
+    districtId: number
+    districtName: string
     date: string
     attendance: number
     totalAmount: number
@@ -50,6 +52,16 @@ export interface MeetingOption {
     id: number
     title: string
     date: string
+    sectorId: number
     sectorName: string | null
+    zoneId: number
+    zoneName: string
+    districtId: number
+    districtName: string
     color: string
+    startTime: string
+    endTime: string
+    frequency: string
+    typeName: string | null
+    expectedAttendees: number
 }

@@ -8,6 +8,7 @@ import type {
     TerritoryInput,
     TerritoryLevel,
     TerritorySector,
+    TerritorySupervisorOption,
     Zone,
 } from '../interfaces/territory.interface'
 
@@ -32,6 +33,8 @@ interface ZoneApiEntity extends TerritoryApiEntity {
 
 interface SectorApiEntity extends TerritoryApiEntity {
     zoneId: number
+    supervisorId: number | null
+    supervisorName: string | null
 }
 
 interface TerritoryHierarchyApiResponse {
@@ -73,8 +76,14 @@ function responseData<T>(response: ApiResponse<T>, fallbackMessage: string): T {
     return response.data
 }
 
-export async function getTerritoryHierarchy(apiClient: AxiosInstance): Promise<TerritoryHierarchy> {
-    const response = await apiClient.get<ApiResponse<TerritoryHierarchyApiResponse>>('/territories')
+export async function getTerritoryHierarchy(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<TerritoryHierarchy> {
+    const response = await apiClient.get<ApiResponse<TerritoryHierarchyApiResponse>>(
+        '/territories',
+        { signal },
+    )
     const data = responseData(response.data, 'No fue posible cargar la jerarquía territorial')
 
     return {
@@ -89,6 +98,8 @@ export async function getTerritoryHierarchy(apiClient: AxiosInstance): Promise<T
             (sector): TerritorySector => ({
                 ...mapEntity(sector),
                 zoneId: String(sector.zoneId),
+                supervisorId: sector.supervisorId,
+                supervisorName: sector.supervisorName ?? '',
             }),
         ),
     }
@@ -101,11 +112,22 @@ function endpointFor(level: TerritoryLevel) {
 }
 
 function requestPayload(level: TerritoryLevel, input: TerritoryInput, parentId?: string | null) {
-    const payload: Record<string, unknown> = {
-        ...input,
-        leaderName: input.leaderName || null,
-        description: input.description || null,
-    }
+    const payload: Record<string, unknown> =
+        level === 'sector'
+            ? {
+                  name: input.name,
+                  supervisorId: input.supervisorId,
+                  description: input.description || null,
+                  color: input.color,
+                  polygon: input.polygon,
+                  isActive: input.isActive,
+              }
+            : {
+                  ...input,
+                  supervisorId: undefined,
+                  leaderName: input.leaderName || null,
+                  description: input.description || null,
+              }
 
     if (level === 'zona') payload.districtId = Number(parentId)
     if (level === 'sector') payload.zoneId = Number(parentId)
@@ -134,7 +156,17 @@ export async function updateTerritoryEntity(
 ) {
     const endpoint = endpointFor(level)
     const { parentId, ...fields } = input
-    const payload: Record<string, unknown> = { ...fields }
+    const payload: Record<string, unknown> =
+        level === 'sector'
+            ? {
+                  name: fields.name,
+                  supervisorId: fields.supervisorId,
+                  description: fields.description || null,
+                  color: fields.color,
+                  polygon: fields.polygon,
+                  isActive: fields.isActive,
+              }
+            : { ...fields, supervisorId: undefined }
     if (level === 'zona' && parentId) payload.districtId = Number(parentId)
     if (level === 'sector' && parentId) payload.zoneId = Number(parentId)
 
@@ -143,6 +175,17 @@ export async function updateTerritoryEntity(
         payload,
     )
     return mapEntity(responseData(response.data, 'No fue posible actualizar el registro'))
+}
+
+export async function getTerritorySupervisors(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<TerritorySupervisorOption[]> {
+    const response = await apiClient.get<ApiResponse<TerritorySupervisorOption[]>>(
+        '/territories/supervisors',
+        { signal },
+    )
+    return responseData(response.data, 'No fue posible cargar el catálogo de supervisores')
 }
 
 export async function deleteTerritoryEntity(

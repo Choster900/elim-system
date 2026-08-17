@@ -1,15 +1,17 @@
-export type MeetingFrequency = 'unica' | 'semanal' | 'quincenal' | 'mensual'
+export type MeetingFrequency = 'unica' | 'diaria' | 'semanal' | 'quincenal' | 'mensual'
 export type MeetingStatus = 'programada' | 'en_curso' | 'completada' | 'cancelada'
 
 export interface MeetingRecord {
     id: number
     typeId: number
     sectorId: number
+    leaderId: number
     supervisorId: number
     coSupervisorIds: number[]
     title: string
     description: string | null
     date: string
+    recurrenceEndDate: string | null
     startTime: string
     endTime: string
     location: string
@@ -24,6 +26,11 @@ export interface MeetingRecord {
     typeName: string | null
     typeColor: string | null
     sectorName: string | null
+    zoneId: number
+    zoneName: string
+    districtId: number
+    districtName: string
+    leaderName: string | null
     supervisorName: string | null
     createdAt: string
     updatedAt: string
@@ -32,11 +39,13 @@ export interface MeetingRecord {
 export interface MeetingInput {
     typeId: number
     sectorId: number
+    leaderId: number
     supervisorId: number
     coSupervisorIds: number[]
     title: string
     description: string | null
     date: string
+    recurrenceEndDate: string | null
     startTime: string
     endTime: string
     location: string
@@ -73,4 +82,6 @@ export interface SectorOption {
     name: string
     code: string
     polygon: [number, number][]
+    supervisorId: number | null
+    supervisorName: string | null
 }

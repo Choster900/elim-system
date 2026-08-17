@@ -4,6 +4,7 @@ import type {
     LatLng,
     Polygon,
     TerritoryInput,
+    TerritorySupervisorOption,
 } from '~/presentation/territories/interfaces/territory.interface'
 
 type Level = 'distrito' | 'zona' | 'sector'
@@ -19,6 +20,8 @@ const props = defineProps<{
     accent: string
     levelLabel: string
     leaderLabel: string
+    supervisorOptions: TerritorySupervisorOption[]
+    supervisorsLoading?: boolean
     saving?: boolean
 }>()
 
@@ -36,10 +39,12 @@ const form = reactive({
     description: '',
     color: '',
     isActive: true,
+    supervisorId: null as number | null,
 })
 const tempPolygon = ref<LatLng[]>([])
 const nameError = ref(false)
 const codeError = ref(false)
+const supervisorError = ref(false)
 const polygonError = ref(false)
 const isLocating = ref(false)
 const locationError = ref('')
@@ -65,6 +70,7 @@ function defaultBox(center: LatLng): LatLng[] {
 function resetForm() {
     nameError.value = false
     codeError.value = false
+    supervisorError.value = false
     polygonError.value = false
     isLocating.value = false
     locationError.value = ''
@@ -75,6 +81,7 @@ function resetForm() {
         form.description = props.entity.description
         form.color = props.entity.color
         form.isActive = props.entity.isActive
+        form.supervisorId = props.entity.supervisorId
         tempPolygon.value = props.entity.polygon.map((p) => [...p] as LatLng)
     } else {
         form.name = ''
@@ -83,6 +90,7 @@ function resetForm() {
         form.description = ''
         form.color = props.palette[0] ?? '#e9c176'
         form.isActive = true
+        form.supervisorId = null
         tempPolygon.value = defaultBox(props.parentCentroid ?? DEFAULT_CENTER)
     }
 }
@@ -238,8 +246,12 @@ function save() {
         nameError.value = true
         return
     }
-    if (!form.code.trim()) {
+    if (props.level !== 'sector' && !form.code.trim()) {
         codeError.value = true
+        return
+    }
+    if (props.level === 'sector' && !form.supervisorId) {
+        supervisorError.value = true
         return
     }
     if (tempPolygon.value.length < 3) {
@@ -255,6 +267,7 @@ function save() {
         color: form.color,
         polygon,
         isActive: form.isActive,
+        supervisorId: form.supervisorId,
     })
 }
 
@@ -319,7 +332,7 @@ const labelClass =
                     </p>
                 </div>
 
-                <div class="mb-4 grid grid-cols-2 gap-3">
+                <div v-if="level !== 'sector'" class="mb-4 grid grid-cols-2 gap-3">
                     <div>
                         <label
                             class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
@@ -354,6 +367,48 @@ const labelClass =
                             :placeholder="`Ej. ${leaderLabel === 'Pastor' ? 'Pr. Manuel Cardona' : 'Ana Beltrán'}`"
                             :class="inputClass"
                         />
+                    </div>
+                </div>
+
+                <div v-else class="mb-4 space-y-4">
+                    <div>
+                        <span :class="labelClass">Código</span>
+                        <div
+                            class="rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface"
+                        >
+                            {{
+                                mode === 'edit' && form.code
+                                    ? form.code
+                                    : 'Se generará automáticamente al guardar (SEC-###)'
+                            }}
+                        </div>
+                    </div>
+                    <div>
+                        <label :class="labelClass">Supervisor *</label>
+                        <UiSearchSelect
+                            v-model="form.supervisorId"
+                            :options="supervisorOptions"
+                            option-value="id"
+                            option-label="fullName"
+                            option-description="code"
+                            :placeholder="
+                                supervisorsLoading
+                                    ? 'Cargando supervisores…'
+                                    : 'Selecciona un supervisor'
+                            "
+                            search-placeholder="Buscar por nombre o código…"
+                            empty-message="No hay supervisores activos disponibles"
+                            :disabled="supervisorsLoading"
+                            :invalid="supervisorError"
+                            @update:model-value="supervisorError = false"
+                        />
+                        <p v-if="supervisorError" class="mt-1 text-xs text-destructive">
+                            Debes asignar un supervisor del catálogo.
+                        </p>
+                        <p class="mt-1.5 text-xs leading-relaxed text-on-surface-variant">
+                            Supervisará todas las reuniones del sector y su registro de asistencia y
+                            ofrendas.
+                        </p>
                     </div>
                 </div>
 

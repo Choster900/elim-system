@@ -18,6 +18,20 @@ function resourceNotFound(resource: string): never {
     })
 }
 
+async function requireSectorSupervisor(supervisorId: number) {
+    const supervisor = await repo.findSectorSupervisorById(supervisorId)
+    if (supervisor) return supervisor
+
+    throw createError({
+        statusCode: 400,
+        message: 'El miembro seleccionado no pertenece al catálogo de supervisores',
+        data: {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            fields: { supervisorId: ['Selecciona un supervisor activo'] },
+        },
+    })
+}
+
 export function getTerritoryHierarchy() {
     return repo.findTerritoryHierarchy()
 }
@@ -72,16 +86,23 @@ export async function getSectorById(id: number) {
 
 export async function createSector(dto: CreateSectorDto) {
     await getZoneById(dto.zoneId)
-    return repo.createSector(dto)
+    const supervisor = await requireSectorSupervisor(dto.supervisorId)
+    return repo.createSector(dto, supervisor.fullName)
 }
 
 export async function updateSector(id: number, dto: UpdateSectorDto) {
     await getSectorById(id)
     if (dto.zoneId !== undefined) await getZoneById(dto.zoneId)
-    return repo.updateSector(id, dto)
+    const supervisor =
+        dto.supervisorId === undefined ? undefined : await requireSectorSupervisor(dto.supervisorId)
+    return repo.updateSector(id, dto, supervisor?.fullName)
 }
 
 export async function deleteSector(id: number) {
     await getSectorById(id)
     return repo.deleteSector(id)
+}
+
+export function getSectorSupervisors() {
+    return repo.findSectorSupervisors()
 }

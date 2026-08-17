@@ -2,6 +2,7 @@ import Joi from 'joi'
 import type {
     CreateOfferingCategoryDto,
     CreateOfferingDto,
+    CreateOfferingsBulkDto,
     UpdateOfferingCategoryDto,
     UpdateOfferingDto,
 } from '../dto/offering/offering.dto'
@@ -28,6 +29,10 @@ export const createOfferingSchema = Joi.object<CreateOfferingDto>({
     currency: baseFields.currency.default('USD'),
     notes: baseFields.notes.default(null),
     details: baseFields.details.required(),
+})
+
+export const createOfferingsBulkSchema = Joi.object<CreateOfferingsBulkDto>({
+    offerings: Joi.array().items(createOfferingSchema).min(1).max(100).required(),
 })
 
 export const updateOfferingSchema = Joi.object<UpdateOfferingDto>(baseFields).min(1)

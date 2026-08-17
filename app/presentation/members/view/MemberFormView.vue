@@ -1,33 +1,29 @@
 <script setup lang="ts">
 import { ArrowLeft, UserPlus } from '@lucide/vue'
 import MemberFormDrawer from '../components/MemberFormDrawer.vue'
+import { useCreateMemberMutation } from '../composables/useMemberMutations'
 import type { MemberInput } from '../interfaces/member.interface'
-import { createMember } from '../services/member.service'
-import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 
 defineOptions({ name: 'MemberFormView' })
 
 useHead({ title: 'Nuevo miembro · Sistema' })
 
-const apiClient = useApiClient()
 const toast = useAppToast()
-const saving = ref(false)
+const createMemberMutation = useCreateMemberMutation()
+const saving = computed(() => createMemberMutation.isPending.value)
 
 function returnToMembers() {
     return navigateTo('/comunidad/miembros')
 }
 
 async function saveMember(payload: MemberInput) {
-    saving.value = true
     try {
-        await createMember(apiClient, payload)
+        await createMemberMutation.mutateAsync(payload)
         toast.success('Miembro creado correctamente')
         await returnToMembers()
     } catch {
         toast.error('No fue posible guardar el miembro. Revisa el código, documento y correo.')
-    } finally {
-        saving.value = false
     }
 }
 </script>

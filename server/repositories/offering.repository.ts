@@ -10,7 +10,17 @@ import type {
 import { mapPrismaError } from '../utils/database/prisma-error.util'
 
 const offeringInclude = {
-    meeting: true,
+    meeting: {
+        include: {
+            sector: {
+                include: {
+                    zone: {
+                        include: { district: true },
+                    },
+                },
+            },
+        },
+    },
     recordedBy: { include: { member: true } },
     details: { include: { category: true }, orderBy: { category: { sortOrder: 'asc' } } },
 } satisfies Prisma.MeetingOfferingInclude
@@ -47,6 +57,8 @@ export function toOfferingRecord(offering: OfferingWithRelations) {
         id: offering.id,
         meetingId: offering.meetingId,
         meetingTitle: offering.meeting?.title ?? null,
+        districtId: offering.meeting.sector.zone.district.id,
+        districtName: offering.meeting.sector.zone.district.name,
         date: toIsoDate(offering.date),
         attendance: offering.attendance,
         totalAmount: Number(offering.totalAmount),
@@ -109,6 +121,37 @@ export async function createOffering(dto: CreateOfferingDto, recordedById: numbe
         })
         .then(toOfferingRecord)
         .catch(mapPrismaError)
+}
+
+export async function createOfferingsBulk(dtos: CreateOfferingDto[], recordedById: number | null) {
+    try {
+        const offerings = await prisma.$transaction(
+            dtos.map((dto) =>
+                prisma.meetingOffering.create({
+                    data: {
+                        meeting: { connect: { id: dto.meetingId } },
+                        date: dateOf(dto.date),
+                        attendance: dto.attendance,
+                        totalAmount: computeTotal(dto.details),
+                        currency: dto.currency,
+                        notes: dto.notes,
+                        ...(recordedById ? { recordedBy: { connect: { id: recordedById } } } : {}),
+                        details: {
+                            create: dto.details.map((detail) => ({
+                                categoryId: detail.categoryId,
+                                amount: detail.amount,
+                                notes: detail.notes,
+                            })),
+                        },
+                    },
+                    include: offeringInclude,
+                }),
+            ),
+        )
+        return offerings.map(toOfferingRecord)
+    } catch (error) {
+        mapPrismaError(error)
+    }
 }
 
 export async function updateOffering(id: number, dto: UpdateOfferingDto) {

@@ -2,7 +2,7 @@ import type { AxiosInstance } from 'axios'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type { Member, MemberImportResult, MemberInput } from '../interfaces/member.interface'
 
-export async function getMembers(apiClient: AxiosInstance) {
+export async function getMembers(apiClient: AxiosInstance, signal?: AbortSignal) {
     const members: Member[] = []
     let page = 1
     let totalPages = 1
@@ -10,6 +10,7 @@ export async function getMembers(apiClient: AxiosInstance) {
     do {
         const response = await apiClient.get<ApiResponse<Member[]>>('/members', {
             params: { page, limit: 100 },
+            signal,
         })
         members.push(...(response.data.data ?? []))
         totalPages = response.data.meta?.pagination?.totalPages ?? 1

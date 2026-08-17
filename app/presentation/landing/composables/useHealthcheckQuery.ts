@@ -12,7 +12,7 @@ export function useHealthcheckQuery(options: UseHealthcheckQueryOptions = {}) {
 
     return useQuery({
         queryKey: queryKeys.system.healthcheck,
-        queryFn: () => getHealthcheck(apiClient),
+        queryFn: ({ signal }) => getHealthcheck(apiClient, signal),
         enabled: options.enabled ?? true,
     })
 }

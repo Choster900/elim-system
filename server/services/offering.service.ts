@@ -69,6 +69,26 @@ export async function createOffering(
     return repo.createOffering(dto, recordedById)
 }
 
+export async function createOfferingsBulk(
+    dtos: CreateOfferingDto[],
+    recordedById: number | null,
+    allowedSectorIds?: number[],
+) {
+    const uniqueKeys = new Set<string>()
+    for (const dto of dtos) {
+        const key = `${dto.meetingId}:${dto.date}`
+        if (uniqueKeys.has(key)) {
+            businessRule('No puedes registrar dos veces la misma reunión en la misma fecha')
+        }
+        uniqueKeys.add(key)
+    }
+
+    const meetings = await Promise.all(dtos.map((dto) => getMeetingById(dto.meetingId)))
+    meetings.forEach((meeting) => assertSectorAllowed(meeting.sectorId, allowedSectorIds))
+    await assertCategoriesExist(dtos.flatMap((dto) => dto.details))
+    return repo.createOfferingsBulk(dtos, recordedById)
+}
+
 export async function updateOffering(
     id: number,
     dto: UpdateOfferingDto,

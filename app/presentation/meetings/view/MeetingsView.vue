@@ -31,8 +31,18 @@ import {
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
-import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import {
+    useMeetingSectorsQuery,
+    useMeetingTypesQuery,
+} from '~/presentation/meetings/composables/useMeetingCatalogQueries'
+import {
+    useCreateMeetingMutation,
+    useDeleteMeetingMutation,
+    useUpdateMeetingMutation,
+} from '~/presentation/meetings/composables/useMeetingMutations'
+import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
+import { statusOptions } from '~/presentation/meetings/constants/meeting.constants'
 import {
     formatMeetingDate,
     formatMeetingMonth,
@@ -41,22 +51,13 @@ import {
     getMeetingFrequencyLabel,
     getMeetingStatusLabel,
 } from '~/presentation/meetings/utils/meeting-format.util'
-import {
-    createMeeting,
-    deleteMeeting as deleteMeetingRequest,
-    getMeetings,
-    getMeetingTypes,
-    getSectors,
-    updateMeeting,
-} from '~/presentation/meetings/services/meeting.service'
 import type {
     MeetingInput,
     MeetingRecord,
-    MeetingTypeOption,
-    SectorOption,
+    MeetingStatus,
 } from '~/presentation/meetings/interfaces/meeting.interface'
 import { formatInitials } from '~/utils/string/text-format.util'
-import { type MeetingStatus, statusOptions } from '~/mock/meetings.mock'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
 defineOptions({ name: 'MeetingsView' })
 
@@ -64,34 +65,52 @@ useHead({
     title: 'Reuniones · Sistema',
 })
 
-const apiClient = useApiClient()
 const toast = useAppToast()
+const meetingsQuery = useMeetingsQuery()
+const meetingTypesQuery = useMeetingTypesQuery()
+const sectorsQuery = useMeetingSectorsQuery()
+const createMeetingMutation = useCreateMeetingMutation()
+const updateMeetingMutation = useUpdateMeetingMutation()
+const deleteMeetingMutation = useDeleteMeetingMutation()
 
-const meetings = ref<MeetingRecord[]>([])
-const meetingTypes = ref<MeetingTypeOption[]>([])
-const sectors = ref<SectorOption[]>([])
-const isLoading = ref(true)
+const meetings = computed(() => meetingsQuery.data.value ?? [])
+const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
+const sectors = computed(() => sectorsQuery.data.value ?? [])
+const isLoading = computed(
+    () =>
+        meetingsQuery.isPending.value ||
+        meetingTypesQuery.isPending.value ||
+        sectorsQuery.isPending.value,
+)
+const isMutating = computed(
+    () =>
+        createMeetingMutation.isPending.value ||
+        updateMeetingMutation.isPending.value ||
+        deleteMeetingMutation.isPending.value,
+)
 
-async function loadMeetings() {
-    meetings.value = await getMeetings(apiClient)
+if (import.meta.server) {
+    onServerPrefetch(() =>
+        Promise.allSettled([
+            meetingsQuery.suspense(),
+            meetingTypesQuery.suspense(),
+            sectorsQuery.suspense(),
+        ]),
+    )
 }
 
-onMounted(async () => {
-    try {
-        const [meetingList, typeList, sectorList] = await Promise.all([
-            getMeetings(apiClient),
-            getMeetingTypes(apiClient),
-            getSectors(apiClient),
-        ])
-        meetings.value = meetingList
-        meetingTypes.value = typeList
-        sectors.value = sectorList
-    } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible cargar las reuniones')
-    } finally {
-        isLoading.value = false
-    }
-})
+if (import.meta.client) {
+    watch(
+        () => [meetingsQuery.error.value, meetingTypesQuery.error.value, sectorsQuery.error.value],
+        (errors) => {
+            const error = errors.find(Boolean)
+            if (error) {
+                toast.error(resolveHttpErrorMessage(error, 'No fue posible cargar las reuniones'))
+            }
+        },
+        { immediate: true },
+    )
+}
 
 function isWithinNextDays(dateStr: string, days: number) {
     const target = new Date(dateStr)
@@ -207,11 +226,10 @@ function askDelete(m: MeetingRecord) {
 async function confirmDelete() {
     if (!deleteTargetId.value) return
     try {
-        await deleteMeetingRequest(apiClient, deleteTargetId.value)
-        await loadMeetings()
+        await deleteMeetingMutation.mutateAsync(deleteTargetId.value)
         toast.success('Reunión eliminada')
     } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible eliminar la reunión')
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible eliminar la reunión'))
     } finally {
         deleteDialogOpen.value = false
         deleteTargetId.value = null
@@ -222,11 +240,13 @@ function toInput(m: MeetingRecord): MeetingInput {
     return {
         typeId: m.typeId,
         sectorId: m.sectorId,
+        leaderId: m.leaderId,
         supervisorId: m.supervisorId,
         coSupervisorIds: [...m.coSupervisorIds],
         title: m.title,
         description: m.description,
         date: m.date,
+        recurrenceEndDate: m.recurrenceEndDate,
         startTime: m.startTime,
         endTime: m.endTime,
         location: m.location,
@@ -243,25 +263,23 @@ function toInput(m: MeetingRecord): MeetingInput {
 
 async function duplicateMeeting(m: MeetingRecord) {
     try {
-        await createMeeting(apiClient, {
+        await createMeetingMutation.mutateAsync({
             ...toInput(m),
             title: `${m.title} (copia)`,
             status: 'programada',
         })
-        await loadMeetings()
         toast.success('Reunión duplicada')
     } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible duplicar la reunión')
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible duplicar la reunión'))
     }
 }
 
 async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
     try {
-        await updateMeeting(apiClient, m.id, { status: next })
-        await loadMeetings()
+        await updateMeetingMutation.mutateAsync({ id: m.id, input: { status: next } })
         toast.success(`Estado: ${getMeetingStatusLabel(next)}`)
     } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible cambiar el estado')
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible cambiar el estado'))
     }
 }
 </script>
@@ -506,6 +524,7 @@ async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
+                                    :disabled="isMutating"
                                     @select="duplicateMeeting(row as MeetingRecord)"
                                 >
                                     <Plus class="size-3.5" /> Duplicar
@@ -517,6 +536,7 @@ async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
                                     )"
                                     :key="s.value"
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2 text-[11px] text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
+                                    :disabled="isMutating"
                                     @select="changeStatus(row as MeetingRecord, s.value)"
                                 >
                                     Marcar como {{ s.label.toLowerCase() }}
@@ -571,6 +591,8 @@ async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
                         <UiButton
                             type="button"
                             class="h-10 rounded bg-destructive px-4 text-xs uppercase tracking-wider text-white hover:bg-destructive/90"
+                            :loading="deleteMeetingMutation.isPending.value"
+                            :disabled="deleteMeetingMutation.isPending.value"
                             @click="confirmDelete"
                         >
                             <Trash2 class="mr-2 size-4" />

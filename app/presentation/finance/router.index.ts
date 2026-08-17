@@ -22,6 +22,16 @@ export default [
         },
     },
     {
+        name: 'offering-bulk-create',
+        path: '/finanzas/ofrendas/registro-global',
+        component: () => import('~/presentation/finance/view/BulkOfferingFormView.vue'),
+        meta: {
+            layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.financeManage,
+        },
+    },
+    {
         name: 'offering-edit',
         path: '/finanzas/ofrendas/:id/editar',
         component: () => import('~/presentation/finance/view/OfferingFormView.vue'),

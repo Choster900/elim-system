@@ -1,14 +1,16 @@
-export type MeetingFrequencyValue = 'unica' | 'semanal' | 'quincenal' | 'mensual'
+export type MeetingFrequencyValue = 'unica' | 'diaria' | 'semanal' | 'quincenal' | 'mensual'
 export type MeetingStatusValue = 'programada' | 'en_curso' | 'completada' | 'cancelada'
 
 export interface CreateMeetingDto {
     typeId: number
     sectorId: number
+    leaderId: number
     supervisorId: number
     coSupervisorIds: number[]
     title: string
     description: string | null
     date: string // YYYY-MM-DD
+    recurrenceEndDate: string | null // YYYY-MM-DD; null = sin finalización
     startTime: string // HH:mm
     endTime: string // HH:mm
     location: string

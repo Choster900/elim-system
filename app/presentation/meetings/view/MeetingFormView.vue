@@ -11,33 +11,37 @@ import {
     Trash2,
     Users,
 } from '@lucide/vue'
-import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
-    createMeeting,
-    getMeeting,
-    getMeetingTypes,
-    getMembers,
-    getSectors,
-    updateMeeting,
-} from '~/presentation/meetings/services/meeting.service'
+    useMeetingLeadersQuery,
+    useMeetingMembersQuery,
+    useMeetingSectorsQuery,
+    useMeetingTypesQuery,
+} from '~/presentation/meetings/composables/useMeetingCatalogQueries'
+import {
+    useCreateMeetingMutation,
+    useUpdateMeetingMutation,
+} from '~/presentation/meetings/composables/useMeetingMutations'
+import { useMeetingQuery } from '~/presentation/meetings/composables/useMeetingQuery'
+import {
+    frequencyOptions,
+    meetingColorPalette,
+    statusOptions,
+} from '~/presentation/meetings/constants/meeting.constants'
 import type {
     MeetingFrequency,
     MeetingInput,
     MeetingStatus,
-    MeetingTypeOption,
-    MemberOption,
-    SectorOption,
 } from '~/presentation/meetings/interfaces/meeting.interface'
-import { colorPalette, frequencyOptions, statusOptions } from '~/mock/meetings.mock'
-import { ELSALVADOR_CENTER } from '~/mock/territories.mock'
+import { formatMeetingRecurrence } from '~/presentation/meetings/utils/meeting-format.util'
+import { EL_SALVADOR_CENTER } from '~/presentation/territories/constants/territory.constants'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
 type LatLng = [number, number]
 
 defineOptions({ name: 'MeetingFormView' })
 
 const route = useRoute()
-const apiClient = useApiClient()
 const toast = useAppToast()
 
 const meetingId = computed(() => {
@@ -50,18 +54,58 @@ useHead({
     title: () => (isEditing.value ? 'Editar reunión · Sistema' : 'Nueva reunión · Sistema'),
 })
 
-const meetingTypes = ref<MeetingTypeOption[]>([])
-const sectors = ref<SectorOption[]>([])
-const members = ref<MemberOption[]>([])
+const meetingQuery = useMeetingQuery(meetingId)
+const meetingTypesQuery = useMeetingTypesQuery()
+const sectorsQuery = useMeetingSectorsQuery()
+const membersQuery = useMeetingMembersQuery()
+const leadersQuery = useMeetingLeadersQuery()
+const createMeetingMutation = useCreateMeetingMutation()
+const updateMeetingMutation = useUpdateMeetingMutation()
+
+const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
+const sectors = computed(() => sectorsQuery.data.value ?? [])
+const members = computed(() => membersQuery.data.value ?? [])
+const leaders = computed(() => leadersQuery.data.value ?? [])
+const isLoading = computed(
+    () =>
+        meetingTypesQuery.isPending.value ||
+        sectorsQuery.isPending.value ||
+        membersQuery.isPending.value ||
+        leadersQuery.isPending.value ||
+        (isEditing.value && meetingQuery.isPending.value),
+)
+const loadError = computed(
+    () =>
+        meetingTypesQuery.error.value ??
+        sectorsQuery.error.value ??
+        membersQuery.error.value ??
+        leadersQuery.error.value ??
+        meetingQuery.error.value,
+)
+const notFound = computed(() => isEditing.value && meetingQuery.isError.value)
+
+if (import.meta.server) {
+    onServerPrefetch(() =>
+        Promise.allSettled([
+            meetingTypesQuery.suspense(),
+            sectorsQuery.suspense(),
+            membersQuery.suspense(),
+            leadersQuery.suspense(),
+            ...(isEditing.value ? [meetingQuery.suspense()] : []),
+        ]),
+    )
+}
 
 interface MeetingForm {
     title: string
     description: string
     typeId: number
     sectorId: number
+    leaderId: number
     supervisorId: number
     coSupervisorIds: number[]
     date: string
+    recurrenceEndDate: string | null
     startTime: string
     endTime: string
     location: string
@@ -80,9 +124,11 @@ function emptyForm(): MeetingForm {
         description: '',
         typeId: 0,
         sectorId: 0,
+        leaderId: 0,
         supervisorId: 0,
         coSupervisorIds: [],
         date: new Date().toISOString().slice(0, 10),
+        recurrenceEndDate: null,
         startTime: '19:00',
         endTime: '20:30',
         location: '',
@@ -91,19 +137,21 @@ function emptyForm(): MeetingForm {
         status: 'programada',
         isPublic: false,
         notes: '',
-        color: colorPalette[0]!,
+        color: meetingColorPalette[0]!,
         position: null,
     }
 }
 
 const form = reactive(emptyForm())
-const notFound = ref(false)
+const formInitialized = ref(false)
+const isClientReady = ref(false)
 
 // ===== Map location picker (Leaflet) =====
 const mapEl = ref<HTMLElement | null>(null)
 let map: import('leaflet').Map | null = null
 let marker: import('leaflet').Marker | null = null
 let L: typeof import('leaflet') | null = null
+let mapInitialization: Promise<void> | null = null
 const isLocating = ref(false)
 const locationError = ref('')
 
@@ -197,13 +245,10 @@ function centerOnSector() {
     if (c) map.setView(c, 13)
 }
 
-async function initMap() {
-    if (!import.meta.client || notFound.value) return
+async function createMap() {
     if (!L) L = (await import('leaflet')).default ?? (await import('leaflet'))
-    if (!mapEl.value || !L) return
-
-    const center = form.position ?? sectorCentroid(form.sectorId) ?? ELSALVADOR_CENTER
-    const zoom = form.position ? 15 : sectorCentroid(form.sectorId) ? 13 : 9
+    await nextTick()
+    if (!mapEl.value || !L || map) return
 
     map = L.map(mapEl.value, {
         zoomControl: true,
@@ -216,17 +261,43 @@ async function initMap() {
         maxZoom: 20,
     }).addTo(map)
     map.on('click', (e) => setPosition(e.latlng.lat, e.latlng.lng))
-    map.setView(center, zoom)
+    if (form.position) map.setView(form.position, 15)
+    else {
+        const center = sectorCentroid(form.sectorId) ?? EL_SALVADOR_CENTER
+        map.setView(center, sectorCentroid(form.sectorId) ? 13 : 9)
+    }
     syncMarkerFromForm()
     const current = map
-    setTimeout(() => current?.invalidateSize(), 80)
+    setTimeout(() => {
+        if (map === current) current.invalidateSize()
+    }, 80)
+}
+
+async function initMap() {
+    if (!import.meta.client || map || notFound.value || isLoading.value || loadError.value) {
+        return
+    }
+    if (mapInitialization) return mapInitialization
+
+    mapInitialization = createMap()
+    try {
+        await mapInitialization
+    } finally {
+        mapInitialization = null
+    }
 }
 
 // Re-center to the chosen sector while no explicit pin has been dropped yet.
 watch(
     () => form.sectorId,
-    () => {
+    (sectorId) => {
         if (!form.position) centerOnSector()
+        const sector = sectors.value.find((item) => item.id === sectorId)
+        form.supervisorId = sector?.supervisorId ?? 0
+        form.coSupervisorIds = form.coSupervisorIds.filter(
+            (memberId) => memberId !== form.supervisorId,
+        )
+        formErrors.supervisorId = null
     },
 )
 // Keep the pin colour in sync with the selected label colour.
@@ -237,31 +308,32 @@ watch(
     },
 )
 
-async function loadCatalogs() {
-    const [typeList, sectorList, memberList] = await Promise.all([
-        getMeetingTypes(apiClient),
-        getSectors(apiClient),
-        getMembers(apiClient),
-    ])
-    meetingTypes.value = typeList
-    sectors.value = sectorList
-    members.value = memberList
-}
+watch(
+    () => form.frequency,
+    (frequency) => {
+        if (frequency === 'unica') form.recurrenceEndDate = null
+    },
+)
 
-onMounted(async () => {
-    try {
-        await loadCatalogs()
+watch(
+    [isLoading, loadError, () => meetingQuery.data.value, meetingTypes, sectors, members, leaders],
+    async () => {
+        if (formInitialized.value || isLoading.value || loadError.value) return
 
-        if (isEditing.value && meetingId.value !== null) {
-            const existing = await getMeeting(apiClient, meetingId.value)
+        if (isEditing.value) {
+            const existing = meetingQuery.data.value
+            if (!existing) return
+
             Object.assign(form, {
                 title: existing.title,
                 description: existing.description ?? '',
                 typeId: existing.typeId,
                 sectorId: existing.sectorId,
+                leaderId: existing.leaderId,
                 supervisorId: existing.supervisorId,
                 coSupervisorIds: [...existing.coSupervisorIds],
                 date: existing.date,
+                recurrenceEndDate: existing.recurrenceEndDate,
                 startTime: existing.startTime,
                 endTime: existing.endTime,
                 location: existing.location,
@@ -279,15 +351,33 @@ onMounted(async () => {
         } else {
             form.typeId = meetingTypes.value[0]?.id ?? 0
             form.sectorId = sectors.value[0]?.id ?? 0
-            form.supervisorId = members.value[0]?.id ?? 0
+            form.leaderId = leaders.value[0]?.id ?? 0
+            form.supervisorId = sectors.value[0]?.supervisorId ?? 0
         }
-    } catch (error) {
-        if (isEditing.value) {
-            notFound.value = true
-        }
-        toast.error(error instanceof Error ? error.message : 'No fue posible cargar la reunión')
-    }
 
+        formInitialized.value = true
+        if (import.meta.client) {
+            await nextTick()
+            await initMap()
+        }
+    },
+    { immediate: true },
+)
+
+if (import.meta.client) {
+    watch(
+        loadError,
+        (error) => {
+            if (error) {
+                toast.error(resolveHttpErrorMessage(error, 'No fue posible cargar la reunión'))
+            }
+        },
+        { immediate: true },
+    )
+}
+
+onMounted(async () => {
+    isClientReady.value = true
     await nextTick()
     await initMap()
 })
@@ -297,14 +387,17 @@ onBeforeUnmount(() => {
         map.remove()
         map = null
     }
+    marker = null
 })
 
 const formErrors = reactive<Record<string, string | null>>({
     title: null,
     date: null,
+    recurrenceEndDate: null,
     startTime: null,
     endTime: null,
     sectorId: null,
+    leaderId: null,
     supervisorId: null,
 })
 
@@ -323,6 +416,14 @@ function validateForm() {
         formErrors.date = 'Selecciona una fecha'
         ok = false
     }
+    if (
+        form.frequency !== 'unica' &&
+        form.recurrenceEndDate &&
+        form.recurrenceEndDate < form.date
+    ) {
+        formErrors.recurrenceEndDate = 'Debe ser igual o posterior a la fecha de inicio'
+        ok = false
+    }
     if (!form.startTime) {
         formErrors.startTime = 'Hora de inicio obligatoria'
         ok = false
@@ -339,24 +440,32 @@ function validateForm() {
         formErrors.sectorId = 'Asigna un sector'
         ok = false
     }
+    if (!form.leaderId) {
+        formErrors.leaderId = 'Asigna un líder con rol Líder'
+        ok = false
+    }
     if (!form.supervisorId) {
-        formErrors.supervisorId = 'Asigna un supervisor'
+        formErrors.supervisorId = 'El sector seleccionado no tiene un supervisor asignado'
         ok = false
     }
     return ok
 }
 
-const isSaving = ref(false)
+const isSaving = computed(
+    () => createMeetingMutation.isPending.value || updateMeetingMutation.isPending.value,
+)
 
 function buildInput(): MeetingInput {
     return {
         typeId: form.typeId,
         sectorId: form.sectorId,
+        leaderId: form.leaderId,
         supervisorId: form.supervisorId,
         coSupervisorIds: [...form.coSupervisorIds],
         title: form.title.trim(),
         description: form.description.trim() || null,
         date: form.date,
+        recurrenceEndDate: form.frequency === 'unica' ? null : form.recurrenceEndDate,
         startTime: form.startTime,
         endTime: form.endTime,
         location: form.location.trim(),
@@ -377,20 +486,20 @@ async function saveMeeting() {
         return
     }
 
-    isSaving.value = true
     try {
         if (isEditing.value && meetingId.value !== null) {
-            await updateMeeting(apiClient, meetingId.value, buildInput())
+            await updateMeetingMutation.mutateAsync({
+                id: meetingId.value,
+                input: buildInput(),
+            })
             toast.success('Reunión actualizada')
         } else {
-            await createMeeting(apiClient, buildInput())
+            await createMeetingMutation.mutateAsync(buildInput())
             toast.success('Reunión creada')
         }
         await navigateTo('/catalogos/reuniones')
     } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible guardar la reunión')
-    } finally {
-        isSaving.value = false
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar la reunión'))
     }
 }
 
@@ -400,20 +509,23 @@ function cancel() {
 
 const selectedType = computed(() => meetingTypes.value.find((t) => t.id === form.typeId))
 const selectedSector = computed(() => sectors.value.find((s) => s.id === form.sectorId))
-const selectedSupervisor = computed(() => members.value.find((s) => s.id === form.supervisorId))
+const selectedLeader = computed(() => leaders.value.find((member) => member.id === form.leaderId))
+const selectedSupervisor = computed(() => ({
+    fullName: selectedSector.value?.supervisorName ?? '',
+}))
+const isRecurring = computed(() => form.frequency !== 'unica')
+const recurrenceSummary = computed(() =>
+    formatMeetingRecurrence(
+        form.date,
+        form.startTime,
+        form.endTime,
+        form.frequency,
+        form.recurrenceEndDate,
+    ),
+)
 const coSupervisorOptions = computed(() =>
     members.value.filter((member) => member.id !== form.supervisorId),
 )
-
-function formatPreviewDate(iso: string) {
-    if (!iso) return '—'
-    return new Date(iso + 'T00:00:00').toLocaleDateString('es-SV', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-    })
-}
 
 const inputClass =
     'h-11 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
@@ -460,7 +572,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                         type="button"
                         class="h-10 rounded px-5 text-xs uppercase tracking-wider"
                         :loading="isSaving"
-                        :disabled="isSaving"
+                        :disabled="isSaving || isLoading || !!loadError"
                         @click="saveMeeting"
                     >
                         <Save class="mr-2 size-4" />
@@ -472,7 +584,14 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
 
         <main class="mx-auto w-full max-w-system px-6 py-8 lg:px-10">
             <div
-                v-if="notFound"
+                v-if="isLoading || !formInitialized || !isClientReady"
+                class="rounded-lg border border-outline-variant bg-surface-container p-8 text-center text-sm text-on-surface-variant"
+            >
+                Cargando información de la reunión…
+            </div>
+
+            <div
+                v-else-if="notFound"
                 class="mx-auto max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center"
             >
                 <p class="font-display text-lg font-semibold text-destructive">
@@ -487,6 +606,18 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                 >
                     Volver al listado
                 </NuxtLink>
+            </div>
+
+            <div
+                v-else-if="loadError"
+                class="mx-auto max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center"
+            >
+                <p class="font-display text-lg font-semibold text-destructive">
+                    No fue posible cargar el formulario
+                </p>
+                <p class="mt-2 text-sm text-on-surface-variant">
+                    Regresa al listado e inténtalo nuevamente.
+                </p>
             </div>
 
             <form
@@ -573,9 +704,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                         </div>
 
-                        <div class="grid gap-4 md:grid-cols-3">
+                        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                             <div>
-                                <label :class="labelClass">Fecha *</label>
+                                <label :class="labelClass">Fecha de inicio *</label>
                                 <div class="mt-1">
                                     <UiDatePicker
                                         v-model="form.date"
@@ -623,6 +754,17 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     {{ formErrors.endTime }}
                                 </p>
                             </div>
+                            <div>
+                                <label :class="labelClass">Frecuencia</label>
+                                <div class="mt-1">
+                                    <UiSearchSelect
+                                        v-model="form.frequency"
+                                        :options="frequencyOptions"
+                                        placeholder="Selecciona frecuencia"
+                                        :searchable="false"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         <div class="mt-4 grid gap-4 md:grid-cols-2">
@@ -641,16 +783,41 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     />
                                 </div>
                             </div>
-                            <div>
-                                <label :class="labelClass">Frecuencia</label>
+                            <div v-if="isRecurring">
+                                <label :class="labelClass">Finaliza</label>
                                 <div class="mt-1">
-                                    <UiSearchSelect
-                                        v-model="form.frequency"
-                                        :options="frequencyOptions"
-                                        placeholder="Selecciona frecuencia"
-                                        :searchable="false"
+                                    <UiDatePicker
+                                        v-model="form.recurrenceEndDate"
+                                        mode="single"
+                                        placeholder="Sin fecha de finalización"
+                                        :invalid="!!formErrors.recurrenceEndDate"
                                     />
                                 </div>
+                                <p
+                                    v-if="formErrors.recurrenceEndDate"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ formErrors.recurrenceEndDate }}
+                                </p>
+                                <p v-else class="mt-1 text-xs text-on-surface-variant">
+                                    Déjala vacía para repetir indefinidamente.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            class="mt-4 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3"
+                        >
+                            <CalendarDays class="mt-0.5 size-4 shrink-0 text-primary" />
+                            <div>
+                                <p
+                                    class="text-xs font-semibold uppercase tracking-wider text-primary"
+                                >
+                                    Resumen de programación
+                                </p>
+                                <p class="mt-1 text-sm text-on-surface">
+                                    {{ recurrenceSummary }}
+                                </p>
                             </div>
                         </div>
                     </UiCard>
@@ -704,8 +871,8 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 {{ form.position[0].toFixed(5) }}, {{ form.position[1].toFixed(5) }}
                             </p>
                             <p v-else class="text-xs text-on-surface-variant">
-                                Haz clic en el mapa para colocar el punto. Luego puedes arrastrarlo
-                                para ajustarlo.
+                                Esta reunión no tiene un punto guardado. Haz clic en el mapa para
+                                colocar su ubicación exacta; se mostrará como un único marcador.
                             </p>
                             <button
                                 v-if="form.position"
@@ -751,23 +918,47 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 </p>
                             </div>
                             <div>
-                                <label :class="labelClass">Supervisor *</label>
+                                <label :class="labelClass">Líder *</label>
                                 <div class="mt-1">
                                     <UiSearchSelect
-                                        v-model="form.supervisorId"
-                                        :options="members"
+                                        v-model="form.leaderId"
+                                        :options="leaders"
                                         option-value="id"
                                         option-label="fullName"
-                                        placeholder="Selecciona un supervisor"
-                                        search-placeholder="Buscar por nombre..."
-                                        :invalid="!!formErrors.supervisorId"
+                                        placeholder="Selecciona un líder"
+                                        search-placeholder="Buscar líder..."
+                                        :invalid="!!formErrors.leaderId"
                                     />
+                                </div>
+                                <p v-if="formErrors.leaderId" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.leaderId }}
+                                </p>
+                            </div>
+                            <div>
+                                <label :class="labelClass">Supervisor *</label>
+                                <div class="mt-1">
+                                    <div
+                                        class="flex min-h-11 items-center rounded border bg-surface-container px-3 text-sm"
+                                        :class="
+                                            formErrors.supervisorId
+                                                ? 'border-destructive text-destructive'
+                                                : 'border-outline-variant text-on-surface'
+                                        "
+                                    >
+                                        {{
+                                            selectedSupervisor.fullName ||
+                                            'Selecciona un sector con supervisor'
+                                        }}
+                                    </div>
                                 </div>
                                 <p
                                     v-if="formErrors.supervisorId"
                                     class="mt-1 text-xs text-destructive"
                                 >
                                     {{ formErrors.supervisorId }}
+                                </p>
+                                <p v-else class="mt-1 text-xs text-on-surface-variant">
+                                    Se hereda automáticamente del sector.
                                 </p>
                             </div>
                             <div>
@@ -829,7 +1020,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 <span :class="labelClass">Color de etiqueta</span>
                                 <div class="mt-2 flex flex-wrap items-center gap-2">
                                     <button
-                                        v-for="c in colorPalette"
+                                        v-for="c in meetingColorPalette"
                                         :key="c"
                                         type="button"
                                         class="size-7 rounded-full border-2 transition-transform hover:scale-110"
@@ -906,14 +1097,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     <CalendarDays
                                         class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant"
                                     />
-                                    <div class="text-on-surface">
-                                        <p class="capitalize">
-                                            {{ formatPreviewDate(form.date) }}
-                                        </p>
-                                        <p class="text-on-surface-variant">
-                                            {{ form.startTime }} – {{ form.endTime }}
-                                        </p>
-                                    </div>
+                                    <p class="text-on-surface">{{ recurrenceSummary }}</p>
                                 </div>
                                 <div v-if="form.location" class="flex items-start gap-2">
                                     <MapPinned
@@ -952,6 +1136,21 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         </p>
                                         <p class="text-on-surface">
                                             {{ selectedSector.name }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div v-if="selectedLeader" class="flex items-start gap-2">
+                                    <Users
+                                        class="mt-0.5 size-3.5 shrink-0 text-on-surface-variant"
+                                    />
+                                    <div>
+                                        <p
+                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                        >
+                                            Líder
+                                        </p>
+                                        <p class="text-on-surface">
+                                            {{ selectedLeader.fullName }}
                                         </p>
                                     </div>
                                 </div>

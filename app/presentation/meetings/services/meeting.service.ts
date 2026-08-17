@@ -13,6 +13,8 @@ interface HierarchySectorApiEntity {
     name: string
     code: string
     polygon: unknown
+    supervisorId: number | null
+    supervisorName: string | null
 }
 
 interface HierarchyApiResponse {
@@ -41,13 +43,20 @@ function normalizePolygon(value: unknown): [number, number][] {
     })
 }
 
-export async function getMeetings(apiClient: AxiosInstance): Promise<MeetingRecord[]> {
-    const response = await apiClient.get<ApiResponse<MeetingRecord[]>>('/meetings')
+export async function getMeetings(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<MeetingRecord[]> {
+    const response = await apiClient.get<ApiResponse<MeetingRecord[]>>('/meetings', { signal })
     return responseData(response.data, 'No fue posible cargar las reuniones')
 }
 
-export async function getMeeting(apiClient: AxiosInstance, id: number): Promise<MeetingRecord> {
-    const response = await apiClient.get<ApiResponse<MeetingRecord>>(`/meetings/${id}`)
+export async function getMeeting(
+    apiClient: AxiosInstance,
+    id: number,
+    signal?: AbortSignal,
+): Promise<MeetingRecord> {
+    const response = await apiClient.get<ApiResponse<MeetingRecord>>(`/meetings/${id}`, { signal })
     return responseData(response.data, 'No fue posible cargar la reunión')
 }
 
@@ -72,23 +81,48 @@ export async function deleteMeeting(apiClient: AxiosInstance, id: number): Promi
     await apiClient.delete(`/meetings/${id}`)
 }
 
-export async function getMeetingTypes(apiClient: AxiosInstance): Promise<MeetingTypeOption[]> {
-    const response = await apiClient.get<ApiResponse<MeetingTypeOption[]>>('/meeting-types')
+export async function getMeetingTypes(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<MeetingTypeOption[]> {
+    const response = await apiClient.get<ApiResponse<MeetingTypeOption[]>>('/meeting-types', {
+        signal,
+    })
     return responseData(response.data, 'No fue posible cargar los tipos de reunión')
 }
 
-export async function getMembers(apiClient: AxiosInstance): Promise<MemberOption[]> {
-    const response = await apiClient.get<ApiResponse<MemberOption[]>>('/members')
+export async function getMembers(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<MemberOption[]> {
+    const response = await apiClient.get<ApiResponse<MemberOption[]>>('/members', { signal })
     return responseData(response.data, 'No fue posible cargar los miembros')
 }
 
-export async function getSectors(apiClient: AxiosInstance): Promise<SectorOption[]> {
-    const response = await apiClient.get<ApiResponse<HierarchyApiResponse>>('/territories')
+export async function getMeetingLeaders(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<MemberOption[]> {
+    const response = await apiClient.get<ApiResponse<MemberOption[]>>('/meetings/leaders', {
+        signal,
+    })
+    return responseData(response.data, 'No fue posible cargar los líderes de reunión')
+}
+
+export async function getSectors(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<SectorOption[]> {
+    const response = await apiClient.get<ApiResponse<HierarchyApiResponse>>('/territories', {
+        signal,
+    })
     const data = responseData(response.data, 'No fue posible cargar los sectores')
     return data.sectors.map((sector) => ({
         id: sector.id,
         name: sector.name,
         code: sector.code,
         polygon: normalizePolygon(sector.polygon),
+        supervisorId: sector.supervisorId,
+        supervisorName: sector.supervisorName,
     }))
 }

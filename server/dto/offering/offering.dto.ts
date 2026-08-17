@@ -13,6 +13,10 @@ export interface CreateOfferingDto {
     details: OfferingDetailDto[]
 }
 
+export interface CreateOfferingsBulkDto {
+    offerings: CreateOfferingDto[]
+}
+
 export type UpdateOfferingDto = Partial<CreateOfferingDto>
 
 export interface CreateOfferingCategoryDto {

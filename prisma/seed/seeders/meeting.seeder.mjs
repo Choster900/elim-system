@@ -1,5 +1,5 @@
 // Datos de prueba de tipos de reunión y reuniones.
-// Las reuniones referencian sectores (por code SEC-***) y miembros supervisores
+// Las reuniones referencian sectores (por code SEC-***) y miembros líderes/supervisores
 // (por code MIE-****) sembrados en territory.seeder.mjs y member.seeder.mjs.
 
 export const MEETING_TYPE_SEEDS = [
@@ -278,6 +278,7 @@ export async function seedMeetings(prisma, types, sectors, members) {
         const baseData = {
             typeId: type.id,
             sectorId: sector.id,
+            leaderId: supervisor.id,
             supervisorId: supervisor.id,
             title: seed.title,
             description: seed.description ?? null,

@@ -51,11 +51,21 @@ export const updateZoneSchema = Joi.object<UpdateZoneDto>({
 }).min(1)
 
 export const createSectorSchema = Joi.object<CreateSectorDto>({
-    ...requiredBaseFields,
+    name: requiredBaseFields.name,
+    description: requiredBaseFields.description,
+    color: requiredBaseFields.color,
+    polygon: requiredBaseFields.polygon,
+    isActive: requiredBaseFields.isActive,
     zoneId: Joi.number().integer().positive().required(),
+    supervisorId: Joi.number().integer().positive().required(),
 })
 
 export const updateSectorSchema = Joi.object<UpdateSectorDto>({
-    ...baseFields,
+    name: baseFields.name,
+    description: baseFields.description,
+    color: baseFields.color,
+    polygon: baseFields.polygon,
+    isActive: baseFields.isActive,
     zoneId: Joi.number().integer().positive(),
+    supervisorId: Joi.number().integer().positive(),
 }).min(1)

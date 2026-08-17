@@ -1,6 +1,47 @@
 // Datos de prueba de miembros de la comunidad.
 // Los códigos (`code`) son la clave de idempotencia usada en el upsert y también
 // permiten que los seeders de territorios y reuniones referencien a un miembro.
+const LEADER_ROLE_SEED = {
+    code: 'LEADER',
+    name: 'Líder',
+    description: 'Miembro autorizado para conducir reuniones.',
+    isActive: true,
+    isSystem: true,
+}
+
+const SUPERVISOR_ROLE_SEED = {
+    code: 'SUPERVISOR',
+    name: 'Supervisor',
+    description: 'Miembro responsable de supervisar todas las reuniones de un sector.',
+    isActive: true,
+    isSystem: true,
+}
+
+// Estos miembros ya conducen territorios o reuniones dentro de los datos semilla.
+const COMMUNITY_LEADER_CODES = new Set([
+    'MIE-0001',
+    'MIE-0002',
+    'MIE-0005',
+    'MIE-0006',
+    'MIE-0007',
+    'MIE-0008',
+    'MIE-0009',
+    'MIE-0010',
+    'MIE-0014',
+    'MIE-0015',
+])
+
+const COMMUNITY_SUPERVISOR_CODES = new Set([
+    'MIE-0002',
+    'MIE-0005',
+    'MIE-0006',
+    'MIE-0007',
+    'MIE-0008',
+    'MIE-0010',
+    'MIE-0014',
+    'MIE-0015',
+])
+
 export const MEMBER_SEEDS = [
     {
         code: 'MIE-0001',
@@ -280,6 +321,17 @@ function buildMemberData(seed) {
 
 // Devuelve un Map<code, member> para que otros seeders resuelvan líderes/supervisores.
 export async function seedMembers(prisma) {
+    const leaderRole = await prisma.communityRole.upsert({
+        where: { code: LEADER_ROLE_SEED.code },
+        create: LEADER_ROLE_SEED,
+        update: LEADER_ROLE_SEED,
+    })
+    const supervisorRole = await prisma.communityRole.upsert({
+        where: { code: SUPERVISOR_ROLE_SEED.code },
+        create: SUPERVISOR_ROLE_SEED,
+        update: SUPERVISOR_ROLE_SEED,
+    })
+
     const members = await prisma.$transaction(
         MEMBER_SEEDS.map((seed) => {
             const data = buildMemberData(seed)
@@ -289,6 +341,50 @@ export async function seedMembers(prisma) {
                 update: data,
             })
         }),
+    )
+
+    await prisma.$transaction(
+        members
+            .filter((member) => COMMUNITY_LEADER_CODES.has(member.code))
+            .map((member) =>
+                prisma.memberCommunityRole.upsert({
+                    where: {
+                        memberId_roleId: {
+                            memberId: member.id,
+                            roleId: leaderRole.id,
+                        },
+                    },
+                    create: {
+                        memberId: member.id,
+                        roleId: leaderRole.id,
+                    },
+                    update: {
+                        endedAt: null,
+                    },
+                }),
+            ),
+    )
+
+    await prisma.$transaction(
+        members
+            .filter((member) => COMMUNITY_SUPERVISOR_CODES.has(member.code))
+            .map((member) =>
+                prisma.memberCommunityRole.upsert({
+                    where: {
+                        memberId_roleId: {
+                            memberId: member.id,
+                            roleId: supervisorRole.id,
+                        },
+                    },
+                    create: {
+                        memberId: member.id,
+                        roleId: supervisorRole.id,
+                    },
+                    update: {
+                        endedAt: null,
+                    },
+                }),
+            ),
     )
 
     return new Map(members.map((member) => [member.code, member]))

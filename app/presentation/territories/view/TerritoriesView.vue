@@ -2,6 +2,7 @@
 import {
     AlertTriangle,
     ExternalLink,
+    HandCoins,
     LoaderCircle,
     MapPinned,
     MoreHorizontal,
@@ -11,16 +12,29 @@ import {
     X,
 } from '@lucide/vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
-import { useApiClient } from '~/presentation/shared/composables/useApiClient'
+import { useUpdateMeetingMutation } from '~/presentation/meetings/composables/useMeetingMutations'
+import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
+import type { MeetingRecord } from '~/presentation/meetings/interfaces/meeting.interface'
+import {
+    getMeetingFrequencyLabel,
+    getMeetingStatusLabel,
+} from '~/presentation/meetings/utils/meeting-format.util'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import AssignMeetingDrawer from '~/presentation/territories/components/AssignMeetingDrawer.vue'
 import TerritoryFormDrawer from '~/presentation/territories/components/TerritoryFormDrawer.vue'
+import { useTerritoryHierarchyQuery } from '~/presentation/territories/composables/useTerritoryHierarchyQuery'
+import { useTerritorySupervisorsQuery } from '~/presentation/territories/composables/useTerritorySupervisorsQuery'
 import {
-    ELSALVADOR_CENTER,
+    useCreateTerritoryMutation,
+    useDeleteTerritoryMutation,
+    useUpdateTerritoryMutation,
+} from '~/presentation/territories/composables/useTerritoryMutations'
+import {
     districtPalette,
+    EL_SALVADOR_CENTER,
     sectorPalette,
     zonePalette,
-} from '~/mock/territories.mock'
+} from '~/presentation/territories/constants/territory.constants'
 import type {
     District,
     LatLng,
@@ -29,21 +43,6 @@ import type {
     TerritorySector,
     Zone,
 } from '~/presentation/territories/interfaces/territory.interface'
-import {
-    createTerritoryEntity,
-    deleteTerritoryEntity,
-    getTerritoryHierarchy,
-    updateTerritoryEntity,
-} from '~/presentation/territories/services/territory.service'
-import {
-    type MockMeeting,
-    frequencyOptions,
-    getMockMeetings,
-    mockMeetingTypes,
-    mockSupervisors,
-    statusOptions,
-} from '~/mock/meetings.mock'
-
 defineOptions({ name: 'TerritoriesView' })
 
 useHead({
@@ -52,8 +51,6 @@ useHead({
 
 type Level = 'distrito' | 'zona' | 'sector' | 'reunion'
 type EntityLevel = 'distrito' | 'zona' | 'sector'
-
-const MEET_KEY = 'meetings-catalog-v2'
 
 // Level accent colors, drawn from the app palette so they harmonize with the gold primary.
 const LEVEL_ACCENT: Record<Level, string> = {
@@ -70,17 +67,53 @@ const LEVEL_LABEL: Record<Level, string> = {
 }
 
 const toast = useAppToast()
-const apiClient = useApiClient()
 const authStore = useAuthStore()
 const canManage = computed(() => authStore.hasPermission('territories.manage'))
+const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
+const canManageOfferings = computed(() => authStore.hasPermission('finance.manage'))
+const hierarchyQuery = useTerritoryHierarchyQuery()
+const supervisorsQuery = useTerritorySupervisorsQuery()
+const meetingsQuery = useMeetingsQuery()
+const createTerritoryMutation = useCreateTerritoryMutation()
+const updateTerritoryMutation = useUpdateTerritoryMutation()
+const deleteTerritoryMutation = useDeleteTerritoryMutation()
+const updateMeetingMutation = useUpdateMeetingMutation()
 
-const districts = ref<District[]>([])
-const zones = ref<Zone[]>([])
-const sectors = ref<TerritorySector[]>([])
-const meetings = ref<MockMeeting[]>(getMockMeetings())
-const hierarchyLoading = ref(true)
-const hierarchySaving = ref(false)
-const hierarchyError = ref('')
+const districts = computed(() => hierarchyQuery.data.value?.districts ?? [])
+const zones = computed(() => hierarchyQuery.data.value?.zones ?? [])
+const sectors = computed(() => hierarchyQuery.data.value?.sectors ?? [])
+const meetings = computed(() => meetingsQuery.data.value ?? [])
+const supervisors = computed(() => supervisorsQuery.data.value ?? [])
+const catalogLoading = computed(
+    () => hierarchyQuery.isPending.value || meetingsQuery.isPending.value,
+)
+const hierarchySaving = computed(
+    () =>
+        createTerritoryMutation.isPending.value ||
+        updateTerritoryMutation.isPending.value ||
+        deleteTerritoryMutation.isPending.value,
+)
+const catalogError = computed(() => {
+    if (hierarchyQuery.error.value) {
+        return requestErrorMessage(
+            hierarchyQuery.error.value,
+            'No fue posible cargar el mantenimiento territorial.',
+        )
+    }
+    if (meetingsQuery.error.value) {
+        return requestErrorMessage(
+            meetingsQuery.error.value,
+            'No fue posible cargar las reuniones del catálogo.',
+        )
+    }
+    if (supervisorsQuery.error.value) {
+        return requestErrorMessage(
+            supervisorsQuery.error.value,
+            'No fue posible cargar el catálogo de supervisores.',
+        )
+    }
+    return ''
+})
 
 const selD = ref<string | null>(null)
 const selZ = ref<string | null>(null)
@@ -111,12 +144,6 @@ let formParentZoneId: string | null = null
 // Assign-meeting drawer
 const assignOpen = ref(false)
 
-// ===== persistence =====
-function persistMeetings() {
-    if (!import.meta.client) return
-    localStorage.setItem(MEET_KEY, JSON.stringify(meetings.value))
-}
-
 function requestErrorMessage(error: unknown, fallback: string) {
     const response = (
         error as { response?: { data?: { message?: string; error?: { details?: string } } } }
@@ -127,22 +154,20 @@ function requestErrorMessage(error: unknown, fallback: string) {
     return fallback
 }
 
-async function loadHierarchy() {
-    hierarchyLoading.value = true
-    hierarchyError.value = ''
-    try {
-        const hierarchy = await getTerritoryHierarchy(apiClient)
-        districts.value = hierarchy.districts
-        zones.value = hierarchy.zones
-        sectors.value = hierarchy.sectors
+watch(
+    () => hierarchyQuery.data.value,
+    (hierarchy) => {
+        if (!hierarchy) return
 
-        if (selD.value && !districts.value.some((district) => district.id === selD.value)) {
+        if (selD.value && !hierarchy.districts.some((district) => district.id === selD.value)) {
             clearSelection()
         }
-        if (!selD.value) selD.value = districts.value[0]?.id ?? null
+        if (!selD.value) selD.value = hierarchy.districts[0]?.id ?? null
         if (
             selZ.value &&
-            !zones.value.some((zone) => zone.id === selZ.value && zone.districtId === selD.value)
+            !hierarchy.zones.some(
+                (zone) => zone.id === selZ.value && zone.districtId === selD.value,
+            )
         ) {
             selZ.value = null
             selS.value = null
@@ -150,31 +175,41 @@ async function loadHierarchy() {
         }
         if (
             selS.value &&
-            !sectors.value.some(
+            !hierarchy.sectors.some(
                 (sector) => sector.id === selS.value && sector.zoneId === selZ.value,
             )
         ) {
             selS.value = null
             selM.value = null
         }
-    } catch (error) {
-        hierarchyError.value = requestErrorMessage(
-            error,
-            'No fue posible cargar el mantenimiento territorial.',
-        )
-        toast.error(hierarchyError.value)
-    } finally {
-        hierarchyLoading.value = false
-    }
+    },
+    { immediate: true },
+)
+
+if (import.meta.server) {
+    onServerPrefetch(async () => {
+        await Promise.allSettled([
+            hierarchyQuery.suspense(),
+            meetingsQuery.suspense(),
+            supervisorsQuery.suspense(),
+        ])
+    })
 }
-function loadMeetings() {
-    if (!import.meta.client) return
-    try {
-        const raw = localStorage.getItem(MEET_KEY)
-        meetings.value = raw ? (JSON.parse(raw) as MockMeeting[]) : getMockMeetings()
-    } catch {
-        meetings.value = getMockMeetings()
-    }
+
+if (import.meta.client) {
+    watch(
+        catalogError,
+        (errorMessage) => {
+            if (errorMessage) toast.error(errorMessage)
+        },
+        { immediate: true },
+    )
+}
+
+function retryCatalog() {
+    hierarchyQuery.refetch()
+    meetingsQuery.refetch()
+    supervisorsQuery.refetch()
 }
 
 // ===== lookups =====
@@ -185,7 +220,7 @@ function sectorsOf(zoneId: string) {
     return sectors.value.filter((s) => s.zoneId === zoneId)
 }
 function meetingsOf(sectorId: string) {
-    return meetings.value.filter((m) => m.sectorId === sectorId)
+    return meetings.value.filter((meeting) => String(meeting.sectorId) === sectorId)
 }
 function zoneMeetings(zone: Zone) {
     return sectorsOf(zone.id).reduce((acc, s) => acc + meetingsOf(s.id).length, 0)
@@ -221,7 +256,7 @@ function plural(n: number, singular: string, pluralWord: string) {
 function capitalize(text: string) {
     return text.charAt(0).toUpperCase() + text.slice(1)
 }
-function meetingDay(m: MockMeeting) {
+function meetingDay(m: MeetingRecord) {
     return capitalize(
         new Date(`${m.date}T00:00:00`).toLocaleDateString('es-SV', { weekday: 'long' }),
     )
@@ -360,7 +395,7 @@ const columns = computed<Column[]>(() => {
         label: 'Reuniones',
         accent: LEVEL_ACCENT.reunion,
         count: sector ? meetingsOf(sector.id).length : 0,
-        canAdd: canManage.value && !!sector,
+        canAdd: canManageMeetings.value && !!sector,
         addTitle: 'Asignar reunión',
         hint: sector ? null : 'Selecciona un sector para ver sus reuniones.',
         empty:
@@ -370,13 +405,13 @@ const columns = computed<Column[]>(() => {
                     : 'Este sector no tiene reuniones. Usa + para asignar una.'
                 : null,
         items: mItems.map((m) => ({
-            id: m.id,
+            id: String(m.id),
             level: 'reunion',
             name: m.title,
             color: m.color,
             sub: `${meetingDay(m)} · ${fmtTime(m.startTime)}`,
             badge: String(m.expectedAttendees),
-            selected: selM.value === m.id,
+            selected: selM.value === String(m.id),
         })),
     })
 
@@ -399,8 +434,8 @@ const crumbs = computed(() => {
     if (selSector.value)
         list.push({ name: selSector.value.name, level: 'sector', id: selSector.value.id })
     if (selM.value && selSector.value) {
-        const m = meetingsOf(selSector.value.id).find((x) => x.id === selM.value)
-        if (m) list.push({ name: m.title, level: 'reunion', id: m.id })
+        const m = meetingsOf(selSector.value.id).find((x) => String(x.id) === selM.value)
+        if (m) list.push({ name: m.title, level: 'reunion', id: String(m.id) })
     }
     return list
 })
@@ -455,7 +490,10 @@ function closeMenu() {
 }
 
 const canMove = computed(
-    () => canManage.value && menuLevel.value !== null && menuLevel.value !== 'distrito',
+    () =>
+        menuLevel.value !== null &&
+        menuLevel.value !== 'distrito' &&
+        (menuLevel.value === 'reunion' ? canManageMeetings.value : canManage.value),
 )
 
 const menuName = computed(() => {
@@ -487,7 +525,7 @@ function findEntity(level: Level, id: string): EntityLike | null {
     if (level === 'distrito') return findDistrict(id)
     if (level === 'zona') return zones.value.find((z) => z.id === id) ?? null
     if (level === 'sector') return sectors.value.find((s) => s.id === id) ?? null
-    const m = meetings.value.find((x) => x.id === id)
+    const m = meetings.value.find((x) => String(x.id) === id)
     return m ? { name: m.title } : null
 }
 function zoneParent(zoneId: string) {
@@ -502,11 +540,11 @@ function sectorParent(sectorId: string) {
     return { sector: s, zone: z ?? null, district: d }
 }
 function meetingParent(meetingId: string) {
-    const m = meetings.value.find((x) => x.id === meetingId)
+    const m = meetings.value.find((x) => String(x.id) === meetingId)
     if (!m) return null
     return {
         meeting: m,
-        ...(sectorParent(m.sectorId) ?? { sector: null, zone: null, district: null }),
+        ...(sectorParent(String(m.sectorId)) ?? { sector: null, zone: null, district: null }),
     }
 }
 
@@ -562,7 +600,7 @@ const detail = computed(() => {
         if (!parent?.sector) return null
         const s = parent.sector
         const fields: DetailField[] = [
-            { label: 'Líder', value: s.leaderName || '—' },
+            { label: 'Supervisor', value: s.supervisorName || '—' },
             { label: 'Estado', value: s.isActive ? 'Activo' : 'Inactivo' },
             { label: 'Zona', value: parent.zone?.name ?? '—' },
             { label: 'Distrito', value: parent.district?.name ?? '—' },
@@ -581,18 +619,14 @@ const detail = computed(() => {
     const parent = meetingParent(id)
     if (!parent?.meeting) return null
     const m = parent.meeting
-    const type = mockMeetingTypes.find((t) => t.id === m.typeId)
-    const supervisor = mockSupervisors.find((s) => s.id === m.supervisorId)
-    const frequency = frequencyOptions.find((f) => f.value === m.frequency)
-    const status = statusOptions.find((st) => st.value === m.status)
     const fields: DetailField[] = [
-        { label: 'Tipo', value: type?.label ?? '—' },
-        { label: 'Supervisor', value: supervisor?.name ?? '—' },
+        { label: 'Tipo', value: m.typeName ?? '—' },
+        { label: 'Supervisor', value: m.supervisorName ?? '—' },
         { label: 'Día', value: meetingDay(m) },
         { label: 'Hora', value: `${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}` },
         { label: 'Ubicación', value: m.location || '—' },
-        { label: 'Frecuencia', value: frequency?.label ?? '—' },
-        { label: 'Estado', value: status?.label ?? '—' },
+        { label: 'Frecuencia', value: getMeetingFrequencyLabel(m.frequency) },
+        { label: 'Estado', value: getMeetingStatusLabel(m.status) },
         { label: 'Asistentes', value: String(m.expectedAttendees) },
         { label: 'Sector', value: parent.sector?.name ?? '—' },
         { label: 'Zona', value: parent.zone?.name ?? '—' },
@@ -647,27 +681,46 @@ const moveTargets = computed<MoveTarget[]>(() => {
 })
 
 async function moveEntity(targetId: string) {
-    if (!canManage.value || !menuFor.value || !menuLevel.value) return
+    if (!menuFor.value || !menuLevel.value) return
     const level = menuLevel.value
     const id = menuFor.value
-    hierarchySaving.value = true
+    if (level === 'reunion' ? !canManageMeetings.value : !canManage.value) return
     try {
         if (level === 'zona') {
-            await updateTerritoryEntity(apiClient, 'zona', id, { parentId: targetId })
+            await updateTerritoryMutation.mutateAsync({
+                level: 'zona',
+                id,
+                input: { parentId: targetId },
+            })
             selD.value = targetId
             selZ.value = id
         } else if (level === 'sector') {
-            await updateTerritoryEntity(apiClient, 'sector', id, { parentId: targetId })
+            await updateTerritoryMutation.mutateAsync({
+                level: 'sector',
+                id,
+                input: { parentId: targetId },
+            })
             const zone = zones.value.find((item) => item.id === targetId)
             selD.value = zone?.districtId ?? selD.value
             selZ.value = targetId
             selS.value = id
         } else if (level === 'reunion') {
-            const meeting = meetings.value.find((item) => item.id === id)
-            if (meeting) meeting.sectorId = targetId
-            persistMeetings()
+            const meeting = meetings.value.find((item) => String(item.id) === id)
+            if (!meeting) throw new Error('La reunión seleccionada ya no está disponible.')
+            await updateMeetingMutation.mutateAsync({
+                id: meeting.id,
+                input: { sectorId: Number(targetId) },
+            })
+
+            const targetSector = sectors.value.find((item) => item.id === targetId)
+            const targetZone = targetSector
+                ? zones.value.find((item) => item.id === targetSector.zoneId)
+                : null
+            selD.value = targetZone?.districtId ?? selD.value
+            selZ.value = targetSector?.zoneId ?? selZ.value
+            selS.value = targetId
+            selM.value = id
         }
-        await loadHierarchy()
         closeMenu()
         toast.success(`${LEVEL_LABEL[level]} movido`)
     } catch (error) {
@@ -677,8 +730,6 @@ async function moveEntity(targetId: string) {
                 `No fue posible mover el ${LEVEL_LABEL[level].toLowerCase()}.`,
             ),
         )
-    } finally {
-        hierarchySaving.value = false
     }
 }
 
@@ -689,9 +740,8 @@ async function removeEntity() {
     const id = menuFor.value
     if (level === 'reunion') return
 
-    hierarchySaving.value = true
     try {
-        await deleteTerritoryEntity(apiClient, level, id)
+        await deleteTerritoryMutation.mutateAsync({ level, id })
         if (level === 'distrito' && selD.value === id) clearSelection()
         if (level === 'zona' && selZ.value === id) {
             selZ.value = null
@@ -704,7 +754,6 @@ async function removeEntity() {
         }
         if (drawer.value?.id === id) drawer.value = null
         closeMenu()
-        await loadHierarchy()
         toast.success(`${LEVEL_LABEL[level]} eliminado`)
     } catch (error) {
         toast.error(
@@ -713,8 +762,6 @@ async function removeEntity() {
                 `No fue posible eliminar el ${LEVEL_LABEL[level].toLowerCase()}.`,
             ),
         )
-    } finally {
-        hierarchySaving.value = false
     }
 }
 
@@ -723,18 +770,19 @@ function goToMeeting(id: string) {
     closeMenu()
     navigateTo(`/catalogos/reuniones/${id}/editar`)
 }
-function unassignMeeting(id: string) {
-    const m = meetings.value.find((x) => x.id === id)
-    if (m) m.sectorId = ''
-    if (selM.value === id) selM.value = null
-    if (drawer.value?.id === id) drawer.value = null
-    persistMeetings()
+
+function goToOfferingRegistration(id: string) {
     closeMenu()
-    toast.success('Reunión quitada del sector')
+    closeDrawer()
+    navigateTo({
+        path: '/finanzas/ofrendas/nueva',
+        query: { meetingId: id },
+    })
 }
 
 // ===== entity form (create/edit) =====
 function toEntityInput(e: District | Zone | TerritorySector): TerritoryInput {
+    const sector = 'supervisorId' in e ? e : null
     return {
         name: e.name,
         code: e.code,
@@ -743,6 +791,7 @@ function toEntityInput(e: District | Zone | TerritorySector): TerritoryInput {
         color: e.color,
         polygon: e.polygon,
         isActive: e.isActive,
+        supervisorId: sector?.supervisorId ?? null,
     }
 }
 
@@ -757,7 +806,7 @@ function openCreate(level: EntityLevel) {
     formParentZoneId = null
 
     if (level === 'distrito') {
-        formParentCentroid.value = ELSALVADOR_CENTER
+        formParentCentroid.value = EL_SALVADOR_CENTER
         formParentLabel.value = null
     } else if (level === 'zona') {
         const d = selDist.value
@@ -813,7 +862,6 @@ async function onFormSave(payload: TerritoryInput) {
     const level = formLevel.value
     if (!canManage.value) return
 
-    hierarchySaving.value = true
     try {
         if (formMode.value === 'create') {
             const parentId =
@@ -822,7 +870,11 @@ async function onFormSave(payload: TerritoryInput) {
                     : level === 'sector'
                       ? formParentZoneId
                       : null
-            const created = await createTerritoryEntity(apiClient, level, payload, parentId)
+            const created = await createTerritoryMutation.mutateAsync({
+                level,
+                input: payload,
+                parentId,
+            })
             if (level === 'distrito') {
                 selD.value = created.id
                 selZ.value = null
@@ -838,11 +890,14 @@ async function onFormSave(payload: TerritoryInput) {
             }
             toast.success(`${LEVEL_LABEL[level]} creado`)
         } else if (formEditId) {
-            await updateTerritoryEntity(apiClient, level, formEditId, payload)
+            await updateTerritoryMutation.mutateAsync({
+                level,
+                id: formEditId,
+                input: payload,
+            })
             toast.success('Cambios guardados')
         }
 
-        await loadHierarchy()
         formOpen.value = false
     } catch (error) {
         toast.error(
@@ -851,8 +906,6 @@ async function onFormSave(payload: TerritoryInput) {
                 `No fue posible guardar el ${LEVEL_LABEL[level].toLowerCase()}.`,
             ),
         )
-    } finally {
-        hierarchySaving.value = false
     }
 }
 
@@ -868,32 +921,42 @@ const assignItems = computed<AssignItem[]>(() => {
     const sector = selSector.value
     if (!sector) return []
     return meetings.value.map((m) => ({
-        id: m.id,
+        id: String(m.id),
         title: m.title,
         color: m.color,
-        meta: `${sectorLabelOf(m.sectorId)} · ${meetingDay(m)} ${fmtTime(m.startTime)}`,
-        assigned: m.sectorId === sector.id,
+        meta: `${sectorLabelOf(String(m.sectorId))} · ${meetingDay(m)} ${fmtTime(m.startTime)}`,
+        assigned: String(m.sectorId) === sector.id,
     }))
 })
 
 function openAssign() {
     closeMenu()
-    if (!canManage.value || !selSector.value) return
+    if (!canManageMeetings.value || !selSector.value) return
     assignOpen.value = true
 }
-function assignMeeting(id: string) {
+async function assignMeeting(id: string) {
     const sector = selSector.value
     if (!sector) return
-    const m = meetings.value.find((x) => x.id === id)
-    if (m) m.sectorId = sector.id
-    persistMeetings()
-    toast.success('Reunión asignada')
+    const meeting = meetings.value.find((item) => String(item.id) === id)
+    if (!meeting) return
+
+    try {
+        await updateMeetingMutation.mutateAsync({
+            id: meeting.id,
+            input: { sectorId: Number(sector.id) },
+        })
+        toast.success('Reunión asignada')
+    } catch (error) {
+        toast.error(requestErrorMessage(error, 'No fue posible asignar la reunión.'))
+    }
 }
 
 function onColumnAdd(level: Level) {
-    if (!canManage.value) return
-    if (level === 'reunion') openAssign()
-    else openCreate(level)
+    if (level === 'reunion') {
+        openAssign()
+        return
+    }
+    if (canManage.value) openCreate(level)
 }
 
 // ===== locator map (Leaflet, detail drawer) =====
@@ -923,11 +986,14 @@ async function renderMap() {
     // A meeting shows a single point: its saved position, or its sector's centroid as a fallback.
     const meetingPoint =
         level === 'reunion'
-            ? (meetings.value.find((m) => m.id === id)?.position ??
-              (() => {
+            ? (() => {
+                  const meeting = meetings.value.find((item) => String(item.id) === id)
+                  if (meeting && meeting.latitude !== null && meeting.longitude !== null) {
+                      return [meeting.latitude, meeting.longitude] as LatLng
+                  }
                   const poly = polygonFor(level, id)
                   return poly && poly.length ? centroid(poly) : null
-              })())
+              })()
             : null
 
     const polygon = polygonFor(level, id)
@@ -992,10 +1058,6 @@ watch(
     },
 )
 
-onMounted(() => {
-    loadHierarchy()
-    loadMeetings()
-})
 onBeforeUnmount(() => {
     destroyMap()
 })
@@ -1077,15 +1139,15 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-            v-if="hierarchyLoading"
+            v-if="catalogLoading"
             class="flex min-h-0 flex-1 items-center justify-center gap-3 bg-surface text-sm text-on-surface-variant"
         >
             <LoaderCircle class="size-5 animate-spin text-primary" />
-            Cargando distritos, zonas y sectores…
+            Cargando distritos, zonas, sectores y reuniones…
         </div>
 
         <div
-            v-else-if="hierarchyError"
+            v-else-if="catalogError"
             class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-surface px-6 py-10"
             role="alert"
             aria-live="polite"
@@ -1122,7 +1184,7 @@ onBeforeUnmount(() => {
                     <h2
                         class="mt-2 font-display text-2xl font-semibold tracking-tight text-on-surface"
                     >
-                        No pudimos cargar tus distritos
+                        No pudimos cargar el catálogo territorial
                     </h2>
                     <p class="mx-auto mt-3 max-w-sm text-sm leading-6 text-on-surface-variant">
                         Parece una interrupción temporal. Revisa tu conexión o vuelve a intentarlo
@@ -1138,14 +1200,14 @@ onBeforeUnmount(() => {
                             Detalle del problema
                         </p>
                         <p class="mt-1 text-sm leading-5 text-on-surface">
-                            {{ hierarchyError }}
+                            {{ catalogError }}
                         </p>
                     </div>
 
                     <button
                         type="button"
                         class="group mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:w-auto"
-                        @click="loadHierarchy"
+                        @click="retryCatalog"
                     >
                         <RefreshCw
                             class="size-4 transition-transform duration-300 group-hover:rotate-45"
@@ -1300,14 +1362,6 @@ onBeforeUnmount(() => {
                     >
                         Eliminar
                     </button>
-                    <button
-                        v-else-if="canManage && menuLevel === 'reunion'"
-                        type="button"
-                        class="block w-full rounded-lg px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
-                        @click="unassignMeeting(menuFor!)"
-                    >
-                        Quitar del sector
-                    </button>
                 </template>
 
                 <template v-else-if="menuMode === 'confirm'">
@@ -1426,11 +1480,19 @@ onBeforeUnmount(() => {
 
                 <div
                     v-if="drawer.level === 'reunion'"
-                    class="flex-none border-t border-outline-variant px-6 py-4"
+                    class="flex-none space-y-2 border-t border-outline-variant px-6 py-4"
                 >
                     <button
+                        v-if="canManageOfferings"
                         type="button"
                         class="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                        @click="goToOfferingRegistration(drawer.id)"
+                    >
+                        <HandCoins class="size-4" /> Registrar asistencia y ofrendas
+                    </button>
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-center gap-2 rounded-lg border border-outline-variant bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container"
                         @click="goToMeeting(drawer.id)"
                     >
                         <ExternalLink class="size-4" /> Ir a la reunión
@@ -1451,6 +1513,8 @@ onBeforeUnmount(() => {
             :accent="LEVEL_ACCENT[formLevel]"
             :level-label="formLevel"
             :leader-label="formLevel === 'distrito' ? 'Pastor' : 'Líder'"
+            :supervisor-options="supervisors"
+            :supervisors-loading="supervisorsQuery.isPending.value"
             :saving="hierarchySaving"
             @close="formOpen = false"
             @save="onFormSave"

@@ -20,8 +20,14 @@ export interface CreateZoneDto extends TerritoryBaseDto {
 
 export type UpdateZoneDto = Partial<CreateZoneDto>
 
-export interface CreateSectorDto extends TerritoryBaseDto {
+type SectorBaseDto = Omit<TerritoryBaseDto, 'code' | 'leaderName'>
+
+export interface CreateSectorDto extends SectorBaseDto {
     zoneId: number
+    supervisorId: number
 }
 
-export type UpdateSectorDto = Partial<CreateSectorDto>
+export interface UpdateSectorDto extends Partial<SectorBaseDto> {
+    zoneId?: number
+    supervisorId?: number
+}

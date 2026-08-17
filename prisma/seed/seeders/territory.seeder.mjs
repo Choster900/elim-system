@@ -3,7 +3,8 @@
 // app/presentation/territories). Las coordenadas se ubican en el área metropolitana
 // de San Salvador, El Salvador.
 //
-// `leaderCode` referencia el `code` de un miembro sembrado (ver member.seeder.mjs).
+// En distritos y zonas, `leaderCode` identifica al líder. En sectores identifica
+// al supervisor responsable de todas sus reuniones.
 
 export const DISTRICT_SEEDS = [
     {
@@ -274,7 +275,10 @@ export async function seedSectors(prisma, zones, members) {
         SECTOR_SEEDS.map((seed) => {
             const zone = zones.get(seed.zoneCode)
             if (!zone) throw new Error(`Seed zone not found: ${seed.zoneCode}`)
-            const { leaderId, leaderName } = resolveLeader(members, seed.leaderCode)
+            const { leaderId: supervisorId, leaderName: supervisorName } = resolveLeader(
+                members,
+                seed.leaderCode,
+            )
             const data = {
                 zoneId: zone.id,
                 code: seed.code,
@@ -282,8 +286,8 @@ export async function seedSectors(prisma, zones, members) {
                 description: seed.description ?? null,
                 color: seed.color,
                 polygon: seed.polygon,
-                leaderId,
-                leaderName,
+                supervisorId,
+                supervisorName,
                 isActive: true,
             }
             return prisma.territorySector.upsert({

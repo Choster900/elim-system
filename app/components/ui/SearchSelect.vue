@@ -84,6 +84,32 @@ function getDescription(opt: T): string | null {
     return v == null ? null : String(v)
 }
 
+function normalizeSearch(value: string) {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('es')
+}
+
+function displayValue(value: Value) {
+    const option = props.options.find((item) => getValue(item) === value)
+    return option ? getLabel(option) : ''
+}
+
+function filterValues(values: Value[], term: string) {
+    const normalizedTerm = normalizeSearch(term.trim())
+    if (!normalizedTerm) return values
+
+    return values.filter((value) => {
+        const option = props.options.find((item) => getValue(item) === value)
+        if (!option) return false
+
+        return normalizeSearch(
+            [getLabel(option), getDescription(option)].filter(Boolean).join(' '),
+        ).includes(normalizedTerm)
+    })
+}
+
 const selectedOptions = computed<T[]>(() => {
     if (props.multiple) {
         const arr = Array.isArray(props.modelValue) ? props.modelValue : []
@@ -111,7 +137,10 @@ function removeOne(val: Value, e?: Event) {
     e?.stopPropagation()
     if (!props.multiple) return
     const arr = Array.isArray(props.modelValue) ? props.modelValue : []
-    emit('update:modelValue', arr.filter((v) => v !== val))
+    emit(
+        'update:modelValue',
+        arr.filter((v) => v !== val),
+    )
 }
 
 function clearAll(e?: Event) {
@@ -137,6 +166,8 @@ const hiddenCount = computed(() => Math.max(0, selectedOptions.value.length - pr
         v-model:open="open"
         :multiple="multiple"
         :disabled="disabled"
+        :display-value="displayValue"
+        :filter-function="filterValues"
         class="relative w-full"
     >
         <ComboboxAnchor as-child>
@@ -149,7 +180,9 @@ const hiddenCount = computed(() => Math.max(0, selectedOptions.value.length - pr
                     invalid
                         ? 'border-destructive focus:border-destructive focus:ring-1 focus:ring-destructive'
                         : 'border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary',
-                    disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-primary/60',
+                    disabled
+                        ? 'cursor-not-allowed opacity-60'
+                        : 'cursor-pointer hover:border-primary/60',
                 ]"
             >
                 <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
@@ -187,7 +220,9 @@ const hiddenCount = computed(() => Math.max(0, selectedOptions.value.length - pr
                         </slot>
                     </span>
 
-                    <span v-else class="truncate text-on-surface-variant/70">{{ placeholder }}</span>
+                    <span v-else class="truncate text-on-surface-variant/70">{{
+                        placeholder
+                    }}</span>
                 </div>
 
                 <div class="flex shrink-0 items-center gap-1">
@@ -217,7 +252,10 @@ const hiddenCount = computed(() => Math.max(0, selectedOptions.value.length - pr
                     contentClass,
                 ]"
             >
-                <div v-if="searchable" class="flex items-center gap-2 border-b border-outline-variant bg-surface-container-low px-3 py-2">
+                <div
+                    v-if="searchable"
+                    class="flex items-center gap-2 border-b border-outline-variant bg-surface-container-low px-3 py-2"
+                >
                     <Search class="size-4 shrink-0 text-on-surface-variant" />
                     <ComboboxInput
                         class="h-7 flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none"
@@ -239,7 +277,10 @@ const hiddenCount = computed(() => Math.max(0, selectedOptions.value.length - pr
                         <div class="min-w-0 flex-1">
                             <slot name="item" :option="opt" :label="getLabel(opt)">
                                 <p class="truncate">{{ getLabel(opt) }}</p>
-                                <p v-if="getDescription(opt)" class="truncate text-[11px] text-on-surface-variant">
+                                <p
+                                    v-if="getDescription(opt)"
+                                    class="truncate text-[11px] text-on-surface-variant"
+                                >
                                     {{ getDescription(opt) }}
                                 </p>
                             </slot>

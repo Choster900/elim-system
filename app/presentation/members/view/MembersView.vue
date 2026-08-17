@@ -35,25 +35,24 @@ import {
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
-import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { formatInitials } from '~/utils/string/text-format.util'
 import MemberDetailsDrawer from '../components/MemberDetailsDrawer.vue'
 import MemberFormDrawer from '../components/MemberFormDrawer.vue'
+import {
+    useDeleteMemberMutation,
+    useImportMembersMutation,
+    useUpdateMemberMutation,
+} from '../composables/useMemberMutations'
+import { useMembersQuery } from '../composables/useMembersQuery'
 import { memberRoleOptions, memberStatusOptions } from '../constants/member.constants'
-import type {
-    Member,
-    MemberImportResult,
-    MemberInput,
-    MemberStatus,
-} from '../interfaces/member.interface'
+import type { Member, MemberInput, MemberStatus } from '../interfaces/member.interface'
 import {
     downloadMembersTemplate,
     exportMembersWorkbook,
     parseMembersWorkbook,
     type MemberImportPreview,
 } from '../services/member-excel.service'
-import { deleteMember, getMembers, importMembers, updateMember } from '../services/member.service'
 import {
     getMemberAge,
     getMemberFullName,
@@ -65,24 +64,34 @@ defineOptions({ name: 'MembersView' })
 
 useHead({ title: 'Miembros · Sistema' })
 
-const apiClient = useApiClient()
 const toast = useAppToast()
-const members = ref<Member[]>([])
-const loading = ref(true)
-const saving = ref(false)
+const membersQuery = useMembersQuery()
+const updateMemberMutation = useUpdateMemberMutation()
+const deleteMemberMutation = useDeleteMemberMutation()
+const importMembersMutation = useImportMembersMutation()
 
-async function loadMembers() {
-    loading.value = true
-    try {
-        members.value = await getMembers(apiClient)
-    } catch {
-        toast.error('No fue posible cargar el directorio de miembros')
-    } finally {
-        loading.value = false
-    }
+const members = computed(() => membersQuery.data.value ?? [])
+const loading = computed(() => membersQuery.isPending.value)
+const saving = computed(() => updateMemberMutation.isPending.value)
+
+if (import.meta.server) {
+    onServerPrefetch(() =>
+        membersQuery
+            .suspense()
+            .then(() => undefined)
+            .catch(() => undefined),
+    )
 }
 
-onMounted(loadMembers)
+if (import.meta.client) {
+    watch(
+        () => membersQuery.error.value,
+        (error) => {
+            if (error) toast.error('No fue posible cargar el directorio de miembros')
+        },
+        { immediate: true },
+    )
+}
 
 const stats = computed(() => {
     const now = new Date()
@@ -181,19 +190,12 @@ function openEdit(member: Member) {
 
 async function saveMember(payload: MemberInput) {
     if (!editingMember.value) return
-    saving.value = true
     try {
-        const updated = await updateMember(apiClient, editingMember.value.id, payload)
-        if (updated) {
-            const index = members.value.findIndex((member) => member.id === updated.id)
-            if (index !== -1) members.value[index] = updated
-        }
+        await updateMemberMutation.mutateAsync({ id: editingMember.value.id, input: payload })
         toast.success('Miembro actualizado correctamente')
         formOpen.value = false
     } catch {
         toast.error('No fue posible guardar el miembro. Revisa el código, documento y correo.')
-    } finally {
-        saving.value = false
     }
 }
 
@@ -216,8 +218,7 @@ function askDelete(member: Member) {
 async function confirmDelete() {
     if (!deleteTarget.value) return
     try {
-        await deleteMember(apiClient, deleteTarget.value.id)
-        members.value = members.value.filter((member) => member.id !== deleteTarget.value?.id)
+        await deleteMemberMutation.mutateAsync(deleteTarget.value.id)
         toast.success('Miembro eliminado del directorio')
         deleteOpen.value = false
         deleteTarget.value = null
@@ -228,11 +229,7 @@ async function confirmDelete() {
 
 async function changeStatus(member: Member, status: MemberStatus) {
     try {
-        const updated = await updateMember(apiClient, member.id, { status })
-        if (updated) {
-            const index = members.value.findIndex((item) => item.id === member.id)
-            if (index !== -1) members.value[index] = updated
-        }
+        await updateMemberMutation.mutateAsync({ id: member.id, input: { status } })
         toast.success(`Estado actualizado a ${getMemberStatusLabel(status).toLowerCase()}`)
     } catch {
         toast.error('No fue posible cambiar el estado')
@@ -268,7 +265,7 @@ async function downloadTemplate() {
 
 const importInput = ref<HTMLInputElement | null>(null)
 const importOpen = ref(false)
-const importing = ref(false)
+const importing = computed(() => importMembersMutation.isPending.value)
 const parsingFile = ref(false)
 const importFileName = ref('')
 const importPreview = ref<MemberImportPreview>({ members: [], errors: [] })
@@ -297,23 +294,16 @@ async function onImportFile(event: Event) {
 
 async function confirmImport() {
     if (!importPreview.value.members.length || importPreview.value.errors.length) return
-    importing.value = true
     try {
-        const result: MemberImportResult | null = await importMembers(
-            apiClient,
-            importPreview.value.members,
-        )
+        const result = await importMembersMutation.mutateAsync(importPreview.value.members)
         if (result) {
             toast.success(
                 `Importación completa: ${result.created} creados y ${result.updated} actualizados`,
             )
         }
         importOpen.value = false
-        await loadMembers()
     } catch {
         toast.error('No fue posible importar los miembros. Revisa datos duplicados o inválidos.')
-    } finally {
-        importing.value = false
     }
 }
 </script>
@@ -643,7 +633,13 @@ async function confirmImport() {
                             <UiButton variant="outline" type="button">
                                 Cancelar
                             </UiButton> </DialogClose
-                        ><UiButton variant="destructive" type="button" @click="confirmDelete">
+                        ><UiButton
+                            variant="destructive"
+                            type="button"
+                            :loading="deleteMemberMutation.isPending.value"
+                            :disabled="deleteMemberMutation.isPending.value"
+                            @click="confirmDelete"
+                        >
                             <Trash2 class="size-4" /> Eliminar
                         </UiButton>
                     </div>
@@ -736,7 +732,9 @@ async function confirmImport() {
                             type="button"
                             :loading="importing"
                             :disabled="
-                                !importPreview.members.length || !!importPreview.errors.length
+                                importing ||
+                                !importPreview.members.length ||
+                                !!importPreview.errors.length
                             "
                             @click="confirmImport"
                         >

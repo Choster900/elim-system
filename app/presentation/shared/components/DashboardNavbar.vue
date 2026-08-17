@@ -96,6 +96,11 @@ const navItems: DashboardMenuItem[] = [
                 href: '/finanzas/ofrendas',
                 requiredPermission: routePermissionCodes.financeView,
             },
+            {
+                label: 'Registro global',
+                href: '/finanzas/ofrendas/registro-global',
+                requiredPermission: routePermissionCodes.financeManage,
+            },
             { label: 'Gastos', href: '#' },
             {
                 label: 'Reportes',

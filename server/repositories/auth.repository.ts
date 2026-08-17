@@ -31,10 +31,10 @@ export function findUserByIdWithAuthGraph(userId: number) {
     })
 }
 
-export function findLedSectorIdsByUserId(userId: number) {
+export function findSupervisedSectorIdsByUserId(userId: number) {
     return prisma.territorySector
         .findMany({
-            where: { leader: { user: { id: userId } } },
+            where: { supervisor: { user: { id: userId } } },
             select: { id: true },
         })
         .then((sectors) => sectors.map((sector) => sector.id))

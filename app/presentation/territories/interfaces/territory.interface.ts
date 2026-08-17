@@ -23,6 +23,8 @@ export interface Zone extends TerritoryEntity {
 
 export interface TerritorySector extends TerritoryEntity {
     zoneId: string
+    supervisorId: number | null
+    supervisorName: string
 }
 
 export interface TerritoryHierarchy {
@@ -39,4 +41,13 @@ export interface TerritoryInput {
     color: string
     polygon: Polygon
     isActive: boolean
+    supervisorId: number | null
+}
+
+export interface TerritorySupervisorOption {
+    id: number
+    code: string
+    fullName: string
+    email: string | null
+    phone: string | null
 }

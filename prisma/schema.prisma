@@ -62,6 +62,7 @@ enum MeetingStatus {
 
 enum MeetingFrequency {
   ONCE     @map("unica")
+  DAILY    @map("diaria")
   WEEKLY   @map("semanal")
   BIWEEKLY @map("quincenal")
   MONTHLY  @map("mensual")
@@ -108,7 +109,8 @@ model Member {
   territorySector       TerritorySector?      @relation("MemberTerritorySector", fields: [territorySectorId], references: [id], onDelete: SetNull, map: "fk_mie_id_sec")
   ledDistricts          District[]            @relation("DistrictLeader")
   ledZones              Zone[]                @relation("ZoneLeader")
-  ledSectors            TerritorySector[]     @relation("SectorLeader")
+  supervisedSectors     TerritorySector[]     @relation("SectorSupervisor")
+  ledMeetings           Meeting[]             @relation("MeetingLeader")
   supervisedMeetings    Meeting[]             @relation("MeetingSupervisor")
   coSupervisedMeetings  MeetingCoSupervisor[]
 
@@ -344,26 +346,28 @@ model Zone {
 }
 
 model TerritorySector {
-  id          Int       @id(map: "pk_sec_sector") @default(autoincrement()) @map("sec_id")
-  zoneId      Int       @map("sec_id_zon")
-  code        String    @unique(map: "uk_sec_codigo") @map("sec_codigo") @db.VarChar(100)
-  name        String    @map("sec_nombre") @db.VarChar(100)
-  description String?   @map("sec_descripcion") @db.VarChar(300)
-  leaderName  String?   @map("sec_nombre_lider") @db.VarChar(100)
-  leaderId    Int?      @map("sec_id_mie")
-  color       String    @map("sec_color") @db.VarChar(100)
-  polygon     Json      @map("sec_poligono") @db.JsonB
-  isActive    Boolean   @default(true) @map("sec_activo")
-  createdAt   DateTime  @default(now()) @map("sec_fecha_creacion")
-  updatedAt   DateTime  @updatedAt @map("sec_fecha_modificacion")
-  zone        Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade, map: "fk_sec_id_zon")
-  leader      Member?   @relation("SectorLeader", fields: [leaderId], references: [id], onDelete: SetNull, map: "fk_sec_id_mie")
-  members     Member[]  @relation("MemberTerritorySector")
-  meetings    Meeting[]
+  id             Int       @id(map: "pk_sec_sector") @default(autoincrement()) @map("sec_id")
+  zoneId         Int       @map("sec_id_zon")
+  code           String    @unique(map: "uk_sec_codigo") @map("sec_codigo") @db.VarChar(100)
+  name           String    @map("sec_nombre") @db.VarChar(100)
+  description    String?   @map("sec_descripcion") @db.VarChar(300)
+  /// Nombre histórico conservado junto con la relación al catálogo de supervisores.
+  supervisorName String?   @map("sec_nombre_supervisor") @db.VarChar(100)
+  /// Miembro con rol comunitario SUPERVISOR responsable de las reuniones del sector.
+  supervisorId   Int?      @map("sec_id_mie_supervisor")
+  color          String    @map("sec_color") @db.VarChar(100)
+  polygon        Json      @map("sec_poligono") @db.JsonB
+  isActive       Boolean   @default(true) @map("sec_activo")
+  createdAt      DateTime  @default(now()) @map("sec_fecha_creacion")
+  updatedAt      DateTime  @updatedAt @map("sec_fecha_modificacion")
+  zone           Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade, map: "fk_sec_id_zon")
+  supervisor     Member?   @relation("SectorSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull, map: "fk_sec_id_mie_supervisor")
+  members        Member[]  @relation("MemberTerritorySector")
+  meetings       Meeting[]
 
   @@unique([zoneId, name], map: "uk_sec_zona_nombre")
   @@index([zoneId], map: "ix_sec_zona")
-  @@index([leaderId], map: "ix_sec_lider")
+  @@index([supervisorId], map: "ix_sec_supervisor")
   @@index([isActive], map: "ix_sec_activo")
   @@map("sec_sector")
 }
@@ -387,10 +391,15 @@ model Meeting {
   id                Int                   @id(map: "pk_reu_reunion") @default(autoincrement()) @map("reu_id")
   typeId            Int                   @map("reu_id_tir")
   sectorId          Int                   @map("reu_id_sec")
+  /// Miembro con rol comunitario LEADER responsable de conducir la reunión.
+  leaderId          Int                   @map("reu_id_mie_lider")
   supervisorId      Int                   @map("reu_id_mie_supervisor")
   title             String                @map("reu_titulo") @db.VarChar(100)
   description       String?               @map("reu_descripcion") @db.VarChar(300)
+  /// Fecha inicial de la reunión y ancla del día para su regla de recurrencia.
   date              DateTime              @map("reu_fecha") @db.Date
+  /// Fecha final inclusiva de la recurrencia; null indica que no tiene finalización.
+  recurrenceEndDate DateTime?             @map("reu_fecha_fin_recurrencia") @db.Date
   startTime         DateTime              @map("reu_hora_inicio") @db.Time(0)
   endTime           DateTime              @map("reu_hora_fin") @db.Time(0)
   location          String                @map("reu_ubicacion") @db.VarChar(300)
@@ -406,12 +415,14 @@ model Meeting {
   updatedAt         DateTime              @updatedAt @map("reu_fecha_modificacion")
   type              MeetingType           @relation(fields: [typeId], references: [id], onDelete: Restrict, map: "fk_reu_id_tir")
   sector            TerritorySector       @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reu_id_sec")
+  leader            Member                @relation("MeetingLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_lider")
   supervisor        Member                @relation("MeetingSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_supervisor")
   coSupervisors     MeetingCoSupervisor[]
   offerings         MeetingOffering[]
 
   @@index([typeId], map: "ix_reu_tipo")
   @@index([sectorId], map: "ix_reu_sector")
+  @@index([leaderId], map: "ix_reu_lider")
   @@index([supervisorId], map: "ix_reu_supervisor")
   @@index([date], map: "ix_reu_fecha")
   @@index([status], map: "ix_reu_estado")

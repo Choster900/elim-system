@@ -25,6 +25,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
             if (!response.success || !response.data) throw new Error('Invalid auth response')
             authStore.setUser(response.data)
         } catch {
+            useNuxtApp().$queryClient.clear()
             authStore.clearUser()
         }
     }

@@ -12,6 +12,7 @@ import { mapPrismaError } from '../utils/database/prisma-error.util'
 
 const FREQUENCY_TO_DB = {
     unica: 'ONCE',
+    diaria: 'DAILY',
     semanal: 'WEEKLY',
     quincenal: 'BIWEEKLY',
     mensual: 'MONTHLY',
@@ -19,6 +20,7 @@ const FREQUENCY_TO_DB = {
 
 const FREQUENCY_FROM_DB: Record<string, MeetingFrequencyValue> = {
     ONCE: 'unica',
+    DAILY: 'diaria',
     WEEKLY: 'semanal',
     BIWEEKLY: 'quincenal',
     MONTHLY: 'mensual',
@@ -40,7 +42,14 @@ const STATUS_FROM_DB: Record<string, MeetingStatusValue> = {
 
 const meetingInclude = {
     type: true,
-    sector: true,
+    sector: {
+        include: {
+            zone: {
+                include: { district: true },
+            },
+        },
+    },
+    leader: true,
     supervisor: true,
     coSupervisors: true,
 } satisfies Prisma.MeetingInclude
@@ -74,11 +83,14 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         id: meeting.id,
         typeId: meeting.typeId,
         sectorId: meeting.sectorId,
+        leaderId: meeting.leaderId,
         supervisorId: meeting.supervisorId,
         coSupervisorIds: meeting.coSupervisors.map((item) => item.memberId),
         title: meeting.title,
         description: meeting.description,
         date: toIsoDate(meeting.date),
+        recurrenceEndDate:
+            meeting.recurrenceEndDate === null ? null : toIsoDate(meeting.recurrenceEndDate),
         startTime: toHmm(meeting.startTime),
         endTime: toHmm(meeting.endTime),
         location: meeting.location,
@@ -93,6 +105,11 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         typeName: meeting.type?.name ?? null,
         typeColor: meeting.type?.color ?? null,
         sectorName: meeting.sector?.name ?? null,
+        zoneId: meeting.sector.zone.id,
+        zoneName: meeting.sector.zone.name,
+        districtId: meeting.sector.zone.district.id,
+        districtName: meeting.sector.zone.district.name,
+        leaderName: fullName(meeting.leader),
         supervisorName: fullName(meeting.supervisor),
         createdAt: meeting.createdAt,
         updatedAt: meeting.updatedAt,
@@ -104,6 +121,9 @@ function buildScalarData(dto: UpdateMeetingDto) {
     if (dto.title !== undefined) data.title = dto.title
     if (dto.description !== undefined) data.description = dto.description
     if (dto.date !== undefined) data.date = dateOf(dto.date)
+    if (dto.recurrenceEndDate !== undefined) {
+        data.recurrenceEndDate = dto.recurrenceEndDate ? dateOf(dto.recurrenceEndDate) : null
+    }
     if (dto.startTime !== undefined) data.startTime = timeOf(dto.startTime)
     if (dto.endTime !== undefined) data.endTime = timeOf(dto.endTime)
     if (dto.location !== undefined) data.location = dto.location
@@ -134,16 +154,74 @@ export async function findMeetingById(id: number) {
     return meeting ? toMeetingRecord(meeting) : null
 }
 
+export async function findMeetingLeaders() {
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+
+    const leaders = await prisma.member.findMany({
+        where: {
+            status: 'ACTIVE',
+            communityRoles: {
+                some: {
+                    role: { code: 'LEADER', isActive: true },
+                    AND: [
+                        { OR: [{ startedAt: null }, { startedAt: { lte: today } }] },
+                        { OR: [{ endedAt: null }, { endedAt: { gte: today } }] },
+                    ],
+                },
+            },
+        },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    })
+
+    return leaders.map((leader) => ({
+        id: leader.id,
+        code: leader.code,
+        fullName: [leader.firstName, leader.middleName, leader.lastName, leader.secondLastName]
+            .filter(Boolean)
+            .join(' '),
+        email: leader.email,
+        phone: leader.phone,
+        status: leader.status,
+    }))
+}
+
+export async function isMeetingLeader(memberId: number) {
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+
+    const leader = await prisma.member.findFirst({
+        where: {
+            id: memberId,
+            status: 'ACTIVE',
+            communityRoles: {
+                some: {
+                    role: { code: 'LEADER', isActive: true },
+                    AND: [
+                        { OR: [{ startedAt: null }, { startedAt: { lte: today } }] },
+                        { OR: [{ endedAt: null }, { endedAt: { gte: today } }] },
+                    ],
+                },
+            },
+        },
+        select: { id: true },
+    })
+
+    return leader !== null
+}
+
 export async function createMeeting(dto: CreateMeetingDto) {
     return prisma.meeting
         .create({
             data: {
                 type: { connect: { id: dto.typeId } },
                 sector: { connect: { id: dto.sectorId } },
+                leader: { connect: { id: dto.leaderId } },
                 supervisor: { connect: { id: dto.supervisorId } },
                 title: dto.title,
                 description: dto.description,
                 date: dateOf(dto.date),
+                recurrenceEndDate: dto.recurrenceEndDate ? dateOf(dto.recurrenceEndDate) : null,
                 startTime: timeOf(dto.startTime),
                 endTime: timeOf(dto.endTime),
                 location: dto.location,
@@ -173,6 +251,7 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     const data = buildScalarData(dto)
     if (dto.typeId !== undefined) data.type = { connect: { id: dto.typeId } }
     if (dto.sectorId !== undefined) data.sector = { connect: { id: dto.sectorId } }
+    if (dto.leaderId !== undefined) data.leader = { connect: { id: dto.leaderId } }
     if (dto.supervisorId !== undefined) data.supervisor = { connect: { id: dto.supervisorId } }
     if (dto.coSupervisorIds !== undefined) {
         data.coSupervisors = {

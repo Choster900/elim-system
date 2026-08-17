@@ -3,6 +3,7 @@ import {
     AlertTriangle,
     CalendarDays,
     HandCoins,
+    ListChecks,
     MoreVertical,
     Pencil,
     Plus,
@@ -27,52 +28,77 @@ import {
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
-import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
-import {
-    deleteOffering as deleteOfferingRequest,
-    getOfferings,
-} from '~/presentation/finance/services/offering.service'
+import { useDeleteOfferingMutation } from '~/presentation/finance/composables/useOfferingMutations'
+import { useOfferingsQuery } from '~/presentation/finance/composables/useOfferingsQuery'
 import type { OfferingRecord } from '~/presentation/finance/interfaces/offering.interface'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { formatMeetingDate } from '~/presentation/meetings/utils/meeting-format.util'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
 defineOptions({ name: 'OfferingsView' })
 
 useHead({ title: 'Ofrendas · Sistema' })
 
-const apiClient = useApiClient()
 const toast = useAppToast()
+const authStore = useAuthStore()
+const offeringsQuery = useOfferingsQuery()
+const deleteOfferingMutation = useDeleteOfferingMutation()
+const offerings = computed(() => offeringsQuery.data.value ?? [])
+const isLoading = computed(() => offeringsQuery.isPending.value)
+const isAdmin = computed(() =>
+    authStore.user?.roles.some((role) => ['SUPER_ADMIN', 'ADMINISTRATOR'].includes(role.code)),
+)
+const selectedDistrictId = ref<number | null>(null)
+const districtOptions = computed(() => {
+    const districts = new Map<number, string>()
+    for (const offering of offerings.value) {
+        districts.set(offering.districtId, offering.districtName)
+    }
 
-const offerings = ref<OfferingRecord[]>([])
-const isLoading = ref(true)
+    return [...districts]
+        .map(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es'))
+})
+const visibleOfferings = computed(() => {
+    if (!isAdmin.value || selectedDistrictId.value === null) return offerings.value
+    return offerings.value.filter((offering) => offering.districtId === selectedDistrictId.value)
+})
 
-async function loadOfferings() {
-    offerings.value = await getOfferings(apiClient)
+if (import.meta.server) {
+    onServerPrefetch(() =>
+        offeringsQuery
+            .suspense()
+            .then(() => undefined)
+            .catch(() => undefined),
+    )
 }
 
-onMounted(async () => {
-    try {
-        offerings.value = await getOfferings(apiClient)
-    } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible cargar las ofrendas')
-    } finally {
-        isLoading.value = false
-    }
-})
+if (import.meta.client) {
+    watch(
+        () => offeringsQuery.error.value,
+        (error) => {
+            if (error) {
+                toast.error(resolveHttpErrorMessage(error, 'No fue posible cargar las ofrendas'))
+            }
+        },
+        { immediate: true },
+    )
+}
 
 function formatMoney(value: number) {
     return value.toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 const stats = computed(() => {
-    const count = offerings.value.length
-    const totalCollected = offerings.value.reduce((sum, item) => sum + item.totalAmount, 0)
-    const totalAttendance = offerings.value.reduce((sum, item) => sum + item.attendance, 0)
+    const count = visibleOfferings.value.length
+    const totalCollected = visibleOfferings.value.reduce((sum, item) => sum + item.totalAmount, 0)
+    const totalAttendance = visibleOfferings.value.reduce((sum, item) => sum + item.attendance, 0)
     const average = count > 0 ? totalCollected / count : 0
     return { count, totalCollected, totalAttendance, average }
 })
 
-const columns: DataTableColumn<OfferingRecord>[] = [
+const columns = computed<DataTableColumn<OfferingRecord>[]>(() => [
     {
         key: 'date',
         label: 'Fecha',
@@ -90,6 +116,17 @@ const columns: DataTableColumn<OfferingRecord>[] = [
         filterType: 'text',
         accessor: (row) => row.meetingTitle ?? '',
     },
+    ...(isAdmin.value
+        ? [
+              {
+                  key: 'district',
+                  label: 'Distrito',
+                  sortable: true,
+                  width: '180px',
+                  accessor: (row: OfferingRecord) => row.districtName,
+              },
+          ]
+        : []),
     {
         key: 'categories',
         label: 'Desglose',
@@ -117,7 +154,7 @@ const columns: DataTableColumn<OfferingRecord>[] = [
         width: '72px',
         align: 'right',
     },
-]
+])
 
 function openCreate() {
     navigateTo('/finanzas/ofrendas/nueva')
@@ -139,11 +176,10 @@ function askDelete(row: OfferingRecord) {
 async function confirmDelete() {
     if (!deleteTargetId.value) return
     try {
-        await deleteOfferingRequest(apiClient, deleteTargetId.value)
-        await loadOfferings()
+        await deleteOfferingMutation.mutateAsync(deleteTargetId.value)
         toast.success('Ofrenda eliminada')
     } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'No fue posible eliminar la ofrenda')
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible eliminar la ofrenda'))
     } finally {
         deleteDialogOpen.value = false
         deleteTargetId.value = null
@@ -169,14 +205,24 @@ async function confirmDelete() {
                 </p>
             </div>
 
-            <UiButton
-                type="button"
-                class="h-11 rounded px-5 text-xs uppercase tracking-wider"
-                @click="openCreate"
-            >
-                <Plus class="mr-2 size-4" />
-                Registrar ofrenda
-            </UiButton>
+            <div class="flex flex-wrap gap-2">
+                <UiButton
+                    variant="outline"
+                    type="button"
+                    class="h-11 rounded px-5 text-xs uppercase tracking-wider"
+                    @click="navigateTo('/finanzas/ofrendas/registro-global')"
+                >
+                    <ListChecks class="mr-2 size-4" /> Registro global
+                </UiButton>
+                <UiButton
+                    type="button"
+                    class="h-11 rounded px-5 text-xs uppercase tracking-wider"
+                    @click="openCreate"
+                >
+                    <Plus class="mr-2 size-4" />
+                    Registrar ofrenda
+                </UiButton>
+            </div>
         </section>
 
         <section class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -231,8 +277,31 @@ async function confirmDelete() {
         </section>
 
         <section class="mt-10">
+            <div
+                v-if="isAdmin"
+                class="mb-4 flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-on-surface">
+                        Filtrar por distrito
+                    </p>
+                    <p class="mt-1 text-xs text-on-surface-variant">
+                        Los totales y registros se actualizan según el distrito seleccionado.
+                    </p>
+                </div>
+                <div class="w-full sm:w-72">
+                    <UiSearchSelect
+                        v-model="selectedDistrictId"
+                        :options="districtOptions"
+                        clearable
+                        placeholder="Todos los distritos"
+                        search-placeholder="Buscar distrito..."
+                    />
+                </div>
+            </div>
+
             <DataTable
-                :rows="offerings"
+                :rows="visibleOfferings"
                 :columns="columns"
                 row-key="id"
                 :page-size="10"
@@ -359,6 +428,8 @@ async function confirmDelete() {
                         <UiButton
                             type="button"
                             class="h-10 rounded bg-destructive px-4 text-xs uppercase tracking-wider text-white hover:bg-destructive/90"
+                            :loading="deleteOfferingMutation.isPending.value"
+                            :disabled="deleteOfferingMutation.isPending.value"
                             @click="confirmDelete"
                         >
                             <Trash2 class="mr-2 size-4" />
