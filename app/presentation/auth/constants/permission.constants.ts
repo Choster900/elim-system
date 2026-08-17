@@ -10,6 +10,9 @@ export const routePermissionCodes = {
     financeManage: 'finance.manage',
     territoriesView: 'territories.view',
     usersView: 'users.view',
+    usersCreate: 'users.create',
+    usersUpdate: 'users.update',
+    usersBlock: 'users.block',
     rolesView: 'roles.view',
     permissionsView: 'permissions.view',
 } as const

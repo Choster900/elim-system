@@ -152,6 +152,8 @@ let map: import('leaflet').Map | null = null
 let marker: import('leaflet').Marker | null = null
 let L: typeof import('leaflet') | null = null
 let mapInitialization: Promise<void> | null = null
+let mapGeneration = 0
+let isUnmounted = false
 const isLocating = ref(false)
 const locationError = ref('')
 
@@ -215,12 +217,14 @@ function useCurrentLocation() {
     isLocating.value = true
     navigator.geolocation.getCurrentPosition(
         ({ coords }) => {
+            if (isUnmounted) return
             setPosition(coords.latitude, coords.longitude)
             map?.setView([coords.latitude, coords.longitude], 17)
             isLocating.value = false
             toast.success('Ubicación actual colocada en el mapa')
         },
         (error) => {
+            if (isUnmounted) return
             if (error.code === error.PERMISSION_DENIED) {
                 locationError.value = 'No se concedió permiso para acceder a tu ubicación.'
             } else if (error.code === error.TIMEOUT) {
@@ -245,12 +249,20 @@ function centerOnSector() {
     if (c) map.setView(c, 13)
 }
 
-async function createMap() {
-    if (!L) L = (await import('leaflet')).default ?? (await import('leaflet'))
-    await nextTick()
-    if (!mapEl.value || !L || map) return
+async function createMap(generation: number) {
+    if (!L) {
+        const leafletModule = await import('leaflet')
+        L = leafletModule.default ?? leafletModule
+    }
+    if (isUnmounted || generation !== mapGeneration) return
 
-    map = L.map(mapEl.value, {
+    await nextTick()
+    const container = mapEl.value
+    if (isUnmounted || generation !== mapGeneration || !container?.isConnected || !L || map) {
+        return
+    }
+
+    map = L.map(container, {
         zoomControl: true,
         attributionControl: false,
         scrollWheelZoom: false,
@@ -269,7 +281,9 @@ async function createMap() {
     syncMarkerFromForm()
     const current = map
     setTimeout(() => {
-        if (map === current) current.invalidateSize()
+        if (!isUnmounted && map === current && container.isConnected) {
+            current.invalidateSize()
+        }
     }, 80)
 }
 
@@ -279,7 +293,8 @@ async function initMap() {
     }
     if (mapInitialization) return mapInitialization
 
-    mapInitialization = createMap()
+    const generation = mapGeneration
+    mapInitialization = createMap(generation)
     try {
         await mapInitialization
     } finally {
@@ -383,6 +398,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+    isUnmounted = true
+    mapGeneration += 1
     if (map) {
         map.remove()
         map = null

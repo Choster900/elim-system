@@ -13,9 +13,21 @@ function resolveRequiredPermission(to: RouteLocationNormalized) {
 }
 
 export default defineNuxtRouteMiddleware(async (to) => {
-    if (!to.meta.requiresAuth) return
-
     const authStore = useAuthStore()
+
+    if (!to.meta.requiresAuth) {
+        if (
+            authStore.sessionChecked &&
+            authStore.user?.mustChangePassword &&
+            to.path !== '/cambiar-clave'
+        ) {
+            return navigateTo({
+                path: '/cambiar-clave',
+                query: { redirect: to.fullPath },
+            })
+        }
+        return
+    }
 
     if (!authStore.sessionChecked) {
         try {
@@ -35,6 +47,17 @@ export default defineNuxtRouteMiddleware(async (to) => {
             path: '/login',
             query: { redirect: to.fullPath },
         })
+    }
+
+    if (authStore.user?.mustChangePassword && to.path !== '/cambiar-clave') {
+        return navigateTo({
+            path: '/cambiar-clave',
+            query: { redirect: to.fullPath },
+        })
+    }
+
+    if (!authStore.user?.mustChangePassword && to.path === '/cambiar-clave') {
+        return navigateTo('/dashboard')
     }
 
     const requiredPermission = resolveRequiredPermission(to)

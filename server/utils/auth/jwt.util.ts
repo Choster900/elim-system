@@ -11,6 +11,7 @@ interface SignAccessTokenInput {
     email: string
     roles: string[]
     permissions: string[]
+    mustChangePassword: boolean
 }
 
 interface SignRefreshTokenInput {
@@ -48,6 +49,7 @@ export function signAccessToken(input: SignAccessTokenInput) {
         email: input.email,
         roles: input.roles,
         permissions: input.permissions,
+        mustChangePassword: input.mustChangePassword,
         type: 'access',
     }
 
@@ -94,7 +96,10 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
             })
         }
 
-        return decoded as AccessTokenPayload
+        return {
+            ...(decoded as AccessTokenPayload),
+            mustChangePassword: decoded.mustChangePassword === true,
+        }
     } catch (error) {
         if ((error as { statusCode?: number })?.statusCode === 401) {
             throw error

@@ -8,6 +8,14 @@ export interface AppEnv {
     PORT: number
     NUXT_PUBLIC_APP_NAME: string
     NODE_ENV: 'development' | 'production' | 'test'
+    APP_BASE_URL: string
+    SMTP_HOST: string
+    SMTP_PORT: number
+    SMTP_SECURE: boolean
+    SMTP_USER: string
+    SMTP_PASSWORD: string
+    MAIL_FROM: string
+    USER_INVITATION_TTL_HOURS: number
 }
 
 const envSchema = Joi.object<AppEnv>({
@@ -18,6 +26,14 @@ const envSchema = Joi.object<AppEnv>({
     PORT: Joi.number().integer().min(1).max(65535).default(3000),
     NUXT_PUBLIC_APP_NAME: Joi.string().min(1).required(),
     NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+    APP_BASE_URL: Joi.string().uri().default('http://127.0.0.1:3000'),
+    SMTP_HOST: Joi.string().min(1).default('127.0.0.1'),
+    SMTP_PORT: Joi.number().integer().min(1).max(65535).default(1025),
+    SMTP_SECURE: Joi.boolean().truthy('true').falsy('false').default(false),
+    SMTP_USER: Joi.string().allow('').default(''),
+    SMTP_PASSWORD: Joi.string().allow('').default(''),
+    MAIL_FROM: Joi.string().min(1).default('Elim <no-reply@elim.local>'),
+    USER_INVITATION_TTL_HOURS: Joi.number().integer().min(1).max(168).default(24),
 }).unknown(true)
 
 let validatedEnv: AppEnv | null = null

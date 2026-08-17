@@ -197,7 +197,7 @@ const age = computed(() => (props.member ? getMemberAge(props.member.birthDate) 
                         <div class="col-span-2">
                             <dt class="text-xs text-on-surface-variant">Ministerios</dt>
                             <dd class="mt-1 text-on-surface">
-                                {{ member.ministries.join(', ') || 'Ninguno registrado' }}
+                                {{ (member.ministries ?? []).join(', ') || 'Ninguno registrado' }}
                             </dd>
                         </div>
                     </dl>

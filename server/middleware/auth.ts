@@ -8,7 +8,10 @@ const PUBLIC_API_PATHS = new Set([
     '/api/auth/login',
     '/api/auth/refresh',
     '/api/auth/logout',
+    '/api/auth/invitations/validate',
 ])
+
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/auth/me', '/api/auth/change-password'])
 
 function isPublicApiPath(path: string) {
     if (PUBLIC_API_PATHS.has(path)) {
@@ -44,6 +47,15 @@ export default defineEventHandler((event) => {
         email: payload.email,
         roles: payload.roles,
         permissions: payload.permissions,
+        mustChangePassword: payload.mustChangePassword,
         tokenExpiresAt: payload.exp ?? null,
+    }
+
+    if (payload.mustChangePassword && !PASSWORD_CHANGE_ALLOWED_PATHS.has(event.path)) {
+        throw createError({
+            statusCode: 403,
+            message: 'Debes cambiar tu contraseña antes de continuar',
+            data: { code: 'PASSWORD_CHANGE_REQUIRED' },
+        })
     }
 })

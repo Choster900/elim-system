@@ -4,6 +4,7 @@ export interface AccessTokenPayload {
     type: 'access'
     roles: string[]
     permissions: string[]
+    mustChangePassword: boolean
     iat?: number
     exp?: number
 }
@@ -21,5 +22,6 @@ export interface AuthenticatedUserContext {
     email: string
     roles: string[]
     permissions: string[]
+    mustChangePassword: boolean
     tokenExpiresAt: number | null
 }

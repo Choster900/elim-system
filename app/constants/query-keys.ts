@@ -41,6 +41,17 @@ const offeringCategories = {
     list: ['offering-categories', 'list'] as const,
 }
 
+const users = {
+    all: ['users'] as const,
+    list: ['users', 'list'] as const,
+    catalog: ['users', 'catalog'] as const,
+}
+
+const auth = {
+    all: ['auth'] as const,
+    invitation: (token: string) => ['auth', 'invitation', token] as const,
+}
+
 export const queryKeys = {
     app: ['app'] as const,
     system: {
@@ -53,4 +64,6 @@ export const queryKeys = {
     offerings,
     offeringCategories,
     dashboard,
+    users,
+    auth,
 }

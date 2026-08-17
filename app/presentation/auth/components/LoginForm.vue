@@ -1,16 +1,23 @@
 <script setup lang="ts">
-import { Eye, EyeOff, Lock, Mail } from '@lucide/vue'
+import { AlertTriangle, CheckCircle2, Eye, EyeOff, Lock, Mail } from '@lucide/vue'
+import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type { HttpClientError } from '~/presentation/shared/interfaces/http/http-client-error.interface'
-import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatValidationMessage } from '~/utils/string/text-format.util'
+import { useInvitationQuery } from '../composables/useInvitationQuery'
 import { useLoginMutation } from '../composables/useLoginMutation'
 import { useAuthStore } from '../stores/auth.store'
 
 defineOptions({ name: 'AuthLoginForm' })
 
 type FieldKey = 'email' | 'password'
+
+const route = useRoute()
+const invitationToken = computed(() =>
+    typeof route.query.invitation === 'string' ? route.query.invitation.trim() : '',
+)
+const invitationQuery = useInvitationQuery(invitationToken)
 
 const form = reactive<Record<FieldKey, string>>({
     email: 'admin@local.test',
@@ -23,14 +30,30 @@ const fieldErrors = reactive<Record<FieldKey, string | null>>({
 })
 
 const formError = ref<string | null>(null)
-
 const showPassword = ref(false)
 const toast = useAppToast()
 const loginMutation = useLoginMutation()
 const authStore = useAuthStore()
-const route = useRoute()
 
 const isLoading = computed(() => loginMutation.isPending.value)
+const hasInvitation = computed(() => !!invitationToken.value)
+const invitationError = computed(() => {
+    if (!hasInvitation.value) return ''
+    if (invitationToken.value.length < 32) return 'El enlace de invitación está incompleto.'
+    if (!invitationQuery.error.value) return ''
+    return resolveHttpErrorMessage(
+        invitationQuery.error.value,
+        'La invitación expiró, fue utilizada o no es válida.',
+    )
+})
+
+watch(
+    () => invitationQuery.data.value,
+    (invitation) => {
+        if (invitation) form.email = invitation.email
+    },
+    { immediate: true },
+)
 
 watch(
     () => form.email,
@@ -62,33 +85,46 @@ function applyValidationErrors(apiResponse: ApiResponse<null> | undefined) {
     return applied
 }
 
+function safeRedirect() {
+    const requestedRedirect =
+        typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+    return requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
+        ? requestedRedirect
+        : '/dashboard'
+}
+
 async function onSubmit() {
     fieldErrors.email = null
     fieldErrors.password = null
     formError.value = null
 
+    if (hasInvitation.value && (!invitationQuery.data.value || invitationError.value)) {
+        formError.value = invitationError.value || 'Espera mientras validamos la invitación.'
+        return
+    }
+
     try {
         const result = await loginMutation.mutateAsync({
             email: form.email,
             password: form.password,
+            ...(invitationToken.value ? { invitationToken: invitationToken.value } : {}),
         })
         authStore.setUser(result.user)
+
+        if (result.user.mustChangePassword) {
+            toast.info('Crea una contraseña propia para continuar')
+            await navigateTo({ path: '/cambiar-clave', query: { redirect: safeRedirect() } })
+            return
+        }
+
         toast.success('Inicio de sesión exitoso')
-        const requestedRedirect =
-            typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
-        const redirectPath =
-            requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
-                ? requestedRedirect
-                : '/dashboard'
-        await navigateTo(redirectPath)
+        await navigateTo(safeRedirect())
     } catch (error: unknown) {
         const httpError = error as HttpClientError | undefined
         const apiResponse = httpError?.details as ApiResponse<null> | undefined
         const errorCode = apiResponse?.error?.code
 
-        if (errorCode === 'VALIDATION_ERROR' && applyValidationErrors(apiResponse)) {
-            return
-        }
+        if (errorCode === 'VALIDATION_ERROR' && applyValidationErrors(apiResponse)) return
 
         if (apiResponse?.error) {
             formError.value =
@@ -98,7 +134,7 @@ async function onSubmit() {
             return
         }
 
-        toast.error(resolveHttpErrorMessage(error, 'No fue posible iniciar sesión'))
+        formError.value = resolveHttpErrorMessage(error, 'No fue posible iniciar sesión')
     }
 }
 </script>
@@ -106,8 +142,40 @@ async function onSubmit() {
 <template>
     <form class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="mb-5 text-center">
-            <h1 class="font-display text-3xl font-semibold text-on-surface">Bienvenido</h1>
-            <p class="mt-1 text-sm text-on-surface-variant">Ingresa a tu comunidad espiritual</p>
+            <h1 class="font-display text-3xl font-semibold text-on-surface">
+                {{ hasInvitation ? 'Activa tu cuenta' : 'Bienvenido' }}
+            </h1>
+            <p class="mt-1 text-sm text-on-surface-variant">
+                {{
+                    hasInvitation
+                        ? 'Ingresa la contraseña temporal recibida por correo'
+                        : 'Ingresa a tu comunidad espiritual'
+                }}
+            </p>
+        </div>
+
+        <div
+            v-if="hasInvitation && invitationQuery.isPending.value"
+            class="rounded border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-on-surface-variant"
+        >
+            Validando el enlace de invitación…
+        </div>
+        <div
+            v-else-if="hasInvitation && invitationQuery.data.value"
+            class="flex items-start gap-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300"
+        >
+            <CheckCircle2 class="mt-0.5 size-4 shrink-0" />
+            <span>
+                Invitación válida para {{ invitationQuery.data.value.displayName }}. Este enlace se
+                desactivará después de ingresar.
+            </span>
+        </div>
+        <div
+            v-else-if="invitationError"
+            class="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+            <AlertTriangle class="mt-0.5 size-4 shrink-0" />
+            <span>{{ invitationError }}</span>
         </div>
 
         <div class="space-y-2">
@@ -126,6 +194,7 @@ async function onSubmit() {
                     placeholder="tu@ejemplo.com"
                     required
                     autocomplete="email"
+                    :readonly="hasInvitation"
                     :aria-invalid="!!fieldErrors.email"
                     aria-describedby="email-error"
                     class="h-11 rounded-none border-x-0 border-t-0 bg-transparent pl-8 text-on-surface placeholder:text-[#d1c5b4]/40 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -144,14 +213,8 @@ async function onSubmit() {
         <div class="space-y-2">
             <div class="flex items-center justify-between gap-4">
                 <UiLabel for="password" class="text-xs uppercase text-on-surface-variant">
-                    Contraseña
+                    {{ hasInvitation ? 'Contraseña temporal' : 'Contraseña' }}
                 </UiLabel>
-                <NuxtLink
-                    to="#"
-                    class="text-xs font-semibold uppercase text-primary underline-offset-4 hover:underline"
-                >
-                    ¿Olvidaste tu contraseña?
-                </NuxtLink>
             </div>
             <div class="relative">
                 <Lock
@@ -202,8 +265,9 @@ async function onSubmit() {
                 type="submit"
                 class="h-11 w-full rounded text-xs uppercase"
                 :loading="isLoading"
+                :disabled="hasInvitation && !invitationQuery.data.value"
             >
-                Iniciar sesión
+                {{ hasInvitation ? 'Activar e ingresar' : 'Iniciar sesión' }}
             </UiButton>
         </div>
 

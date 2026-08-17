@@ -13,6 +13,13 @@ import {
 } from '../repositories/auth.repository'
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/auth/jwt.util'
 import { hashPassword, verifyPassword } from '../utils/auth/password.util'
+import {
+    changeUserPasswordRecord,
+    consumeInvitation,
+    findInvitationByTokenHash,
+    recordUserAccess,
+} from '../repositories/user.repository'
+import { hashInvitationToken } from '../utils/auth/invitation-token.util'
 
 interface AuthTokensResult extends AuthResponseDto {
     refreshToken: string
@@ -77,6 +84,7 @@ function mapUserAuth(user: NonNullable<Awaited<ReturnType<typeof findUserByEmail
             id: user.id,
             email: user.email,
             username: user.username,
+            mustChangePassword: user.mustChangePassword,
             roles,
             permissions: [...permissionMap.values()],
         } as AuthUserDto,
@@ -106,6 +114,7 @@ async function issueTokensAndSession(
         email: user.email,
         roles: roleCodes,
         permissions: permissionCodes,
+        mustChangePassword: user.mustChangePassword,
     })
 
     const sessionTokenId = randomUUID()
@@ -137,8 +146,8 @@ async function issueTokensAndSession(
     }
 }
 
-export async function login(dto: { email: string; password: string }) {
-    const user = await findUserByEmailWithAuthGraph(dto.email)
+export async function login(dto: { email: string; password: string; invitationToken?: string }) {
+    let user = await findUserByEmailWithAuthGraph(dto.email)
     if (!user) {
         throw invalidCredentialsError()
     }
@@ -152,7 +161,74 @@ export async function login(dto: { email: string; password: string }) {
         throw inactiveUserError()
     }
 
+    if (user.status === 'INVITED') {
+        if (!dto.invitationToken) {
+            throw createError({
+                statusCode: 401,
+                message: 'Abre el enlace de invitación enviado a tu correo',
+                data: { code: ApiErrorCode.INVALID_TOKEN },
+            })
+        }
+        const invitation = await findInvitationByTokenHash(hashInvitationToken(dto.invitationToken))
+        if (
+            !invitation ||
+            invitation.userId !== user.id ||
+            invitation.usedAt ||
+            invitation.revokedAt
+        ) {
+            throw createError({
+                statusCode: 401,
+                message: 'La invitación no es válida o ya fue utilizada',
+                data: { code: ApiErrorCode.INVALID_TOKEN },
+            })
+        }
+        if (invitation.expiresAt.getTime() <= Date.now()) {
+            throw createError({
+                statusCode: 401,
+                message: 'La invitación ha expirado',
+                data: { code: ApiErrorCode.TOKEN_EXPIRED },
+            })
+        }
+        if (!(await consumeInvitation(invitation.id, user.id))) {
+            throw createError({
+                statusCode: 401,
+                message: 'La invitación ya no está disponible',
+                data: { code: ApiErrorCode.INVALID_TOKEN },
+            })
+        }
+        user = await findUserByEmailWithAuthGraph(dto.email)
+        if (!user) throw invalidCredentialsError()
+    } else {
+        await recordUserAccess(user.id)
+    }
+
     return issueTokensAndSession(user)
+}
+
+export async function changePassword(
+    userId: number,
+    dto: { currentPassword: string; newPassword: string },
+) {
+    const user = await findUserByIdWithAuthGraph(userId)
+    if (!user) throw invalidCredentialsError()
+    if (!(await verifyPassword(dto.currentPassword, user.passwordHash))) {
+        throw invalidCredentialsError()
+    }
+    if (await verifyPassword(dto.newPassword, user.passwordHash)) {
+        throw createError({
+            statusCode: 400,
+            message: 'La contraseña nueva debe ser diferente de la temporal',
+            data: {
+                code: ApiErrorCode.VALIDATION_ERROR,
+                fields: { newPassword: ['Utiliza una contraseña diferente.'] },
+            },
+        })
+    }
+
+    await changeUserPasswordRecord(userId, await hashPassword(dto.newPassword))
+    const updatedUser = await findUserByIdWithAuthGraph(userId)
+    if (!updatedUser) throw invalidCredentialsError()
+    return issueTokensAndSession(updatedUser)
 }
 
 export async function getCurrentUser(userId: number) {

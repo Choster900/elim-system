@@ -1,31 +1,32 @@
 <script setup lang="ts">
-import { Eye, EyeOff, KeyRound, Save, ShieldCheck, UserRound, X } from '@lucide/vue'
-import { systemRoleOptions, systemUserStatusOptions } from '../constants/user.constants'
+import { Clock3, KeyRound, MailCheck, Save, ShieldCheck, UserRound, X } from '@lucide/vue'
+import { systemUserStatusOptions } from '../constants/user.constants'
 import type {
     SystemRole,
     SystemUser,
     SystemUserStatus,
     UserFormPayload,
     UserMemberOption,
+    UserRoleOption,
 } from '../interfaces/user.interface'
 
 interface FormState {
     memberId: number | null
     username: string
     email: string
-    password: string
-    confirmPassword: string
     roles: SystemRole[]
     status: SystemUserStatus
     requirePasswordChange: boolean
-    twoFactorEnabled: boolean
-    sendWelcomeEmail: boolean
+    invitationExpiresInHours: number
 }
 
 const props = defineProps<{
     open: boolean
     user: SystemUser | null
     members: UserMemberOption[]
+    roleOptions: UserRoleOption[]
+    defaultInvitationExpiresInHours: number
+    saving?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,21 +34,25 @@ const emit = defineEmits<{
     save: [payload: UserFormPayload]
 }>()
 
-const showPassword = ref(false)
-const showConfirmPassword = ref(false)
+const invitationExpirationOptions = [
+    { value: 1, label: '1 hora' },
+    { value: 6, label: '6 horas' },
+    { value: 12, label: '12 horas' },
+    { value: 24, label: '24 horas' },
+    { value: 48, label: '2 días' },
+    { value: 72, label: '3 días' },
+    { value: 168, label: '7 días' },
+]
 
 function emptyForm(): FormState {
     return {
         memberId: null,
         username: '',
         email: '',
-        password: '',
-        confirmPassword: '',
-        roles: ['READ_ONLY'],
+        roles: props.roleOptions[0] ? [props.roleOptions[0].value] : [],
         status: 'ACTIVE',
         requirePasswordChange: true,
-        twoFactorEnabled: false,
-        sendWelcomeEmail: true,
+        invitationExpiresInHours: props.defaultInvitationExpiresInHours || 24,
     }
 }
 
@@ -56,8 +61,6 @@ const errors = reactive({
     member: '',
     username: '',
     email: '',
-    password: '',
-    confirmPassword: '',
     roles: '',
 })
 
@@ -66,11 +69,17 @@ const memberSelectOptions = computed(() =>
         ...member,
         value: member.id,
         label: member.fullName,
-        description: `${member.code} · ${member.communityRoles.join(', ')}`,
+        description: `${member.code} · ${member.communityRoles.join(', ') || 'Miembro'}`,
     })),
 )
 
 const selectedMember = computed(() => props.members.find((member) => member.id === form.memberId))
+const editableStatusOptions = computed(() => {
+    if (props.user?.status === 'INVITED') {
+        return systemUserStatusOptions.filter(({ value }) => value !== 'ACTIVE')
+    }
+    return systemUserStatusOptions.filter(({ value }) => value !== 'INVITED')
+})
 
 function suggestedUsername(fullName: string) {
     const parts = fullName
@@ -90,9 +99,6 @@ function clearErrors() {
 function resetForm() {
     Object.assign(form, emptyForm())
     clearErrors()
-    showPassword.value = false
-    showConfirmPassword.value = false
-
     if (!props.user) return
     Object.assign(form, {
         memberId: props.user.memberId,
@@ -101,8 +107,6 @@ function resetForm() {
         roles: [...props.user.roles],
         status: props.user.status,
         requirePasswordChange: props.user.mustChangePassword,
-        twoFactorEnabled: props.user.twoFactorEnabled,
-        sendWelcomeEmail: false,
     })
 }
 
@@ -110,6 +114,14 @@ watch(
     () => props.open,
     (isOpen) => isOpen && resetForm(),
     { immediate: true },
+)
+
+watch(
+    () => props.roleOptions,
+    (roles) => {
+        if (props.user || form.roles.length || !roles[0]) return
+        form.roles = [roles[0].value]
+    },
 )
 
 watch(
@@ -126,38 +138,30 @@ watch(
 
 function validate() {
     clearErrors()
-    if (!form.memberId) errors.member = 'Selecciona el miembro que recibirá acceso.'
-    if (form.username.trim().length < 4) {
-        errors.username = 'Usa al menos 4 caracteres.'
+    if (!props.user && !form.memberId) {
+        errors.member = 'Selecciona el miembro que recibirá acceso.'
+    }
+    if (!/^[a-z0-9._-]{4,100}$/.test(form.username.trim().toLowerCase())) {
+        errors.username = 'Usa de 4 a 100 caracteres: letras, números, punto, guion o guion bajo.'
     }
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) {
         errors.email = 'Ingresa un correo válido.'
-    }
-    if (!props.user && form.password.length < 8) {
-        errors.password = 'La contraseña debe tener al menos 8 caracteres.'
-    }
-    if (form.password && form.password.length < 8) {
-        errors.password = 'La contraseña debe tener al menos 8 caracteres.'
-    }
-    if (form.password !== form.confirmPassword) {
-        errors.confirmPassword = 'Las contraseñas no coinciden.'
     }
     if (!form.roles.length) errors.roles = 'Asigna al menos un rol de acceso.'
     return !Object.values(errors).some(Boolean)
 }
 
 function submit() {
-    if (!validate() || !form.memberId) return
+    if (!validate() || (!props.user && !form.memberId) || props.saving) return
     emit('save', {
         memberId: form.memberId,
         username: form.username.trim().toLowerCase(),
         email: form.email.trim().toLowerCase(),
-        password: form.password,
         roles: form.roles,
         status: form.status,
         requirePasswordChange: form.requirePasswordChange,
-        twoFactorEnabled: form.twoFactorEnabled,
-        sendWelcomeEmail: form.sendWelcomeEmail,
+        twoFactorEnabled: props.user?.twoFactorEnabled ?? false,
+        invitationExpiresInHours: form.invitationExpiresInHours,
     })
 }
 
@@ -219,8 +223,7 @@ const labelClass =
                                 Miembro vinculado
                             </h3>
                             <p class="text-xs text-on-surface-variant">
-                                La cuenta usa los datos del miembro, pero mantiene acceso
-                                independiente.
+                                Cada miembro puede tener una sola cuenta del sistema.
                             </p>
                         </div>
                     </div>
@@ -241,11 +244,10 @@ const labelClass =
                             data-testid="user-member-select"
                         >
                             <template #item="{ option }">
-                                <p class="font-medium text-on-surface">
-                                    {{ option.fullName }}
-                                </p>
+                                <p class="font-medium text-on-surface">{{ option.fullName }}</p>
                                 <p class="mt-0.5 text-[11px] text-on-surface-variant">
-                                    {{ option.code }} · {{ option.communityRoles.join(', ') }}
+                                    {{ option.code }} ·
+                                    {{ option.communityRoles.join(', ') || 'Miembro' }}
                                 </p>
                             </template>
                         </UiSearchSelect>
@@ -274,7 +276,7 @@ const labelClass =
                                 </p>
                                 <p class="mt-0.5 truncate text-on-surface-variant">
                                     {{ selectedMember.email || 'Sin correo registrado' }} ·
-                                    {{ selectedMember.phone }}
+                                    {{ selectedMember.phone || 'Sin teléfono' }}
                                 </p>
                             </div>
                         </div>
@@ -284,9 +286,9 @@ const labelClass =
                 <UiSeparator class="my-7" />
 
                 <section>
-                    <h3 class="font-display text-lg font-semibold text-on-surface">Credenciales</h3>
+                    <h3 class="font-display text-lg font-semibold text-on-surface">Cuenta</h3>
                     <p class="mt-1 text-xs text-on-surface-variant">
-                        El nombre de usuario y la contraseña serán exclusivos para iniciar sesión.
+                        El correo será el identificador principal para iniciar sesión.
                     </p>
                     <div class="mt-4 grid gap-4 sm:grid-cols-2">
                         <div>
@@ -318,79 +320,33 @@ const labelClass =
                                 {{ errors.email }}
                             </p>
                         </div>
-                        <div>
-                            <label :class="labelClass" for="user-password">
-                                {{ user ? 'Nueva contraseña' : 'Contraseña *' }}
-                            </label>
-                            <div class="relative">
-                                <input
-                                    id="user-password"
-                                    v-model="form.password"
-                                    :type="showPassword ? 'text' : 'password'"
-                                    :class="[
-                                        inputClass,
-                                        'pr-11',
-                                        errors.password ? 'border-destructive' : '',
-                                    ]"
-                                    autocomplete="new-password"
-                                    :placeholder="
-                                        user
-                                            ? 'Déjala vacía para conservarla'
-                                            : 'Mínimo 8 caracteres'
-                                    "
-                                    data-testid="user-password"
-                                />
-                                <button
-                                    type="button"
-                                    class="absolute right-0 top-0 flex size-11 items-center justify-center text-on-surface-variant hover:text-primary"
-                                    :aria-label="
-                                        showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
-                                    "
-                                    @click="showPassword = !showPassword"
-                                >
-                                    <EyeOff v-if="showPassword" class="size-4" />
-                                    <Eye v-else class="size-4" />
-                                </button>
+                    </div>
+
+                    <div
+                        v-if="!user"
+                        class="mt-4 rounded border border-primary/25 bg-primary/5 p-4"
+                    >
+                        <div class="flex items-start gap-3">
+                            <MailCheck class="mt-0.5 size-5 shrink-0 text-primary" />
+                            <div>
+                                <p class="text-sm font-semibold text-on-surface">
+                                    Credenciales enviadas por correo
+                                </p>
+                                <p class="mt-1 text-xs leading-relaxed text-on-surface-variant">
+                                    El servidor generará una contraseña temporal segura y un enlace
+                                    de invitación de un solo uso. Ninguna contraseña se mostrará ni
+                                    se devolverá en esta pantalla.
+                                </p>
                             </div>
-                            <p v-if="errors.password" class="mt-1 text-xs text-destructive">
-                                {{ errors.password }}
-                            </p>
                         </div>
-                        <div>
-                            <label :class="labelClass" for="user-confirm-password">
-                                Confirmar contraseña{{ user ? '' : ' *' }}
-                            </label>
-                            <div class="relative">
-                                <input
-                                    id="user-confirm-password"
-                                    v-model="form.confirmPassword"
-                                    :type="showConfirmPassword ? 'text' : 'password'"
-                                    :class="[
-                                        inputClass,
-                                        'pr-11',
-                                        errors.confirmPassword ? 'border-destructive' : '',
-                                    ]"
-                                    autocomplete="new-password"
-                                    placeholder="Repite la contraseña"
-                                    data-testid="user-confirm-password"
-                                />
-                                <button
-                                    type="button"
-                                    class="absolute right-0 top-0 flex size-11 items-center justify-center text-on-surface-variant hover:text-primary"
-                                    :aria-label="
-                                        showConfirmPassword
-                                            ? 'Ocultar confirmación'
-                                            : 'Mostrar confirmación'
-                                    "
-                                    @click="showConfirmPassword = !showConfirmPassword"
-                                >
-                                    <EyeOff v-if="showConfirmPassword" class="size-4" />
-                                    <Eye v-else class="size-4" />
-                                </button>
-                            </div>
-                            <p v-if="errors.confirmPassword" class="mt-1 text-xs text-destructive">
-                                {{ errors.confirmPassword }}
-                            </p>
+                        <div class="mt-4">
+                            <span :class="labelClass">Vigencia del enlace</span>
+                            <UiSearchSelect
+                                v-model="form.invitationExpiresInHours"
+                                :options="invitationExpirationOptions"
+                                :searchable="false"
+                                content-class="!z-[80]"
+                            />
                         </div>
                     </div>
                 </section>
@@ -409,9 +365,9 @@ const labelClass =
                             <span :class="labelClass">Roles del sistema *</span>
                             <UiSearchSelect
                                 v-model="form.roles"
-                                :options="systemRoleOptions"
+                                :options="roleOptions"
                                 multiple
-                                :max-items="3"
+                                :max-items="8"
                                 option-description="description"
                                 placeholder="Selecciona uno o más roles"
                                 search-placeholder="Buscar rol..."
@@ -422,18 +378,19 @@ const labelClass =
                                 {{ errors.roles }}
                             </p>
                         </div>
-                        <div>
-                            <span :class="labelClass">Estado inicial</span>
+                        <div v-if="user">
+                            <span :class="labelClass">Estado</span>
                             <UiSearchSelect
                                 v-model="form.status"
-                                :options="systemUserStatusOptions"
+                                :options="editableStatusOptions"
                                 :searchable="false"
                                 content-class="!z-[80]"
                             />
                         </div>
 
                         <div
-                            class="grid gap-3 rounded border border-outline-variant bg-surface p-4"
+                            v-if="!user || user.status === 'INVITED'"
+                            class="rounded border border-outline-variant bg-surface p-4"
                         >
                             <label class="flex cursor-pointer items-start gap-3">
                                 <input
@@ -443,44 +400,33 @@ const labelClass =
                                 />
                                 <span>
                                     <span class="block text-sm font-medium text-on-surface">
-                                        Cambiar contraseña en el primer acceso
+                                        Forzar cambio de contraseña temporal
                                     </span>
                                     <span class="mt-0.5 block text-xs text-on-surface-variant">
-                                        Recomendado cuando otra persona entrega la contraseña
-                                        temporal.
+                                        Si está activo, al ingresar con la contraseña temporal solo
+                                        podrá acceder a la pantalla para crear una contraseña
+                                        propia.
                                     </span>
                                 </span>
                             </label>
-                            <label class="flex cursor-pointer items-start gap-3">
-                                <input
-                                    v-model="form.twoFactorEnabled"
-                                    type="checkbox"
-                                    class="mt-0.5 size-4 accent-primary"
-                                />
-                                <span>
-                                    <span class="block text-sm font-medium text-on-surface">
-                                        Requerir verificación en dos pasos
-                                    </span>
-                                    <span class="mt-0.5 block text-xs text-on-surface-variant">
-                                        Añade una segunda validación al iniciar sesión.
-                                    </span>
-                                </span>
-                            </label>
-                            <label v-if="!user" class="flex cursor-pointer items-start gap-3">
-                                <input
-                                    v-model="form.sendWelcomeEmail"
-                                    type="checkbox"
-                                    class="mt-0.5 size-4 accent-primary"
-                                />
-                                <span>
-                                    <span class="block text-sm font-medium text-on-surface">
-                                        Enviar correo de bienvenida
-                                    </span>
-                                    <span class="mt-0.5 block text-xs text-on-surface-variant">
-                                        Notifica al miembro que su acceso está listo.
-                                    </span>
-                                </span>
-                            </label>
+                        </div>
+                        <div
+                            v-else
+                            class="rounded border border-outline-variant bg-surface px-4 py-3 text-xs leading-relaxed text-on-surface-variant"
+                        >
+                            Para volver a exigir una contraseña propia, usa
+                            <strong>Restablecer y reenviar</strong> desde las acciones del usuario.
+                        </div>
+
+                        <div
+                            v-if="!user"
+                            class="flex items-start gap-3 rounded border border-outline-variant px-4 py-3"
+                        >
+                            <Clock3 class="mt-0.5 size-4 shrink-0 text-primary" />
+                            <p class="text-xs leading-relaxed text-on-surface-variant">
+                                La cuenta quedará como invitada hasta que el usuario abra el enlace
+                                y valide la contraseña temporal dentro del tiempo configurado.
+                            </p>
                         </div>
                     </div>
                 </section>
@@ -489,16 +435,23 @@ const labelClass =
             <footer
                 class="flex flex-col-reverse gap-3 border-t border-outline-variant bg-surface px-6 py-4 sm:flex-row sm:justify-end sm:px-8"
             >
-                <UiButton variant="outline" type="button" class="sm:w-28" @click="emit('close')">
+                <UiButton
+                    variant="outline"
+                    type="button"
+                    class="sm:w-28"
+                    :disabled="saving"
+                    @click="emit('close')"
+                >
                     Cancelar
                 </UiButton>
                 <UiButton
                     type="button"
                     class="sm:min-w-44"
+                    :loading="saving"
                     data-testid="user-save-button"
                     @click="submit"
                 >
-                    <Save class="size-4" /> {{ user ? 'Guardar cambios' : 'Crear usuario' }}
+                    <Save class="size-4" /> {{ user ? 'Guardar cambios' : 'Crear y enviar' }}
                 </UiButton>
             </footer>
         </aside>

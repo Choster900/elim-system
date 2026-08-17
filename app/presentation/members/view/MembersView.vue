@@ -139,7 +139,7 @@ const columns: DataTableColumn<Member>[] = [
         filterable: true,
         filterType: 'select',
         filterOptions: memberRoleOptions,
-        accessor: (row) => row.roles.join(', '),
+        accessor: (row) => (row.roles ?? []).join(', '),
         width: '240px',
     },
     {

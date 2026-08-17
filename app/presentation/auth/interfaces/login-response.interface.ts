@@ -19,6 +19,7 @@ export interface AuthUser {
     id: number
     email: string
     username: string | null
+    mustChangePassword: boolean
     roles: AuthRole[]
     permissions: AuthPermission[]
 }
@@ -33,4 +34,16 @@ export interface AuthTokens {
 export interface LoginResponse {
     user: AuthUser
     tokens: AuthTokens
+}
+
+export interface InvitationDetails {
+    email: string
+    displayName: string
+    expiresAt: string
+    requirePasswordChange: boolean
+}
+
+export interface ChangePasswordRequest {
+    currentPassword: string
+    newPassword: string
 }

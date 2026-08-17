@@ -128,8 +128,8 @@ function resetForm() {
         department: props.member.department ?? '',
         occupation: props.member.occupation ?? '',
         status: props.member.status,
-        roles: [...props.member.roles],
-        ministriesText: props.member.ministries.join('; '),
+        roles: normalizeMemberRoles(props.member.roles ?? []),
+        ministriesText: (props.member.ministries ?? []).join('; '),
         joinedAt: toInputDate(props.member.joinedAt),
         conversionDate: toInputDate(props.member.conversionDate),
         baptismDate: toInputDate(props.member.baptismDate),
@@ -151,6 +151,22 @@ watch(
 
 function optional(value: string) {
     return value.trim() || null
+}
+
+function normalizeMemberRoles(roles: Array<MemberCommunityRole | string | null | undefined>) {
+    const normalized = roles
+        .filter((role): role is string => typeof role === 'string' && role.trim().length > 0)
+        .map((role) => {
+            const exactMatch = memberRoleOptions.find((option) => option.value === role)
+            if (exactMatch) return exactMatch.value
+
+            const labelMatch = memberRoleOptions.find((option) => option.label === role)
+            if (labelMatch) return labelMatch.value
+
+            return role as MemberCommunityRole
+        })
+
+    return [...new Set(normalized)] as MemberCommunityRole[]
 }
 
 function submit() {
@@ -178,7 +194,7 @@ function submit() {
         department: optional(form.department),
         occupation: optional(form.occupation),
         status: form.status,
-        roles: form.roles.length ? form.roles : ['MEMBER'],
+        roles: normalizeMemberRoles(form.roles.length ? form.roles : ['MEMBER']),
         ministries: form.ministriesText
             .split(/[;,]/)
             .map((value) => value.trim())

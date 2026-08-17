@@ -963,6 +963,8 @@ function onColumnAdd(level: Level) {
 const mapEl = ref<HTMLElement | null>(null)
 let map: import('leaflet').Map | null = null
 let L: typeof import('leaflet') | null = null
+let mapGeneration = 0
+let isUnmounted = false
 
 function polygonFor(level: Level, id: string): Polygon | null {
     if (level === 'distrito') return findDistrict(id)?.polygon ?? null
@@ -972,16 +974,23 @@ function polygonFor(level: Level, id: string): Polygon | null {
     return parent?.sector?.polygon ?? null
 }
 
-function destroyMap() {
+function removeMap() {
     if (map) {
         map.remove()
         map = null
     }
 }
 
+function destroyMap() {
+    mapGeneration += 1
+    removeMap()
+}
+
 async function renderMap() {
-    if (!import.meta.client || !drawer.value) return
+    if (!import.meta.client || isUnmounted || !drawer.value) return
+    const generation = ++mapGeneration
     const { level, id } = drawer.value
+    const drawerKey = `${level}:${id}`
 
     // A meeting shows a single point: its saved position, or its sector's centroid as a fallback.
     const meetingPoint =
@@ -1005,13 +1014,28 @@ async function renderMap() {
         destroyMap()
         return
     }
-    if (!L) L = (await import('leaflet')).default ?? (await import('leaflet'))
+    if (!L) {
+        const leafletModule = await import('leaflet')
+        L = leafletModule.default ?? leafletModule
+    }
+
     await nextTick()
-    if (!mapEl.value || !L) return
-    destroyMap()
+    const container = mapEl.value
+    const currentDrawerKey = drawer.value ? `${drawer.value.level}:${drawer.value.id}` : ''
+    if (
+        isUnmounted ||
+        generation !== mapGeneration ||
+        drawerKey !== currentDrawerKey ||
+        !container?.isConnected ||
+        !L
+    ) {
+        return
+    }
+
+    removeMap()
 
     const accent = detail.value?.accent ?? '#e9c176'
-    map = L.map(mapEl.value, {
+    map = L.map(container, {
         zoomControl: true,
         attributionControl: false,
         scrollWheelZoom: false,
@@ -1044,7 +1068,16 @@ async function renderMap() {
         map.fitBounds(shape.getBounds(), { padding: [22, 22] })
     }
     const current = map
-    setTimeout(() => current?.invalidateSize(), 60)
+    setTimeout(() => {
+        if (
+            !isUnmounted &&
+            generation === mapGeneration &&
+            map === current &&
+            container.isConnected
+        ) {
+            current.invalidateSize()
+        }
+    }, 60)
 }
 
 watch(
@@ -1059,6 +1092,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+    isUnmounted = true
     destroyMap()
 })
 </script>

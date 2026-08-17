@@ -19,6 +19,7 @@ export interface AuthUserDto {
     id: number
     email: string
     username: string | null
+    mustChangePassword: boolean
     roles: AuthRoleDto[]
     permissions: AuthPermissionDto[]
 }

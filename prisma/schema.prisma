@@ -206,11 +206,42 @@ model User {
   assignedUserRoles      UserRole[]        @relation("UserRoleAssigner")
   grantedRolePermissions RolePermission[]  @relation("RolePermissionGranter")
   recordedOfferings      MeetingOffering[] @relation("OfferingRecorder")
+  receivedInvitations    UserInvitation[]  @relation("UserInvitationRecipient")
+  createdInvitations     UserInvitation[]  @relation("UserInvitationCreator")
 
   @@index([isActive], map: "ix_usu_activo")
   @@index([status], map: "ix_usu_estado")
   @@index([lastAccessAt], map: "ix_usu_fecha_ultimo_acceso")
   @@map("usu_usuario")
+}
+
+/// Invitación de acceso de un solo uso enviada a un usuario del sistema.
+model UserInvitation {
+  /// Identificador interno de la invitación.
+  id          Int       @id(map: "pk_inv_invitacion_usuario") @default(autoincrement()) @map("inv_id")
+  /// Usuario que debe completar el primer acceso.
+  userId      Int       @map("inv_id_usu")
+  /// Resumen SHA-256 del token; el token original solo se entrega por correo.
+  tokenHash   String    @unique(map: "uk_inv_resumen_token") @map("inv_resumen_token") @db.VarChar(100)
+  /// Momento límite para utilizar la invitación.
+  expiresAt   DateTime  @map("inv_fecha_expiracion")
+  /// Momento en que el token fue consumido correctamente.
+  usedAt      DateTime? @map("inv_fecha_uso")
+  /// Momento en que una invitación anterior fue invalidada.
+  revokedAt   DateTime? @map("inv_fecha_revocacion")
+  /// Administrador que creó o reenvió la invitación.
+  createdById Int?      @map("inv_id_usu_creador")
+  /// Momento en que se generó la invitación.
+  createdAt   DateTime  @default(now()) @map("inv_fecha_creacion")
+  /// Momento de la última modificación de la invitación.
+  updatedAt   DateTime  @updatedAt @map("inv_fecha_modificacion")
+  user        User      @relation("UserInvitationRecipient", fields: [userId], references: [id], onDelete: Cascade, map: "fk_inv_id_usu")
+  createdBy   User?     @relation("UserInvitationCreator", fields: [createdById], references: [id], onDelete: SetNull, map: "fk_inv_id_usu_creador")
+
+  @@index([userId], map: "ix_inv_usuario")
+  @@index([expiresAt], map: "ix_inv_fecha_expiracion")
+  @@index([createdById], map: "ix_inv_usuario_creador")
+  @@map("inv_invitacion_usuario")
 }
 
 model AuthSession {

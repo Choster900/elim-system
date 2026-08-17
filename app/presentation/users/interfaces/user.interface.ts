@@ -1,12 +1,6 @@
 export type SystemUserStatus = 'ACTIVE' | 'INVITED' | 'BLOCKED'
 
-export type SystemRole =
-    | 'SUPER_ADMIN'
-    | 'ADMINISTRATOR'
-    | 'PASTORAL'
-    | 'SECRETARY'
-    | 'FINANCE'
-    | 'READ_ONLY'
+export type SystemRole = string
 
 export interface UserMemberOption {
     id: number
@@ -15,11 +9,18 @@ export interface UserMemberOption {
     email: string | null
     phone: string | null
     communityRoles: string[]
+    assignedUserId: number | null
+}
+
+export interface UserRoleOption {
+    value: SystemRole
+    label: string
+    description: string
 }
 
 export interface SystemUser {
     id: number
-    memberId: number
+    memberId: number | null
     memberCode: string
     memberName: string
     username: string
@@ -30,16 +31,28 @@ export interface SystemUser {
     mustChangePassword: boolean
     lastAccessAt: string | null
     createdAt: string
+    invitationExpiresAt: string | null
+    invitationUsedAt: string | null
 }
 
 export interface UserFormPayload {
-    memberId: number
+    memberId: number | null
     username: string
     email: string
-    password: string
     roles: SystemRole[]
     status: SystemUserStatus
     requirePasswordChange: boolean
     twoFactorEnabled: boolean
-    sendWelcomeEmail: boolean
+    invitationExpiresInHours: number
+}
+
+export interface UserCatalog {
+    members: UserMemberOption[]
+    roles: UserRoleOption[]
+    defaultInvitationExpiresInHours: number
+}
+
+export interface ResetUserPasswordPayload {
+    requirePasswordChange: boolean
+    invitationExpiresInHours: number
 }

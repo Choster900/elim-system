@@ -9,11 +9,12 @@ import {
     Mail,
     MoreVertical,
     Plus,
+    RefreshCw,
     RotateCcwKey,
-    ShieldCheck,
     UserCog,
     UserRoundCheck,
     UsersRound,
+    X,
 } from '@lucide/vue'
 import {
     DropdownMenuContent,
@@ -23,49 +24,76 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from 'radix-vue'
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatInitials } from '~/utils/string/text-format.util'
 import UserFormDrawer from '../components/UserFormDrawer.vue'
 import {
-    getSystemRoleLabel,
-    getSystemUserStatusLabel,
-    systemRoleOptions,
-    systemUserStatusOptions,
-} from '../constants/user.constants'
+    useCreateUserMutation,
+    useResetUserPasswordMutation,
+    useUpdateUserMutation,
+    useUpdateUserStatusMutation,
+} from '../composables/useUserMutations'
+import { useUserCatalogQuery, useUsersQuery } from '../composables/useUsersQuery'
+import { getSystemUserStatusLabel, systemUserStatusOptions } from '../constants/user.constants'
 import type { SystemUser, SystemUserStatus, UserFormPayload } from '../interfaces/user.interface'
-import { systemUsersMock, userMemberOptionsMock } from '../mocks/user.mock'
 
 defineOptions({ name: 'UsersView' })
 
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const toast = useAppToast()
-const users = ref<SystemUser[]>(
-    systemUsersMock.map((user) => ({ ...user, roles: [...user.roles] })),
+const authStore = useAuthStore()
+const usersQuery = useUsersQuery()
+const catalogQuery = useUserCatalogQuery()
+const createMutation = useCreateUserMutation()
+const updateMutation = useUpdateUserMutation()
+const statusMutation = useUpdateUserStatusMutation()
+const resetMutation = useResetUserPasswordMutation()
+
+const users = computed(() => usersQuery.data.value ?? [])
+const catalog = computed(() => catalogQuery.data.value)
+const roleOptions = computed(() => catalog.value?.roles ?? [])
+const defaultInvitationExpiresInHours = computed(
+    () => catalog.value?.defaultInvitationExpiresInHours ?? 24,
 )
+const isLoading = computed(() => usersQuery.isPending.value || catalogQuery.isPending.value)
+const isSaving = computed(() => createMutation.isPending.value || updateMutation.isPending.value)
+const loadError = computed(() => {
+    const error = usersQuery.error.value ?? catalogQuery.error.value
+    return error ? resolveHttpErrorMessage(error, 'No fue posible cargar los usuarios') : ''
+})
+
+const canCreate = computed(() => authStore.hasPermission(routePermissionCodes.usersCreate))
+const canUpdate = computed(() => authStore.hasPermission(routePermissionCodes.usersUpdate))
+const canBlock = computed(() => authStore.hasPermission(routePermissionCodes.usersBlock))
+const hasActions = computed(() => canUpdate.value || canBlock.value)
+
 const formOpen = ref(false)
 const editingUser = ref<SystemUser | null>(null)
+const resetTarget = ref<SystemUser | null>(null)
+const resetRequirePasswordChange = ref(true)
+const resetExpiresInHours = ref(24)
 
 const stats = computed(() => ({
     total: users.value.length,
     active: users.value.filter((user) => user.status === 'ACTIVE').length,
     pending: users.value.filter((user) => user.status === 'INVITED').length,
-    protected: users.value.filter((user) => user.twoFactorEnabled).length,
+    changePending: users.value.filter((user) => user.mustChangePassword).length,
 }))
 
-const availableMembers = computed(() => {
-    const assignedMemberIds = new Set(
-        users.value
-            .filter((user) => user.id !== editingUser.value?.id)
-            .map((user) => user.memberId),
-    )
-    return userMemberOptionsMock.filter((member) => !assignedMemberIds.has(member.id))
-})
+const availableMembers = computed(() =>
+    (catalog.value?.members ?? []).filter(
+        (member) => !member.assignedUserId || member.assignedUserId === editingUser.value?.id,
+    ),
+)
 
-const columns: DataTableColumn<SystemUser>[] = [
+const columns = computed<DataTableColumn<SystemUser>[]>(() => [
     {
         key: 'member',
         label: 'Miembro',
@@ -89,15 +117,15 @@ const columns: DataTableColumn<SystemUser>[] = [
         label: 'Roles de acceso',
         filterable: true,
         filterType: 'select',
-        filterOptions: systemRoleOptions,
+        filterOptions: roleOptions.value,
         accessor: (row) => row.roles.join(', '),
         width: '260px',
     },
     {
         key: 'security',
         label: 'Seguridad',
-        accessor: (row) => (row.twoFactorEnabled ? '2FA' : 'Contraseña'),
-        width: '170px',
+        accessor: (row) => (row.mustChangePassword ? 'Cambio pendiente' : 'Contraseña vigente'),
+        width: '190px',
     },
     {
         key: 'lastAccess',
@@ -116,8 +144,16 @@ const columns: DataTableColumn<SystemUser>[] = [
         accessor: (row) => row.status,
         width: '135px',
     },
-    { key: 'actions', label: '', width: '70px', align: 'right' },
-]
+    ...(hasActions.value
+        ? ([
+              { key: 'actions', label: '', width: '70px', align: 'right' },
+          ] as DataTableColumn<SystemUser>[])
+        : []),
+])
+
+function getRoleLabel(role: string) {
+    return roleOptions.value.find((option) => option.value === role)?.label ?? role
+}
 
 function statusTone(status: SystemUserStatus) {
     switch (status) {
@@ -141,6 +177,16 @@ function formatAccessDate(value: string | null) {
     }).format(new Date(value))
 }
 
+function formatInvitationDate(value: string | null) {
+    if (!value) return null
+    return new Intl.DateTimeFormat('es-SV', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(new Date(value))
+}
+
 function openCreate() {
     editingUser.value = null
     formOpen.value = true
@@ -151,68 +197,57 @@ function openEdit(user: SystemUser) {
     formOpen.value = true
 }
 
-function saveUser(payload: UserFormPayload) {
-    const member = userMemberOptionsMock.find((item) => item.id === payload.memberId)
-    if (!member) return
-
-    if (editingUser.value) {
-        users.value = users.value.map((user) =>
-            user.id === editingUser.value?.id
-                ? {
-                      ...user,
-                      username: payload.username,
-                      email: payload.email,
-                      roles: [...payload.roles],
-                      status: payload.status,
-                      twoFactorEnabled: payload.twoFactorEnabled,
-                      mustChangePassword: payload.requirePasswordChange,
-                  }
-                : user,
-        )
-        toast.success('Cambios aplicados en esta vista previa')
-    } else {
-        const nextId = Math.max(0, ...users.value.map((user) => user.id)) + 1
-        users.value = [
-            {
-                id: nextId,
-                memberId: member.id,
-                memberCode: member.code,
-                memberName: member.fullName,
-                username: payload.username,
-                email: payload.email,
-                roles: [...payload.roles],
-                status: payload.status,
-                twoFactorEnabled: payload.twoFactorEnabled,
-                mustChangePassword: payload.requirePasswordChange,
-                lastAccessAt: null,
-                createdAt: new Date().toISOString(),
-            },
-            ...users.value,
-        ]
-        toast.success('Usuario agregado a esta vista previa')
+async function saveUser(payload: UserFormPayload) {
+    try {
+        if (editingUser.value) {
+            await updateMutation.mutateAsync({ id: editingUser.value.id, payload })
+            toast.success('Usuario actualizado correctamente')
+        } else {
+            await createMutation.mutateAsync(payload)
+            toast.success('Usuario creado; la invitación fue enviada por correo')
+        }
+        formOpen.value = false
+        editingUser.value = null
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar el usuario'))
     }
-
-    formOpen.value = false
-    editingUser.value = null
 }
 
-function toggleBlocked(user: SystemUser) {
-    const nextStatus: SystemUserStatus = user.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED'
-    users.value = users.value.map((item) =>
-        item.id === user.id ? { ...item, status: nextStatus } : item,
-    )
-    toast.success(
-        nextStatus === 'BLOCKED'
-            ? 'Acceso bloqueado en la vista previa'
-            : 'Acceso habilitado en la vista previa',
-    )
+async function toggleBlocked(user: SystemUser) {
+    const nextStatus = user.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED'
+    try {
+        await statusMutation.mutateAsync({ id: user.id, status: nextStatus })
+        toast.success(nextStatus === 'BLOCKED' ? 'Acceso bloqueado' : 'Acceso habilitado')
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible cambiar el acceso'))
+    }
 }
 
-function simulatePasswordReset(user: SystemUser) {
-    users.value = users.value.map((item) =>
-        item.id === user.id ? { ...item, mustChangePassword: true } : item,
-    )
-    toast.success(`Restablecimiento preparado para ${user.memberName}`)
+function openPasswordReset(user: SystemUser) {
+    resetTarget.value = user
+    resetRequirePasswordChange.value = true
+    resetExpiresInHours.value = defaultInvitationExpiresInHours.value
+}
+
+async function confirmPasswordReset() {
+    if (!resetTarget.value) return
+    try {
+        await resetMutation.mutateAsync({
+            id: resetTarget.value.id,
+            payload: {
+                requirePasswordChange: resetRequirePasswordChange.value,
+                invitationExpiresInHours: resetExpiresInHours.value,
+            },
+        })
+        toast.success('Nueva contraseña temporal e invitación enviadas por correo')
+        resetTarget.value = null
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible restablecer el acceso'))
+    }
+}
+
+function retryQueries() {
+    void Promise.all([usersQuery.refetch(), catalogQuery.refetch()])
 }
 </script>
 
@@ -234,24 +269,29 @@ function simulatePasswordReset(user: SystemUser) {
                     Usuarios
                 </h1>
                 <p class="mt-3 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-                    Convierte un miembro del directorio en usuario del sistema y administra sus
-                    credenciales, roles de acceso y opciones de seguridad.
+                    Vincula miembros, asigna roles y entrega credenciales temporales mediante una
+                    invitación segura por correo.
                 </p>
             </div>
 
-            <UiButton type="button" data-testid="users-new-button" @click="openCreate">
+            <UiButton
+                v-if="canCreate"
+                type="button"
+                data-testid="users-new-button"
+                @click="openCreate"
+            >
                 <Plus class="size-4" /> Nuevo usuario
             </UiButton>
         </section>
 
         <div
-            class="mt-6 flex items-start gap-3 rounded border border-primary/25 bg-primary/5 px-4 py-3 text-xs text-on-surface-variant"
+            v-if="loadError"
+            class="mt-6 flex items-center justify-between gap-4 rounded border border-destructive/35 bg-destructive/10 px-4 py-3"
         >
-            <ShieldCheck class="mt-0.5 size-4 shrink-0 text-primary" />
-            <p>
-                Esta es una vista visual sin conexión al backend. Los cambios realizados aquí se
-                restablecen al recargar la página.
-            </p>
+            <p class="text-sm text-destructive">{{ loadError }}</p>
+            <UiButton variant="outline" size="sm" type="button" @click="retryQueries">
+                <RefreshCw class="size-4" /> Reintentar
+            </UiButton>
         </div>
 
         <section class="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -265,7 +305,7 @@ function simulatePasswordReset(user: SystemUser) {
                 <p class="mt-1 font-display text-3xl font-semibold text-on-surface">
                     {{ stats.total }}
                 </p>
-                <p class="mt-1 text-xs text-on-surface-variant">Cuentas vinculadas a miembros</p>
+                <p class="mt-1 text-xs text-on-surface-variant">Cuentas registradas</p>
             </UiCard>
             <UiCard class="p-5">
                 <UserRoundCheck class="mb-3 size-6 text-emerald-400" />
@@ -296,12 +336,12 @@ function simulatePasswordReset(user: SystemUser) {
                 <p
                     class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
-                    Doble verificación
+                    Cambio requerido
                 </p>
                 <p class="mt-1 font-display text-3xl font-semibold text-on-surface">
-                    {{ stats.protected }}
+                    {{ stats.changePending }}
                 </p>
-                <p class="mt-1 text-xs text-on-surface-variant">Cuentas con 2FA</p>
+                <p class="mt-1 text-xs text-on-surface-variant">Contraseña propia pendiente</p>
             </UiCard>
         </section>
 
@@ -311,6 +351,7 @@ function simulatePasswordReset(user: SystemUser) {
                 :columns="columns"
                 row-key="id"
                 :page-size="10"
+                :loading="isLoading"
                 show-search
                 search-placeholder="Buscar por miembro, usuario o correo…"
                 empty-title="Sin usuarios"
@@ -322,7 +363,7 @@ function simulatePasswordReset(user: SystemUser) {
                     </span>
                 </template>
 
-                <template #toolbar-end>
+                <template v-if="canCreate" #toolbar-end>
                     <UiButton variant="outline" size="sm" type="button" @click="openCreate">
                         <UserCog class="size-4" /> Asignar acceso
                     </UiButton>
@@ -342,7 +383,7 @@ function simulatePasswordReset(user: SystemUser) {
                                 {{ (row as SystemUser).memberName }}
                             </span>
                             <span class="mt-0.5 block text-[11px] text-on-surface-variant">
-                                {{ (row as SystemUser).memberCode }} · Miembro vinculado
+                                {{ (row as SystemUser).memberCode }}
                             </span>
                         </span>
                     </div>
@@ -368,7 +409,7 @@ function simulatePasswordReset(user: SystemUser) {
                             :key="role"
                             class="rounded border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
                         >
-                            {{ getSystemRoleLabel(role) }}
+                            {{ getRoleLabel(role) }}
                         </span>
                         <span
                             v-if="(row as SystemUser).roles.length > 2"
@@ -381,21 +422,16 @@ function simulatePasswordReset(user: SystemUser) {
 
                 <template #cell-security="{ row }">
                     <div class="space-y-1 text-xs text-on-surface-variant">
-                        <p class="flex items-center gap-2">
-                            <CheckCircle2
-                                class="size-3.5"
-                                :class="
-                                    (row as SystemUser).twoFactorEnabled ? 'text-emerald-400' : ''
-                                "
-                            />
-                            {{
-                                (row as SystemUser).twoFactorEnabled
-                                    ? '2FA habilitado'
-                                    : 'Solo contraseña'
-                            }}
-                        </p>
                         <p v-if="(row as SystemUser).mustChangePassword" class="text-amber-300">
-                            Cambio pendiente
+                            Cambio obligatorio
+                        </p>
+                        <p v-else>Contraseña vigente</p>
+                        <p v-if="(row as SystemUser).status === 'INVITED'" class="text-[11px]">
+                            Vence:
+                            {{
+                                formatInvitationDate((row as SystemUser).invitationExpiresAt) ||
+                                'sin fecha'
+                            }}
                         </p>
                     </div>
                 </template>
@@ -415,7 +451,7 @@ function simulatePasswordReset(user: SystemUser) {
                     </span>
                 </template>
 
-                <template #cell-actions="{ row }">
+                <template v-if="hasActions" #cell-actions="{ row }">
                     <DropdownMenuRoot>
                         <DropdownMenuTrigger
                             class="flex size-9 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
@@ -430,19 +466,25 @@ function simulatePasswordReset(user: SystemUser) {
                                 class="z-50 w-60 border border-outline-variant bg-surface-container py-1 shadow-xl focus:outline-none"
                             >
                                 <DropdownMenuItem
+                                    v-if="canUpdate"
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-xs text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
                                     @select="openEdit(row as SystemUser)"
                                 >
                                     <Edit3 class="size-4" /> Editar cuenta
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
+                                    v-if="canUpdate"
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-xs text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
-                                    @select="simulatePasswordReset(row as SystemUser)"
+                                    @select="openPasswordReset(row as SystemUser)"
                                 >
-                                    <RotateCcwKey class="size-4" /> Restablecer contraseña
+                                    <RotateCcwKey class="size-4" /> Restablecer y reenviar
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator class="my-1 h-px bg-outline-variant" />
+                                <DropdownMenuSeparator
+                                    v-if="canUpdate && canBlock"
+                                    class="my-1 h-px bg-outline-variant"
+                                />
                                 <DropdownMenuItem
+                                    v-if="canBlock"
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-xs outline-none data-[highlighted]:bg-surface-container-high"
                                     :class="
                                         (row as SystemUser).status === 'BLOCKED'
@@ -473,8 +515,95 @@ function simulatePasswordReset(user: SystemUser) {
             :open="formOpen"
             :user="editingUser"
             :members="availableMembers"
+            :role-options="roleOptions"
+            :default-invitation-expires-in-hours="defaultInvitationExpiresInHours"
+            :saving="isSaving"
             @close="formOpen = false"
             @save="saveUser"
         />
+
+        <template v-if="resetTarget">
+            <div class="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm" />
+            <section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="reset-access-title"
+                class="fixed left-1/2 top-1/2 z-[71] w-[520px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded border border-outline-variant bg-surface-container p-6 shadow-2xl"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-widest text-primary">
+                            Seguridad
+                        </p>
+                        <h2
+                            id="reset-access-title"
+                            class="mt-1 font-display text-2xl text-on-surface"
+                        >
+                            Restablecer acceso
+                        </h2>
+                    </div>
+                    <button
+                        type="button"
+                        class="text-on-surface-variant hover:text-on-surface"
+                        aria-label="Cerrar"
+                        @click="resetTarget = null"
+                    >
+                        <X class="size-5" />
+                    </button>
+                </div>
+                <p class="mt-4 text-sm leading-relaxed text-on-surface-variant">
+                    Se invalidarán las sesiones de <strong>{{ resetTarget.memberName }}</strong> y
+                    se enviará una nueva contraseña temporal con un enlace de un solo uso.
+                </p>
+                <div class="mt-5 space-y-4 rounded border border-outline-variant bg-surface p-4">
+                    <label class="flex items-start gap-3">
+                        <input
+                            v-model="resetRequirePasswordChange"
+                            type="checkbox"
+                            class="mt-0.5 size-4 accent-primary"
+                        />
+                        <span class="text-sm text-on-surface">
+                            Forzar cambio de contraseña después de ingresar
+                        </span>
+                    </label>
+                    <label class="block">
+                        <span
+                            class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                        >
+                            Vigencia del nuevo enlace
+                        </span>
+                        <select
+                            v-model.number="resetExpiresInHours"
+                            class="h-11 w-full rounded border border-outline-variant bg-surface-container px-3 text-sm text-on-surface outline-none focus:border-primary"
+                        >
+                            <option :value="1">1 hora</option>
+                            <option :value="6">6 horas</option>
+                            <option :value="12">12 horas</option>
+                            <option :value="24">24 horas</option>
+                            <option :value="48">2 días</option>
+                            <option :value="72">3 días</option>
+                            <option :value="168">7 días</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <UiButton
+                        variant="outline"
+                        type="button"
+                        :disabled="resetMutation.isPending.value"
+                        @click="resetTarget = null"
+                    >
+                        Cancelar
+                    </UiButton>
+                    <UiButton
+                        type="button"
+                        :loading="resetMutation.isPending.value"
+                        @click="confirmPasswordReset"
+                    >
+                        <Mail class="size-4" /> Generar y enviar
+                    </UiButton>
+                </div>
+            </section>
+        </template>
     </component>
 </template>

@@ -55,6 +55,8 @@ let L: typeof import('leaflet') | null = null
 let polygonLayer: import('leaflet').Polygon | null = null
 let vertexMarkers: import('leaflet').CircleMarker[] = []
 let userLocationMarker: import('leaflet').CircleMarker | null = null
+let mapGeneration = 0
+let isUnmounted = false
 
 function defaultBox(center: LatLng): LatLng[] {
     const [lat, lng] = center
@@ -95,7 +97,7 @@ function resetForm() {
     }
 }
 
-function destroyMap() {
+function removeMap() {
     if (map) {
         map.remove()
         map = null
@@ -103,6 +105,11 @@ function destroyMap() {
     polygonLayer = null
     vertexMarkers = []
     userLocationMarker = null
+}
+
+function destroyMap() {
+    mapGeneration += 1
+    removeMap()
 }
 
 function renderPolygon(fit: boolean) {
@@ -202,11 +209,27 @@ function locateCurrentPosition() {
 }
 
 async function initMap() {
-    if (!import.meta.client || !mapEl.value) return
-    if (!L) L = (await import('leaflet')).default ?? (await import('leaflet'))
-    if (!mapEl.value || !L) return
-    destroyMap()
-    map = L.map(mapEl.value, {
+    if (!import.meta.client || isUnmounted || !props.open) return
+    const generation = ++mapGeneration
+    if (!L) {
+        const leafletModule = await import('leaflet')
+        L = leafletModule.default ?? leafletModule
+    }
+
+    await nextTick()
+    const container = mapEl.value
+    if (
+        isUnmounted ||
+        generation !== mapGeneration ||
+        !props.open ||
+        !container?.isConnected ||
+        !L
+    ) {
+        return
+    }
+
+    removeMap()
+    map = L.map(container, {
         zoomControl: true,
         attributionControl: false,
         scrollWheelZoom: false,
@@ -219,7 +242,16 @@ async function initMap() {
     map.on('click', (e) => addVertex([e.latlng.lat, e.latlng.lng]))
     renderPolygon(true)
     const current = map
-    setTimeout(() => current?.invalidateSize(), 80)
+    setTimeout(() => {
+        if (
+            !isUnmounted &&
+            generation === mapGeneration &&
+            map === current &&
+            container.isConnected
+        ) {
+            current.invalidateSize()
+        }
+    }, 80)
 }
 
 watch(
@@ -239,7 +271,10 @@ watch(
     },
 )
 
-onBeforeUnmount(() => destroyMap())
+onBeforeUnmount(() => {
+    isUnmounted = true
+    destroyMap()
+})
 
 function save() {
     if (!form.name.trim()) {
