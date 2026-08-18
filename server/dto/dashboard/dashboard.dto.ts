@@ -82,6 +82,10 @@ export interface DashboardSummaryDto {
         averageOffering: number
         attendanceGoalRate: number
         offeringPerAttendee: number
+        /// Porcentaje de fechas esperadas que ya fueron registradas en el período.
+        recordingCoverage: number
+        /// Fechas del período que siguen sin registrar.
+        pendingOccurrences: number
     }
     trends: DashboardTrendPointDto[]
     categoryDistribution: DashboardDistributionDto[]

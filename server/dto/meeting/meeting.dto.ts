@@ -1,5 +1,5 @@
 export type MeetingFrequencyValue = 'unica' | 'diaria' | 'semanal' | 'quincenal' | 'mensual'
-export type MeetingStatusValue = 'programada' | 'en_curso' | 'completada' | 'cancelada'
+export type MonthlyModeValue = 'dia_fijo' | 'ordinal'
 
 export interface CreateMeetingDto {
     typeId: number
@@ -17,8 +17,15 @@ export interface CreateMeetingDto {
     latitude: number | null
     longitude: number | null
     frequency: MeetingFrequencyValue
+    /// Solo aplica cuando la frecuencia es mensual.
+    monthlyMode: MonthlyModeValue | null
+    /// 1 a 4, o 5 para el último; solo en modo ordinal.
+    weekOrdinal: number | null
+    /// 0 domingo a 6 sábado; solo en modo ordinal.
+    weekday: number | null
     expectedAttendees: number
-    status: MeetingStatusValue
+    /// Una reunión inactiva deja de generar ocurrencias pendientes.
+    isActive: boolean
     isPublic: boolean
     notes: string | null
     color: string
