@@ -152,12 +152,20 @@ export const PERMISSION_SEEDS = [
         description: 'Consultar movimientos y resúmenes financieros.',
     },
     {
+        name: 'Registrar ofrendas',
+        code: 'finance.record',
+        module: 'Finanzas',
+        resource: 'finance',
+        action: 'record',
+        description: 'Registrar asistencia y ofrendas de las reuniones a su cargo.',
+    },
+    {
         name: 'Administrar finanzas',
         code: 'finance.manage',
         module: 'Finanzas',
         resource: 'finance',
         action: 'manage',
-        description: 'Registrar y modificar operaciones financieras.',
+        description: 'Corregir o eliminar registros de ofrenda ya capturados.',
     },
     {
         name: 'Exportar reportes',

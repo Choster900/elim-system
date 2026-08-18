@@ -52,19 +52,31 @@ export const ROLE_SEEDS = [
         name: 'Finanzas',
         code: 'FINANCE',
         description: 'Accede a operaciones y reportes financieros.',
-        permissionCodes: ['dashboard.view', 'finance.view', 'finance.manage', 'reports.export'],
+        permissionCodes: [
+            'dashboard.view',
+            'finance.view',
+            'finance.record',
+            'finance.manage',
+            'reports.export',
+        ],
     },
     {
         name: 'Supervisor de sector',
         code: 'SUPERVISOR',
         description: 'Registra ofrendas de las reuniones de los sectores que lidera.',
-        permissionCodes: ['dashboard.view', 'finance.view', 'finance.manage', 'reports.export'],
+        permissionCodes: [
+            'dashboard.view',
+            'finance.view',
+            'finance.record',
+            'finance.manage',
+            'reports.export',
+        ],
     },
     {
         name: 'Líder de reunión',
         code: 'LEADER',
         description: 'Registra ofrendas de las reuniones donde está asignado.',
-        permissionCodes: ['dashboard.view', 'finance.view', 'finance.manage'],
+        permissionCodes: ['dashboard.view', 'finance.view', 'finance.record'],
     },
     {
         name: 'Solo lectura',
@@ -104,6 +116,24 @@ export function seedRoles(prisma) {
 export function seedRolePermissionAssignments(prisma, roles, permissions) {
     const roleByCode = new Map(roles.map((role) => [role.code, role]))
     const permissionByCode = new Map(permissions.map((permission) => [permission.code, permission]))
+
+    // Quitar un permiso del seed tiene que revocarlo de verdad: sin esto, un rol
+    // conserva para siempre los permisos que tuvo en una siembra anterior.
+    const revocations = ROLE_SEEDS.map((roleSeed) => {
+        const role = roleByCode.get(roleSeed.code)
+        if (!role) throw new Error(`Seed role not found: ${roleSeed.code}`)
+
+        const permissionIds = roleSeed.permissionCodes.map((permissionCode) => {
+            const permission = permissionByCode.get(permissionCode)
+            if (!permission) throw new Error(`Seed permission not found: ${permissionCode}`)
+            return permission.id
+        })
+
+        return prisma.rolePermission.deleteMany({
+            where: { roleId: role.id, permissionId: { notIn: permissionIds } },
+        })
+    })
+
     const assignments = ROLE_SEEDS.flatMap((roleSeed) => {
         const role = roleByCode.get(roleSeed.code)
         if (!role) throw new Error(`Seed role not found: ${roleSeed.code}`)
@@ -128,5 +158,5 @@ export function seedRolePermissionAssignments(prisma, roles, permissions) {
         })
     })
 
-    return prisma.$transaction(assignments)
+    return prisma.$transaction([...revocations, ...assignments])
 }

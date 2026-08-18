@@ -108,7 +108,7 @@ function round2(value) {
     return Math.round(value * 100) / 100
 }
 
-// Idempotente: una ofrenda por (reunión, fecha). Si ya existe, se omite.
+// Idempotente: una ocurrencia por (reunión, fecha). Si ya existe registrada, se omite.
 export async function seedOfferings(prisma, meetings, categories, recordedById) {
     let created = 0
 
@@ -116,10 +116,10 @@ export async function seedOfferings(prisma, meetings, categories, recordedById) 
         const meeting = meetings.get(seed.meetingTitle)
         if (!meeting) throw new Error(`Seed meeting not found: ${seed.meetingTitle}`)
 
-        const existing = await prisma.meetingOffering.findUnique({
+        const existing = await prisma.meetingOccurrence.findUnique({
             where: { meetingId_date: { meetingId: meeting.id, date: meeting.date } },
         })
-        if (existing) continue
+        if (existing && existing.status === 'RECORDED') continue
 
         const details = seed.details.map((detail) => {
             const category = categories.get(detail.categoryCode)
@@ -130,18 +130,32 @@ export async function seedOfferings(prisma, meetings, categories, recordedById) 
 
         const totalAmount = round2(details.reduce((sum, detail) => sum + detail.amount, 0))
 
-        await prisma.meetingOffering.create({
-            data: {
-                meetingId: meeting.id,
-                date: meeting.date,
-                attendance: seed.attendance,
-                totalAmount,
-                currency: 'USD',
-                notes: seed.notes || null,
-                recordedById: recordedById ?? null,
-                details: { create: details },
-            },
-        })
+        // La ocurrencia puede existir ya como pendiente si la generación corrió antes.
+        const captureData = {
+            status: 'RECORDED',
+            attendance: seed.attendance,
+            totalAmount,
+            currency: 'USD',
+            notes: seed.notes || null,
+            recordedById: recordedById ?? null,
+            recordedAt: new Date(),
+            details: { deleteMany: {}, create: details },
+        }
+
+        if (existing) {
+            await prisma.meetingOccurrence.update({ where: { id: existing.id }, data: captureData })
+        } else {
+            await prisma.meetingOccurrence.create({
+                data: {
+                    meetingId: meeting.id,
+                    date: meeting.date,
+                    sectorId: meeting.sectorId,
+                    leaderId: meeting.leaderId,
+                    ...captureData,
+                    details: { create: details },
+                },
+            })
+        }
         created += 1
     }
 
