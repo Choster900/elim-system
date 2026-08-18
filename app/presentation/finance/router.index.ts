@@ -23,9 +23,10 @@ export default [
         },
     },
     {
-        name: 'offering-bulk-record',
-        path: '/finanzas/ofrendas/registro-global',
-        component: () => import('~/presentation/finance/view/BulkOfferingMatrixView.vue'),
+        // Pantalla propia de captura: registrar no cabía en un panel lateral.
+        name: 'offering-capture',
+        path: '/finanzas/ofrendas/registrar/:meetingId',
+        component: () => import('~/presentation/finance/view/OccurrenceCaptureView.vue'),
         meta: {
             layout: 'dashboard',
             requiresAuth: true,

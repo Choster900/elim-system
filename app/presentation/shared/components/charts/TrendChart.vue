@@ -11,7 +11,8 @@ const props = withDefaults(
         values: TrendValue[]
         color?: string
         format?: 'number' | 'currency'
-        ariaLabel: string
+        /// Nombre accesible del gráfico; se expone como aria-label.
+        label: string
     }>(),
     {
         color: 'var(--chart-1)',
@@ -82,7 +83,7 @@ function formatValue(value: number) {
             :viewBox="`0 0 ${width} ${height}`"
             class="h-auto min-h-56 w-full overflow-visible"
             role="img"
-            :aria-label="ariaLabel"
+            :aria-label="label"
         >
             <defs>
                 <linearGradient :id="gradientId" x1="0" x2="0" y1="0" y2="1">
@@ -98,8 +99,8 @@ function formatValue(value: number) {
                     :y1="line.y"
                     :y2="line.y"
                     class="stroke-outline-variant"
-                    stroke-dasharray="4 6"
                     stroke-width="1"
+                    stroke-opacity="0.6"
                 />
                 <text
                     :x="padding.left - 10"

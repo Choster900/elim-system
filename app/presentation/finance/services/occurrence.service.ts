@@ -2,7 +2,6 @@ import type { AxiosInstance } from 'axios'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type {
     BulkRecordEntry,
-    MeetingOption,
     OccurrenceFilters,
     OccurrenceRecord,
     OfferingCategoryOption,
@@ -106,14 +105,4 @@ export async function getOfferingCategories(
         { signal },
     )
     return responseData(response.data, 'No fue posible cargar las categorías de ofrenda')
-}
-
-export async function getOfferingMeetingOptions(
-    apiClient: AxiosInstance,
-    signal?: AbortSignal,
-): Promise<MeetingOption[]> {
-    const response = await apiClient.get<ApiResponse<MeetingOption[]>>('/offerings/meetings', {
-        signal,
-    })
-    return responseData(response.data, 'No fue posible cargar las reuniones')
 }

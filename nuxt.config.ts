@@ -14,6 +14,16 @@ export default defineNuxtConfig({
     app: {
         head: {
             title: env.NUXT_PUBLIC_APP_NAME,
+            link: [
+                // El emblema va en blanco y sin fondo, tal como fue entregado. En una
+                // barra de pestañas clara se distingue poco: es una decisión tomada
+                // a la vista de la comparativa, no un descuido.
+                { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' },
+                // El mismo trazo en 16, 32 y 48 px; es el que el navegador pide solo.
+                { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+                // iOS pinta de negro cualquier transparencia, así que este va con fondo.
+                { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
+            ],
             script: [
                 {
                     key: 'theme-mode-init',

@@ -15,7 +15,7 @@ import {
     UsersRound,
 } from '@lucide/vue'
 import DashboardDonutChart from '~/presentation/dashboard/components/DashboardDonutChart.vue'
-import DashboardTrendChart from '~/presentation/dashboard/components/DashboardTrendChart.vue'
+import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
 import { useDashboardQuery } from '~/presentation/dashboard/composables/useDashboardQuery'
 import type {
     DashboardMetric,
@@ -355,10 +355,10 @@ function openMeeting(id: number) {
                             </p>
                         </div>
                     </div>
-                    <DashboardTrendChart
+                    <TrendChart
                         class="mt-6"
                         :values="attendanceTrend"
-                        aria-label="Tendencia de asistencia por período"
+                        label="Tendencia de asistencia por período"
                         color="var(--chart-1)"
                     />
                 </UiCard>
@@ -385,10 +385,10 @@ function openMeeting(id: number) {
                             </p>
                         </div>
                     </div>
-                    <DashboardTrendChart
+                    <TrendChart
                         class="mt-6"
                         :values="offeringTrend"
-                        aria-label="Tendencia de ofrendas por período"
+                        label="Tendencia de ofrendas por período"
                         color="var(--chart-2)"
                         format="currency"
                     />

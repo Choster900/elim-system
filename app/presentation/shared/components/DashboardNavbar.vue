@@ -102,11 +102,6 @@ const navItems: DashboardMenuItem[] = [
                 requiredPermission: routePermissionCodes.financeRecord,
             },
             {
-                label: 'Registro global',
-                href: '/finanzas/ofrendas/registro-global',
-                requiredPermission: routePermissionCodes.financeRecord,
-            },
-            {
                 label: 'Historial de ofrendas',
                 href: '/finanzas/ofrendas/historial',
                 requiredPermission: routePermissionCodes.financeView,

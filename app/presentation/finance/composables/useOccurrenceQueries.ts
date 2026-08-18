@@ -7,7 +7,6 @@ import {
     getOccurrence,
     getOccurrences,
     getOfferingCategories,
-    getOfferingMeetingOptions,
     getPendingOccurrences,
 } from '../services/occurrence.service'
 
@@ -20,7 +19,10 @@ export function usePendingOccurrencesQuery() {
     })
 }
 
-export function useOccurrencesQuery(filters: Ref<OccurrenceFilters>) {
+// Solo se lee, así que acepta también un computed con los filtros derivados.
+export function useOccurrencesQuery(
+    filters: Ref<OccurrenceFilters> | ComputedRef<OccurrenceFilters>,
+) {
     const apiClient = useApiClient()
 
     return useQuery({
@@ -55,14 +57,5 @@ export function useOfferingCategoriesQuery() {
     return useQuery({
         queryKey: queryKeys.offeringCategories.list,
         queryFn: ({ signal }) => getOfferingCategories(apiClient, signal),
-    })
-}
-
-export function useOfferingMeetingOptionsQuery() {
-    const apiClient = useApiClient()
-
-    return useQuery({
-        queryKey: queryKeys.meetings.options,
-        queryFn: ({ signal }) => getOfferingMeetingOptions(apiClient, signal),
     })
 }

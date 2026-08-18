@@ -6,16 +6,11 @@ import {
     ChevronDown,
     ClipboardList,
     History,
-    Table2,
 } from '@lucide/vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import { formatShortIsoDate } from '~/utils/date/date-format.util'
-import OccurrenceCaptureDrawer from '../components/OccurrenceCaptureDrawer.vue'
-import {
-    useOfferingCategoriesQuery,
-    usePendingOccurrencesQuery,
-} from '../composables/useOccurrenceQueries'
+import { usePendingOccurrencesQuery } from '../composables/useOccurrenceQueries'
 import type { OccurrenceRecord, PendingGroup } from '../interfaces/occurrence.interface'
 
 defineOptions({ name: 'PendingOfferingsView' })
@@ -31,17 +26,11 @@ useHead({
 
 const authStore = useAuthStore()
 const pendingQuery = usePendingOccurrencesQuery()
-const categoriesQuery = useOfferingCategoriesQuery()
 
 const canRecord = computed(() => authStore.hasPermission(routePermissionCodes.financeRecord))
-const categories = computed(() =>
-    (categoriesQuery.data.value ?? []).filter((category) => category.isActive),
-)
 
 const selectedZone = ref<string>('')
 const selectedSector = ref<string>('')
-const activeGroup = ref<PendingGroup | null>(null)
-const drawerOpen = ref(false)
 
 const MS_PER_DAY = 86_400_000
 
@@ -130,14 +119,8 @@ function behindLabel(daysBehind: number) {
     return `hace ${daysBehind} días`
 }
 
-function openGroup(group: PendingGroup) {
-    activeGroup.value = group
-    drawerOpen.value = true
-}
-
-function closeDrawer() {
-    drawerOpen.value = false
-    activeGroup.value = null
+function openCapture(group: PendingGroup) {
+    return navigateTo(`/finanzas/ofrendas/registrar/${group.meetingId}`)
 }
 
 watch(selectedZone, () => {
@@ -177,14 +160,6 @@ const selectClass =
                     @click="navigateTo('/finanzas/ofrendas/historial')"
                 >
                     <History class="mr-2 size-4" /> Historial
-                </UiButton>
-                <UiButton
-                    v-if="canRecord"
-                    type="button"
-                    class="h-11 rounded px-5 text-xs uppercase tracking-wider"
-                    @click="navigateTo('/finanzas/ofrendas/registro-global')"
-                >
-                    <Table2 class="mr-2 size-4" /> Registro global
                 </UiButton>
             </div>
         </section>
@@ -350,7 +325,7 @@ const selectClass =
                                 v-if="canRecord"
                                 type="button"
                                 class="h-10 rounded px-4 text-xs uppercase tracking-wider"
-                                @click="openGroup(group)"
+                                @click="openCapture(group)"
                             >
                                 Registrar
                             </UiButton>
@@ -379,12 +354,5 @@ const selectClass =
                 </article>
             </div>
         </section>
-
-        <OccurrenceCaptureDrawer
-            :open="drawerOpen"
-            :group="activeGroup"
-            :categories="categories"
-            @close="closeDrawer"
-        />
     </main>
 </template>
