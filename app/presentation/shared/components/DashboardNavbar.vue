@@ -92,14 +92,24 @@ const navItems: DashboardMenuItem[] = [
         label: 'Finanzas',
         children: [
             {
-                label: 'Ofrendas',
+                label: 'Pendientes de registro',
                 href: '/finanzas/ofrendas',
                 requiredPermission: routePermissionCodes.financeView,
             },
             {
+                label: 'Mis reuniones',
+                href: '/finanzas/mis-reuniones',
+                requiredPermission: routePermissionCodes.financeRecord,
+            },
+            {
                 label: 'Registro global',
                 href: '/finanzas/ofrendas/registro-global',
-                requiredPermission: routePermissionCodes.financeManage,
+                requiredPermission: routePermissionCodes.financeRecord,
+            },
+            {
+                label: 'Historial de ofrendas',
+                href: '/finanzas/ofrendas/historial',
+                requiredPermission: routePermissionCodes.financeView,
             },
             { label: 'Gastos', href: '#' },
             {

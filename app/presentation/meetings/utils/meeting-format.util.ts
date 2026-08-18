@@ -1,11 +1,5 @@
-import {
-    frequencyOptions,
-    statusOptions,
-} from '~/presentation/meetings/constants/meeting.constants'
-import type {
-    MeetingFrequency,
-    MeetingStatus,
-} from '~/presentation/meetings/interfaces/meeting.interface'
+import { frequencyOptions } from '~/presentation/meetings/constants/meeting.constants'
+import type { MeetingFrequency } from '~/presentation/meetings/interfaces/meeting.interface'
 import {
     formatLocalIsoDate,
     formatTimeRange,
@@ -95,8 +89,4 @@ export function formatMeetingRecurrence(
     }
 
     return `El día ${Number(date.slice(8, 10))} de cada mes, de ${timeRange}, a partir del ${startDate}${end}.`
-}
-
-export function getMeetingStatusLabel(status: MeetingStatus) {
-    return getOptionLabel(statusOptions, status)
 }

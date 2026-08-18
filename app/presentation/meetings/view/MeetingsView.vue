@@ -42,19 +42,17 @@ import {
     useUpdateMeetingMutation,
 } from '~/presentation/meetings/composables/useMeetingMutations'
 import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
-import { statusOptions } from '~/presentation/meetings/constants/meeting.constants'
+import { activeOptions } from '~/presentation/meetings/constants/meeting.constants'
 import {
     formatMeetingDate,
     formatMeetingMonth,
     formatMeetingTimeRange,
     getMeetingDateDay,
     getMeetingFrequencyLabel,
-    getMeetingStatusLabel,
 } from '~/presentation/meetings/utils/meeting-format.util'
 import type {
     MeetingInput,
     MeetingRecord,
-    MeetingStatus,
 } from '~/presentation/meetings/interfaces/meeting.interface'
 import { formatInitials } from '~/utils/string/text-format.util'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
@@ -123,26 +121,17 @@ function isWithinNextDays(dateStr: string, days: number) {
 const stats = computed(() => {
     const total = meetings.value.length
     const upcoming = meetings.value.filter(
-        (m) => m.status === 'programada' && new Date(m.date) >= new Date(new Date().toDateString()),
+        (m) => m.isActive && new Date(m.date) >= new Date(new Date().toDateString()),
     ).length
-    const thisWeek = meetings.value.filter(
-        (m) => m.status !== 'cancelada' && isWithinNextDays(m.date, 7),
-    ).length
-    const completed = meetings.value.filter((m) => m.status === 'completada').length
-    return { total, upcoming, thisWeek, completed }
+    const thisWeek = meetings.value.filter((m) => m.isActive && isWithinNextDays(m.date, 7)).length
+    const inactive = meetings.value.filter((m) => !m.isActive).length
+    return { total, upcoming, thisWeek, inactive }
 })
 
-function statusTone(status: MeetingStatus) {
-    switch (status) {
-        case 'programada':
-            return 'border-primary/40 bg-primary/10 text-primary'
-        case 'en_curso':
-            return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500'
-        case 'completada':
-            return 'border-outline-variant bg-surface-container-high text-on-surface-variant'
-        case 'cancelada':
-            return 'border-destructive/40 bg-destructive/10 text-destructive'
-    }
+function activeTone(isActive: boolean) {
+    return isActive
+        ? 'border-primary/40 bg-primary/10 text-primary'
+        : 'border-outline-variant bg-surface-container-high text-on-surface-variant'
 }
 
 const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
@@ -194,13 +183,13 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         width: '120px',
     },
     {
-        key: 'status',
+        key: 'isActive',
         label: 'Estado',
         sortable: true,
         filterable: true,
         filterType: 'select',
-        filterOptions: statusOptions.map((s) => ({ value: s.value, label: s.label })),
-        accessor: (row) => row.status,
+        filterOptions: activeOptions.map((o) => ({ value: o.value, label: o.label })),
+        accessor: (row) => row.isActive,
         width: '140px',
     },
     {
@@ -253,8 +242,11 @@ function toInput(m: MeetingRecord): MeetingInput {
         latitude: m.latitude,
         longitude: m.longitude,
         frequency: m.frequency,
+        monthlyMode: m.monthlyMode,
+        weekOrdinal: m.weekOrdinal,
+        weekday: m.weekday,
         expectedAttendees: m.expectedAttendees,
-        status: m.status,
+        isActive: m.isActive,
         isPublic: m.isPublic,
         notes: m.notes,
         color: m.color,
@@ -266,7 +258,6 @@ async function duplicateMeeting(m: MeetingRecord) {
         await createMeetingMutation.mutateAsync({
             ...toInput(m),
             title: `${m.title} (copia)`,
-            status: 'programada',
         })
         toast.success('Reunión duplicada')
     } catch (error) {
@@ -274,10 +265,11 @@ async function duplicateMeeting(m: MeetingRecord) {
     }
 }
 
-async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
+// Desactivar una reunión detiene la generación de fechas pendientes.
+async function toggleActive(m: MeetingRecord) {
     try {
-        await updateMeetingMutation.mutateAsync({ id: m.id, input: { status: next } })
-        toast.success(`Estado: ${getMeetingStatusLabel(next)}`)
+        await updateMeetingMutation.mutateAsync({ id: m.id, input: { isActive: !m.isActive } })
+        toast.success(m.isActive ? 'Reunión desactivada' : 'Reunión activada')
     } catch (error) {
         toast.error(resolveHttpErrorMessage(error, 'No fue posible cambiar el estado'))
     }
@@ -353,12 +345,12 @@ async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
                 <p
                     class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
-                    Completadas
+                    Inactivas
                 </p>
                 <h3 class="mt-1 font-display text-3xl font-semibold text-on-surface">
-                    {{ stats.completed }}
+                    {{ stats.inactive }}
                 </h3>
-                <p class="mt-2 text-xs text-on-surface-variant">Cerradas con éxito</p>
+                <p class="mt-2 text-xs text-on-surface-variant">Ya no generan pendientes</p>
             </UiCard>
         </section>
 
@@ -493,12 +485,12 @@ async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
                     </div>
                 </template>
 
-                <template #cell-status="{ row }">
+                <template #cell-isActive="{ row }">
                     <span
                         class="inline-flex items-center rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider"
-                        :class="statusTone((row as MeetingRecord).status)"
+                        :class="activeTone((row as MeetingRecord).isActive)"
                     >
-                        {{ getMeetingStatusLabel((row as MeetingRecord).status) }}
+                        {{ (row as MeetingRecord).isActive ? 'Activa' : 'Inactiva' }}
                     </span>
                 </template>
 
@@ -531,15 +523,15 @@ async function changeStatus(m: MeetingRecord, next: MeetingStatus) {
                                 </DropdownMenuItem>
                                 <div class="my-1 h-px bg-outline-variant" />
                                 <DropdownMenuItem
-                                    v-for="s in statusOptions.filter(
-                                        (o) => o.value !== (row as MeetingRecord).status,
-                                    )"
-                                    :key="s.value"
                                     class="flex cursor-pointer items-center gap-3 px-4 py-2 text-[11px] text-on-surface-variant outline-none data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
                                     :disabled="isMutating"
-                                    @select="changeStatus(row as MeetingRecord, s.value)"
+                                    @select="toggleActive(row as MeetingRecord)"
                                 >
-                                    Marcar como {{ s.label.toLowerCase() }}
+                                    {{
+                                        (row as MeetingRecord).isActive
+                                            ? 'Desactivar reunión'
+                                            : 'Activar reunión'
+                                    }}
                                 </DropdownMenuItem>
                                 <div class="my-1 h-px bg-outline-variant" />
                                 <DropdownMenuItem

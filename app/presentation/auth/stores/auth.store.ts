@@ -9,16 +9,20 @@ import type { AuthUser } from '../interfaces/login-response.interface'
 import { SYSTEM_PERMISSION_CODE } from '../constants/permission.constants'
 
 const STORAGE_KEY = 'auth-user'
+// Solo el correo. La contraseña nunca se guarda en el navegador.
+const REMEMBERED_EMAIL_KEY = 'auth-remembered-email'
 
 interface AuthState {
     user: AuthUser | null
     sessionChecked: boolean
+    rememberedEmail: string | null
 }
 
 export const useAuthStore = defineStore('auth', {
     state: (): AuthState => ({
         user: readJsonStorage<AuthUser | null>(STORAGE_KEY, null),
         sessionChecked: false,
+        rememberedEmail: readJsonStorage<string | null>(REMEMBERED_EMAIL_KEY, null),
     }),
     getters: {
         displayName(state): string {
@@ -52,6 +56,21 @@ export const useAuthStore = defineStore('auth', {
             this.user = null
             this.sessionChecked = true
             removeStorageItem(STORAGE_KEY)
+        },
+        // El correo recordado sobrevive al cierre de sesión: ese es su propósito.
+        setRememberedEmail(email: string) {
+            const normalizedEmail = email.trim()
+            if (!normalizedEmail) {
+                this.clearRememberedEmail()
+                return
+            }
+
+            this.rememberedEmail = normalizedEmail
+            writeJsonStorage(REMEMBERED_EMAIL_KEY, normalizedEmail)
+        },
+        clearRememberedEmail() {
+            this.rememberedEmail = null
+            removeStorageItem(REMEMBERED_EMAIL_KEY)
         },
     },
 })

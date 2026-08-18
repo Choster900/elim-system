@@ -15,10 +15,7 @@ import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useUpdateMeetingMutation } from '~/presentation/meetings/composables/useMeetingMutations'
 import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
 import type { MeetingRecord } from '~/presentation/meetings/interfaces/meeting.interface'
-import {
-    getMeetingFrequencyLabel,
-    getMeetingStatusLabel,
-} from '~/presentation/meetings/utils/meeting-format.util'
+import { getMeetingFrequencyLabel } from '~/presentation/meetings/utils/meeting-format.util'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import AssignMeetingDrawer from '~/presentation/territories/components/AssignMeetingDrawer.vue'
 import TerritoryFormDrawer from '~/presentation/territories/components/TerritoryFormDrawer.vue'
@@ -626,7 +623,7 @@ const detail = computed(() => {
         { label: 'Hora', value: `${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}` },
         { label: 'Ubicación', value: m.location || '—' },
         { label: 'Frecuencia', value: getMeetingFrequencyLabel(m.frequency) },
-        { label: 'Estado', value: getMeetingStatusLabel(m.status) },
+        { label: 'Estado', value: m.isActive ? 'Activa' : 'Inactiva' },
         { label: 'Asistentes', value: String(m.expectedAttendees) },
         { label: 'Sector', value: parent.sector?.name ?? '—' },
         { label: 'Zona', value: parent.zone?.name ?? '—' },

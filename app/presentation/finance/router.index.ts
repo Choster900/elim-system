@@ -2,9 +2,10 @@ import { routePermissionCodes } from '~/presentation/auth/constants/permission.c
 
 export default [
     {
+        // La bandeja de pendientes es la entrada del módulo: la pregunta es «qué me falta».
         name: 'offerings',
         path: '/finanzas/ofrendas',
-        component: () => import('~/presentation/finance/view/OfferingsView.vue'),
+        component: () => import('~/presentation/finance/view/PendingOfferingsView.vue'),
         meta: {
             layout: 'dashboard',
             requiresAuth: true,
@@ -12,33 +13,44 @@ export default [
         },
     },
     {
-        name: 'offering-create',
-        path: '/finanzas/ofrendas/nueva',
-        component: () => import('~/presentation/finance/view/OfferingFormView.vue'),
+        name: 'offering-history',
+        path: '/finanzas/ofrendas/historial',
+        component: () => import('~/presentation/finance/view/OfferingHistoryView.vue'),
         meta: {
             layout: 'dashboard',
             requiresAuth: true,
-            requiredPermission: routePermissionCodes.financeManage,
+            requiredPermission: routePermissionCodes.financeView,
         },
     },
     {
-        name: 'offering-bulk-create',
+        name: 'offering-bulk-record',
         path: '/finanzas/ofrendas/registro-global',
-        component: () => import('~/presentation/finance/view/BulkOfferingFormView.vue'),
+        component: () => import('~/presentation/finance/view/BulkOfferingMatrixView.vue'),
         meta: {
             layout: 'dashboard',
             requiresAuth: true,
-            requiredPermission: routePermissionCodes.financeManage,
+            requiredPermission: routePermissionCodes.financeRecord,
         },
     },
     {
-        name: 'offering-edit',
-        path: '/finanzas/ofrendas/:id/editar',
-        component: () => import('~/presentation/finance/view/OfferingFormView.vue'),
+        name: 'meeting-offering-history',
+        path: '/finanzas/ofrendas/reunion/:id',
+        component: () => import('~/presentation/finance/view/MeetingOfferingHistoryView.vue'),
         meta: {
             layout: 'dashboard',
             requiresAuth: true,
-            requiredPermission: routePermissionCodes.financeManage,
+            requiredPermission: routePermissionCodes.financeView,
+        },
+    },
+    {
+        // Vista del líder: sus reuniones y nada más.
+        name: 'my-meetings',
+        path: '/finanzas/mis-reuniones',
+        component: () => import('~/presentation/finance/view/MyMeetingsView.vue'),
+        meta: {
+            layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.financeRecord,
         },
     },
 ]

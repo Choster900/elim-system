@@ -26,12 +26,14 @@ import { useMeetingQuery } from '~/presentation/meetings/composables/useMeetingQ
 import {
     frequencyOptions,
     meetingColorPalette,
-    statusOptions,
+    monthlyModeOptions,
+    weekdayOptions,
+    weekOrdinalOptions,
 } from '~/presentation/meetings/constants/meeting.constants'
 import type {
     MeetingFrequency,
     MeetingInput,
-    MeetingStatus,
+    MonthlyMode,
 } from '~/presentation/meetings/interfaces/meeting.interface'
 import { formatMeetingRecurrence } from '~/presentation/meetings/utils/meeting-format.util'
 import { EL_SALVADOR_CENTER } from '~/presentation/territories/constants/territory.constants'
@@ -110,8 +112,11 @@ interface MeetingForm {
     endTime: string
     location: string
     frequency: MeetingFrequency
+    monthlyMode: MonthlyMode
+    weekOrdinal: number
+    weekday: number
     expectedAttendees: number
-    status: MeetingStatus
+    isActive: boolean
     isPublic: boolean
     notes: string
     color: string
@@ -133,8 +138,11 @@ function emptyForm(): MeetingForm {
         endTime: '20:30',
         location: '',
         frequency: 'unica',
+        monthlyMode: 'dia_fijo',
+        weekOrdinal: 1,
+        weekday: new Date().getDay(),
         expectedAttendees: 0,
-        status: 'programada',
+        isActive: true,
         isPublic: false,
         notes: '',
         color: meetingColorPalette[0]!,
@@ -353,8 +361,11 @@ watch(
                 endTime: existing.endTime,
                 location: existing.location,
                 frequency: existing.frequency,
+                monthlyMode: existing.monthlyMode ?? 'dia_fijo',
+                weekOrdinal: existing.weekOrdinal ?? 1,
+                weekday: existing.weekday ?? new Date(`${existing.date}T00:00:00Z`).getUTCDay(),
                 expectedAttendees: existing.expectedAttendees,
-                status: existing.status,
+                isActive: existing.isActive,
                 isPublic: existing.isPublic,
                 notes: existing.notes ?? '',
                 color: existing.color,
@@ -489,8 +500,16 @@ function buildInput(): MeetingInput {
         latitude: form.position ? form.position[0] : null,
         longitude: form.position ? form.position[1] : null,
         frequency: form.frequency,
+        // Los campos del ordinal solo viajan cuando la recurrencia los usa.
+        monthlyMode: form.frequency === 'mensual' ? form.monthlyMode : null,
+        weekOrdinal:
+            form.frequency === 'mensual' && form.monthlyMode === 'ordinal'
+                ? form.weekOrdinal
+                : null,
+        weekday:
+            form.frequency === 'mensual' && form.monthlyMode === 'ordinal' ? form.weekday : null,
         expectedAttendees: form.expectedAttendees,
-        status: form.status,
+        isActive: form.isActive,
         isPublic: form.isPublic,
         notes: form.notes.trim() || null,
         color: form.color,
@@ -784,6 +803,57 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                         </div>
 
+                        <div
+                            v-if="form.frequency === 'mensual'"
+                            class="mt-4 grid gap-4 md:grid-cols-2"
+                        >
+                            <div>
+                                <label :class="labelClass">¿Cómo cae cada mes?</label>
+                                <div class="mt-1">
+                                    <UiSearchSelect
+                                        v-model="form.monthlyMode"
+                                        :options="monthlyModeOptions"
+                                        placeholder="Selecciona el modo"
+                                        :searchable="false"
+                                    />
+                                </div>
+                                <p class="mt-1 text-[11px] text-on-surface-variant">
+                                    {{
+                                        form.monthlyMode === 'ordinal'
+                                            ? 'Por ejemplo, el tercer sábado de cada mes.'
+                                            : 'Se repite el mismo número de día de la fecha de inicio.'
+                                    }}
+                                </p>
+                            </div>
+                            <div
+                                v-if="form.monthlyMode === 'ordinal'"
+                                class="grid grid-cols-2 gap-3"
+                            >
+                                <div>
+                                    <label :class="labelClass">Posición</label>
+                                    <div class="mt-1">
+                                        <UiSearchSelect
+                                            v-model="form.weekOrdinal"
+                                            :options="weekOrdinalOptions"
+                                            placeholder="Posición"
+                                            :searchable="false"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label :class="labelClass">Día</label>
+                                    <div class="mt-1">
+                                        <UiSearchSelect
+                                            v-model="form.weekday"
+                                            :options="weekdayOptions"
+                                            placeholder="Día"
+                                            :searchable="false"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mt-4 grid gap-4 md:grid-cols-2">
                             <div>
                                 <label :class="labelClass" for="meeting-location">Ubicación</label>
@@ -1024,14 +1094,19 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                             <div>
                                 <label :class="labelClass">Estado</label>
-                                <div class="mt-1">
-                                    <UiSearchSelect
-                                        v-model="form.status"
-                                        :options="statusOptions"
-                                        placeholder="Selecciona estado"
-                                        :searchable="false"
+                                <label
+                                    class="mt-3 flex cursor-pointer items-center gap-2.5 text-sm text-on-surface"
+                                >
+                                    <input
+                                        v-model="form.isActive"
+                                        type="checkbox"
+                                        class="size-4 accent-primary"
                                     />
-                                </div>
+                                    Activa
+                                </label>
+                                <p class="mt-1 text-[11px] text-on-surface-variant">
+                                    Una reunión inactiva deja de generar fechas pendientes.
+                                </p>
                             </div>
                             <div>
                                 <span :class="labelClass">Color de etiqueta</span>

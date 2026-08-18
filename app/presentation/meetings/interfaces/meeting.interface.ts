@@ -1,5 +1,5 @@
 export type MeetingFrequency = 'unica' | 'diaria' | 'semanal' | 'quincenal' | 'mensual'
-export type MeetingStatus = 'programada' | 'en_curso' | 'completada' | 'cancelada'
+export type MonthlyMode = 'dia_fijo' | 'ordinal'
 
 export interface MeetingRecord {
     id: number
@@ -18,8 +18,11 @@ export interface MeetingRecord {
     latitude: number | null
     longitude: number | null
     frequency: MeetingFrequency
+    monthlyMode: MonthlyMode | null
+    weekOrdinal: number | null
+    weekday: number | null
     expectedAttendees: number
-    status: MeetingStatus
+    isActive: boolean
     isPublic: boolean
     notes: string | null
     color: string
@@ -52,8 +55,11 @@ export interface MeetingInput {
     latitude: number | null
     longitude: number | null
     frequency: MeetingFrequency
+    monthlyMode: MonthlyMode | null
+    weekOrdinal: number | null
+    weekday: number | null
     expectedAttendees: number
-    status: MeetingStatus
+    isActive: boolean
     isPublic: boolean
     notes: string | null
     color: string
