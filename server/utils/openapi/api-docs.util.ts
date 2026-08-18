@@ -16,6 +16,10 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
             { name: 'Health', description: 'Health check' },
             { name: 'Auth', description: 'Authentication and token lifecycle' },
             { name: 'Permissions', description: 'Permission management' },
+            {
+                name: 'Offerings',
+                description: 'Meeting occurrences: pending dates, capture and history',
+            },
         ],
         paths: {
             '/api/healthcheck': {
@@ -252,6 +256,156 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     },
                 },
             },
+            '/api/offerings/pendientes': {
+                get: {
+                    tags: ['Offerings'],
+                    summary: 'Pending dates within the caller scope',
+                    description:
+                        'Materializes any missing past occurrence before responding, so a supervisor returning after weeks sees the whole backlog.',
+                    security: [{ BearerAuth: [] }],
+                    responses: {
+                        200: { description: 'Pending occurrences, oldest first' },
+                        403: { description: 'Requires finance.view' },
+                    },
+                },
+            },
+            '/api/offerings/ocurrencias': {
+                get: {
+                    tags: ['Offerings'],
+                    summary: 'List occurrences',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'status',
+                            in: 'query',
+                            schema: { type: 'string', enum: ['pendiente', 'registrada'] },
+                        },
+                        { name: 'meetingId', in: 'query', schema: { type: 'integer' } },
+                        { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+                        { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+                    ],
+                    responses: {
+                        200: { description: 'Occurrences within the caller scope' },
+                    },
+                },
+            },
+            '/api/offerings/ocurrencias/{id}': {
+                get: {
+                    tags: ['Offerings'],
+                    summary: 'Get one occurrence',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    responses: {
+                        200: { description: 'Occurrence detail' },
+                        403: { description: 'Outside the caller scope' },
+                        404: { description: 'Not found' },
+                    },
+                },
+                put: {
+                    tags: ['Offerings'],
+                    summary: 'Correct an already recorded occurrence',
+                    description:
+                        'Requires finance.manage. This is what stops a leader from rewriting their own entry.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/RecordOccurrenceDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Occurrence corrected' },
+                        403: { description: 'Requires finance.manage' },
+                        409: { description: 'The occurrence has not been recorded yet' },
+                    },
+                },
+            },
+            '/api/offerings/ocurrencias/{id}/registrar': {
+                post: {
+                    tags: ['Offerings'],
+                    summary: 'Record a pending occurrence',
+                    description: 'Requires finance.record. Recording is one-time only.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/RecordOccurrenceDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Occurrence recorded' },
+                        409: { description: 'Already recorded' },
+                    },
+                },
+            },
+            '/api/offerings/ocurrencias/registrar-lote': {
+                post: {
+                    tags: ['Offerings'],
+                    summary: 'Record several occurrences at once',
+                    description:
+                        'Partial capture is the normal case: send only the dates you actually have.',
+                    security: [{ BearerAuth: [] }],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        entries: {
+                                            type: 'array',
+                                            items: {
+                                                $ref: '#/components/schemas/BulkRecordEntryDto',
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Occurrences recorded' },
+                    },
+                },
+            },
+            '/api/meetings/{id}/ocurrencias': {
+                get: {
+                    tags: ['Offerings'],
+                    summary: 'Full history of one meeting',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    responses: {
+                        200: { description: 'Every date of the meeting, recorded or pending' },
+                    },
+                },
+            },
+            '/api/meetings/ocurrencias/sincronizar': {
+                post: {
+                    tags: ['Offerings'],
+                    summary: 'Force occurrence generation',
+                    description:
+                        'The pending query already syncs on read; this exists for bulk recurrence changes.',
+                    security: [{ BearerAuth: [] }],
+                    responses: {
+                        200: { description: 'Occurrences synchronized' },
+                        403: { description: 'Requires finance.manage' },
+                    },
+                },
+            },
         },
         components: {
             securitySchemes: {
@@ -262,6 +416,42 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
             },
             schemas: {
+                RecordOccurrenceDto: {
+                    type: 'object',
+                    required: ['attendance'],
+                    properties: {
+                        attendance: { type: 'integer', minimum: 0 },
+                        totalAmount: {
+                            type: 'number',
+                            nullable: true,
+                            description: 'Only used when there is no per-category breakdown.',
+                        },
+                        currency: { type: 'string', default: 'USD' },
+                        notes: { type: 'string', nullable: true },
+                        details: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                required: ['categoryId', 'amount'],
+                                properties: {
+                                    categoryId: { type: 'integer' },
+                                    amount: { type: 'number', minimum: 0 },
+                                    notes: { type: 'string', nullable: true },
+                                },
+                            },
+                        },
+                    },
+                },
+                BulkRecordEntryDto: {
+                    allOf: [
+                        { $ref: '#/components/schemas/RecordOccurrenceDto' },
+                        {
+                            type: 'object',
+                            required: ['occurrenceId'],
+                            properties: { occurrenceId: { type: 'integer' } },
+                        },
+                    ],
+                },
                 Permission: {
                     type: 'object',
                     properties: {
