@@ -106,7 +106,7 @@ model Member {
   baptismDate           DateTime?             @map("mie_fecha_bautismo") @db.Date
   district              String?               @map("mie_distrito") @db.VarChar(100)
   zone                  String?               @map("mie_zona") @db.VarChar(100)
-  sector                String?               @map("mie_sector") @db.VarChar(100)
+  sector                String?               @map("mie_sector") @db.VarChar(100) // TODO: o solo el mimebro se alia al sector o el sector al mimebro
   smallGroup            String?               @map("mie_grupo_pequeno") @db.VarChar(100)
   emergencyContactName  String?               @map("mie_contacto_emergencia") @db.VarChar(100)
   emergencyContactPhone String?               @map("mie_telefono_emergencia") @db.VarChar(100)
@@ -351,7 +351,7 @@ model District {
   name        String   @unique(map: "uk_dis_nombre") @map("dis_nombre") @db.VarChar(100)
   description String?  @map("dis_descripcion") @db.VarChar(300)
   leaderName  String?  @map("dis_nombre_lider") @db.VarChar(100)
-  leaderId    Int?     @map("dis_id_mie")
+  leaderId    Int?     @map("dis_id_mie") // TODO: no deberia de ir aqui
   color       String   @map("dis_color") @db.VarChar(100)
   polygon     Json     @map("dis_poligono") @db.JsonB
   isActive    Boolean  @default(true) @map("dis_activo")
@@ -372,7 +372,7 @@ model Zone {
   name        String            @map("zon_nombre") @db.VarChar(100)
   description String?           @map("zon_descripcion") @db.VarChar(300)
   leaderName  String?           @map("zon_nombre_lider") @db.VarChar(100)
-  leaderId    Int?              @map("zon_id_mie")
+  leaderId    Int?              @map("zon_id_mie") // TODO: no deberia de ir aqui
   color       String            @map("zon_color") @db.VarChar(100)
   polygon     Json              @map("zon_poligono") @db.JsonB
   isActive    Boolean           @default(true) @map("zon_activo")
