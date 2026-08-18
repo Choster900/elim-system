@@ -51,15 +51,6 @@ enum AccessRecordStatus {
   @@map("ere_estado_registro")
 }
 
-enum MeetingStatus {
-  SCHEDULED   @map("programada")
-  IN_PROGRESS @map("en_curso")
-  COMPLETED   @map("completada")
-  CANCELLED   @map("cancelada")
-
-  @@map("ere_estado_reunion")
-}
-
 enum MeetingFrequency {
   ONCE     @map("unica")
   DAILY    @map("diaria")
@@ -68,6 +59,26 @@ enum MeetingFrequency {
   MONTHLY  @map("mensual")
 
   @@map("fre_frecuencia_reunion")
+}
+
+/// Modo de cálculo de una recurrencia mensual.
+enum MonthlyMode {
+  /// Mismo número de día que la fecha ancla; se ajusta al último día en meses cortos.
+  FIXED_DAY @map("dia_fijo")
+  /// N-ésimo día de semana del mes, por ejemplo el tercer sábado.
+  ORDINAL   @map("ordinal")
+
+  @@map("mme_modo_mensual")
+}
+
+/// Estado de captura de una fecha concreta en que la reunión debía realizarse.
+enum OccurrenceStatus {
+  /// La fecha ya pasó y nadie registró asistencia ni ofrenda.
+  PENDING  @map("pendiente")
+  /// Asistencia y ofrenda capturadas.
+  RECORDED @map("registrada")
+
+  @@map("eoc_estado_ocurrencia")
 }
 
 model Member {
@@ -112,6 +123,7 @@ model Member {
   supervisedSectors     TerritorySector[]     @relation("SectorSupervisor")
   ledMeetings           Meeting[]             @relation("MeetingLeader")
   supervisedMeetings    Meeting[]             @relation("MeetingSupervisor")
+  ledOccurrences        MeetingOccurrence[]   @relation("OccurrenceLeader")
   coSupervisedMeetings  MeetingCoSupervisor[]
 
   @@index([status], map: "ix_mie_estado")
@@ -188,26 +200,27 @@ model MemberMinistry {
 }
 
 model User {
-  id                     Int               @id(map: "pk_usu_usuario") @default(autoincrement()) @map("usu_id")
-  memberId               Int?              @unique(map: "uk_usu_id_mie") @map("usu_id_mie")
-  email                  String            @unique(map: "uk_usu_correo") @map("usu_correo") @db.VarChar(100)
-  username               String?           @unique(map: "uk_usu_nombre_usuario") @map("usu_nombre_usuario") @db.VarChar(100)
-  passwordHash           String            @map("usu_resumen_clave") @db.VarChar(100)
-  isActive               Boolean           @default(true) @map("usu_activo")
-  status                 SystemUserStatus  @default(ACTIVE) @map("usu_estado")
-  twoFactorEnabled       Boolean           @default(false) @map("usu_doble_factor")
-  mustChangePassword     Boolean           @default(true) @map("usu_cambiar_clave")
-  lastAccessAt           DateTime?         @map("usu_fecha_ultimo_acceso")
-  createdAt              DateTime          @default(now()) @map("usu_fecha_creacion")
-  updatedAt              DateTime          @updatedAt @map("usu_fecha_modificacion")
-  member                 Member?           @relation(fields: [memberId], references: [id], onDelete: SetNull, map: "fk_usu_id_mie")
+  id                     Int                 @id(map: "pk_usu_usuario") @default(autoincrement()) @map("usu_id")
+  memberId               Int?                @unique(map: "uk_usu_id_mie") @map("usu_id_mie")
+  email                  String              @unique(map: "uk_usu_correo") @map("usu_correo") @db.VarChar(100)
+  username               String?             @unique(map: "uk_usu_nombre_usuario") @map("usu_nombre_usuario") @db.VarChar(100)
+  passwordHash           String              @map("usu_resumen_clave") @db.VarChar(100)
+  isActive               Boolean             @default(true) @map("usu_activo")
+  status                 SystemUserStatus    @default(ACTIVE) @map("usu_estado")
+  twoFactorEnabled       Boolean             @default(false) @map("usu_doble_factor")
+  mustChangePassword     Boolean             @default(true) @map("usu_cambiar_clave")
+  lastAccessAt           DateTime?           @map("usu_fecha_ultimo_acceso")
+  createdAt              DateTime            @default(now()) @map("usu_fecha_creacion")
+  updatedAt              DateTime            @updatedAt @map("usu_fecha_modificacion")
+  member                 Member?             @relation(fields: [memberId], references: [id], onDelete: SetNull, map: "fk_usu_id_mie")
   authSessions           AuthSession[]
-  userRoles              UserRole[]        @relation("UserRoleUser")
-  assignedUserRoles      UserRole[]        @relation("UserRoleAssigner")
-  grantedRolePermissions RolePermission[]  @relation("RolePermissionGranter")
-  recordedOfferings      MeetingOffering[] @relation("OfferingRecorder")
-  receivedInvitations    UserInvitation[]  @relation("UserInvitationRecipient")
-  createdInvitations     UserInvitation[]  @relation("UserInvitationCreator")
+  userRoles              UserRole[]          @relation("UserRoleUser")
+  assignedUserRoles      UserRole[]          @relation("UserRoleAssigner")
+  grantedRolePermissions RolePermission[]    @relation("RolePermissionGranter")
+  recordedOccurrences    MeetingOccurrence[] @relation("OccurrenceRecorder")
+  editedOccurrences      MeetingOccurrence[] @relation("OccurrenceEditor")
+  receivedInvitations    UserInvitation[]    @relation("UserInvitationRecipient")
+  createdInvitations     UserInvitation[]    @relation("UserInvitationCreator")
 
   @@index([isActive], map: "ix_usu_activo")
   @@index([status], map: "ix_usu_estado")
@@ -377,24 +390,25 @@ model Zone {
 }
 
 model TerritorySector {
-  id             Int       @id(map: "pk_sec_sector") @default(autoincrement()) @map("sec_id")
-  zoneId         Int       @map("sec_id_zon")
-  code           String    @unique(map: "uk_sec_codigo") @map("sec_codigo") @db.VarChar(100)
-  name           String    @map("sec_nombre") @db.VarChar(100)
-  description    String?   @map("sec_descripcion") @db.VarChar(300)
+  id             Int                 @id(map: "pk_sec_sector") @default(autoincrement()) @map("sec_id")
+  zoneId         Int                 @map("sec_id_zon")
+  code           String              @unique(map: "uk_sec_codigo") @map("sec_codigo") @db.VarChar(100)
+  name           String              @map("sec_nombre") @db.VarChar(100)
+  description    String?             @map("sec_descripcion") @db.VarChar(300)
   /// Nombre histórico conservado junto con la relación al catálogo de supervisores.
-  supervisorName String?   @map("sec_nombre_supervisor") @db.VarChar(100)
+  supervisorName String?             @map("sec_nombre_supervisor") @db.VarChar(100)
   /// Miembro con rol comunitario SUPERVISOR responsable de las reuniones del sector.
-  supervisorId   Int?      @map("sec_id_mie_supervisor")
-  color          String    @map("sec_color") @db.VarChar(100)
-  polygon        Json      @map("sec_poligono") @db.JsonB
-  isActive       Boolean   @default(true) @map("sec_activo")
-  createdAt      DateTime  @default(now()) @map("sec_fecha_creacion")
-  updatedAt      DateTime  @updatedAt @map("sec_fecha_modificacion")
-  zone           Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade, map: "fk_sec_id_zon")
-  supervisor     Member?   @relation("SectorSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull, map: "fk_sec_id_mie_supervisor")
-  members        Member[]  @relation("MemberTerritorySector")
+  supervisorId   Int?                @map("sec_id_mie_supervisor")
+  color          String              @map("sec_color") @db.VarChar(100)
+  polygon        Json                @map("sec_poligono") @db.JsonB
+  isActive       Boolean             @default(true) @map("sec_activo")
+  createdAt      DateTime            @default(now()) @map("sec_fecha_creacion")
+  updatedAt      DateTime            @updatedAt @map("sec_fecha_modificacion")
+  zone           Zone                @relation(fields: [zoneId], references: [id], onDelete: Cascade, map: "fk_sec_id_zon")
+  supervisor     Member?             @relation("SectorSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull, map: "fk_sec_id_mie_supervisor")
+  members        Member[]            @relation("MemberTerritorySector")
   meetings       Meeting[]
+  occurrences    MeetingOccurrence[]
 
   @@unique([zoneId, name], map: "uk_sec_zona_nombre")
   @@index([zoneId], map: "ix_sec_zona")
@@ -437,8 +451,15 @@ model Meeting {
   latitude          Decimal?              @map("reu_latitud") @db.Decimal(10, 7)
   longitude         Decimal?              @map("reu_longitud") @db.Decimal(10, 7)
   frequency         MeetingFrequency      @default(ONCE) @map("reu_frecuencia")
+  /// Modo de la recurrencia mensual; nulo para el resto de frecuencias.
+  monthlyMode       MonthlyMode?          @map("reu_modo_mensual")
+  /// Posición del día dentro del mes (1 a 4, o 5 para el último) en modo ordinal.
+  weekOrdinal       Int?                  @map("reu_ordinal_semana") @db.SmallInt
+  /// Día de la semana (0 domingo a 6 sábado) en modo ordinal.
+  weekday           Int?                  @map("reu_dia_semana") @db.SmallInt
   expectedAttendees Int                   @default(0) @map("reu_asistente_esperado")
-  status            MeetingStatus         @default(SCHEDULED) @map("reu_estado")
+  /// Una reunión inactiva deja de generar ocurrencias pendientes.
+  isActive          Boolean               @default(true) @map("reu_activa")
   isPublic          Boolean               @default(false) @map("reu_publica")
   notes             String?               @map("reu_nota") @db.VarChar(600)
   color             String                @map("reu_color") @db.VarChar(100)
@@ -449,14 +470,14 @@ model Meeting {
   leader            Member                @relation("MeetingLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_lider")
   supervisor        Member                @relation("MeetingSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_supervisor")
   coSupervisors     MeetingCoSupervisor[]
-  offerings         MeetingOffering[]
+  occurrences       MeetingOccurrence[]
 
   @@index([typeId], map: "ix_reu_tipo")
   @@index([sectorId], map: "ix_reu_sector")
   @@index([leaderId], map: "ix_reu_lider")
   @@index([supervisorId], map: "ix_reu_supervisor")
   @@index([date], map: "ix_reu_fecha")
-  @@index([status], map: "ix_reu_estado")
+  @@index([isActive], map: "ix_reu_activa")
   @@map("reu_reunion")
 }
 
@@ -488,41 +509,58 @@ model OfferingCategory {
   @@map("cof_categoria_ofrenda")
 }
 
-model MeetingOffering {
-  id           Int              @id(map: "pk_ofr_ofrenda") @default(autoincrement()) @map("ofr_id")
-  meetingId    Int              @map("ofr_id_reu")
-  date         DateTime         @map("ofr_fecha") @db.Date
-  attendance   Int              @default(0) @map("ofr_asistencia")
-  totalAmount  Decimal          @default(0) @map("ofr_monto_total") @db.Decimal(12, 2)
-  currency     String           @default("USD") @map("ofr_moneda") @db.VarChar(10)
-  notes        String?          @map("ofr_nota") @db.VarChar(600)
-  recordedById Int?             @map("ofr_id_usu_registro")
-  createdAt    DateTime         @default(now()) @map("ofr_fecha_creacion")
-  updatedAt    DateTime         @updatedAt @map("ofr_fecha_modificacion")
-  meeting      Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "fk_ofr_id_reu")
-  recordedBy   User?            @relation("OfferingRecorder", fields: [recordedById], references: [id], onDelete: SetNull, map: "fk_ofr_id_usu_registro")
+/// Cada fecha en que una reunión debía realizarse, con su captura de asistencia y ofrenda.
+model MeetingOccurrence {
+  id           Int              @id(map: "pk_reo_reunion_ocurrencia") @default(autoincrement()) @map("reo_id")
+  meetingId    Int              @map("reo_id_reu")
+  /// Fecha programada según la regla de recurrencia de la reunión.
+  date         DateTime         @map("reo_fecha") @db.Date
+  status       OccurrenceStatus @default(PENDING) @map("reo_estado")
+  /// Personas que asistieron; nulo mientras la ocurrencia siga pendiente.
+  attendance   Int?             @map("reo_asistencia")
+  /// Ofrenda total del día; nulo mientras la ocurrencia siga pendiente.
+  totalAmount  Decimal?         @map("reo_monto_total") @db.Decimal(12, 2)
+  currency     String           @default("USD") @map("reo_moneda") @db.VarChar(10)
+  notes        String?          @map("reo_nota") @db.VarChar(600)
+  /// Sector responsable en esa fecha; se conserva aunque la reunión cambie de sector.
+  sectorId     Int              @map("reo_id_sec")
+  /// Líder responsable en esa fecha; se conserva aunque la reunión cambie de líder.
+  leaderId     Int?             @map("reo_id_mie_lider")
+  /// Usuario que capturó los datos por primera vez.
+  recordedById Int?             @map("reo_id_usu_registro")
+  recordedAt   DateTime?        @map("reo_fecha_registro")
+  /// Último usuario que corrigió los datos ya capturados.
+  updatedById  Int?             @map("reo_id_usu_modificacion")
+  createdAt    DateTime         @default(now()) @map("reo_fecha_creacion")
+  updatedAt    DateTime         @updatedAt @map("reo_fecha_modificacion")
+  meeting      Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "fk_reo_id_reu")
+  sector       TerritorySector  @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reo_id_sec")
+  leader       Member?          @relation("OccurrenceLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reo_id_mie_lider")
+  recordedBy   User?            @relation("OccurrenceRecorder", fields: [recordedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_registro")
+  updatedBy    User?            @relation("OccurrenceEditor", fields: [updatedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_modificacion")
   details      OfferingDetail[]
 
-  @@unique([meetingId, date], map: "uk_ofr_reunion_fecha")
-  @@index([meetingId], map: "ix_ofr_reunion")
-  @@index([date], map: "ix_ofr_fecha")
-  @@index([recordedById], map: "ix_ofr_usuario_registro")
-  @@map("ofr_ofrenda")
+  @@unique([meetingId, date], map: "uk_reo_reunion_fecha")
+  @@index([status, date], map: "ix_reo_estado_fecha")
+  @@index([meetingId], map: "ix_reo_reunion")
+  @@index([sectorId], map: "ix_reo_sector")
+  @@index([recordedById], map: "ix_reo_usuario_registro")
+  @@map("reo_reunion_ocurrencia")
 }
 
 model OfferingDetail {
-  id         Int              @id(map: "pk_dof_detalle_ofrenda") @default(autoincrement()) @map("dof_id")
-  offeringId Int              @map("dof_id_ofr")
-  categoryId Int              @map("dof_id_cof")
-  amount     Decimal          @map("dof_monto") @db.Decimal(12, 2)
-  notes      String?          @map("dof_nota") @db.VarChar(300)
-  createdAt  DateTime         @default(now()) @map("dof_fecha_creacion")
-  updatedAt  DateTime         @updatedAt @map("dof_fecha_modificacion")
-  offering   MeetingOffering  @relation(fields: [offeringId], references: [id], onDelete: Cascade, map: "fk_dof_id_ofr")
-  category   OfferingCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict, map: "fk_dof_id_cof")
+  id           Int               @id(map: "pk_dof_detalle_ofrenda") @default(autoincrement()) @map("dof_id")
+  occurrenceId Int               @map("dof_id_reo")
+  categoryId   Int               @map("dof_id_cof")
+  amount       Decimal           @map("dof_monto") @db.Decimal(12, 2)
+  notes        String?           @map("dof_nota") @db.VarChar(300)
+  createdAt    DateTime          @default(now()) @map("dof_fecha_creacion")
+  updatedAt    DateTime          @updatedAt @map("dof_fecha_modificacion")
+  occurrence   MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade, map: "fk_dof_id_reo")
+  category     OfferingCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict, map: "fk_dof_id_cof")
 
-  @@unique([offeringId, categoryId], map: "uk_dof_ofrenda_categoria")
-  @@index([offeringId], map: "ix_dof_ofrenda")
+  @@unique([occurrenceId, categoryId], map: "uk_dof_ocurrencia_categoria")
+  @@index([occurrenceId], map: "ix_dof_ocurrencia")
   @@index([categoryId], map: "ix_dof_categoria")
   @@map("dof_detalle_ofrenda")
 }
