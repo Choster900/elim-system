@@ -24,10 +24,13 @@ const territories = {
     supervisors: ['territories', 'supervisors'] as const,
 }
 
-const offerings = {
-    all: ['offerings'] as const,
-    lists: ['offerings', 'list'] as const,
-    detail: (id: number) => ['offerings', 'detail', id] as const,
+const occurrences = {
+    all: ['occurrences'] as const,
+    pending: ['occurrences', 'pending'] as const,
+    lists: ['occurrences', 'list'] as const,
+    list: (filters: Record<string, unknown>) => ['occurrences', 'list', filters] as const,
+    detail: (id: number) => ['occurrences', 'detail', id] as const,
+    meetingHistory: (meetingId: number) => ['occurrences', 'meeting', meetingId] as const,
 }
 
 const dashboard = {
@@ -61,7 +64,7 @@ export const queryKeys = {
     meetingTypes,
     members,
     territories,
-    offerings,
+    occurrences,
     offeringCategories,
     dashboard,
     users,
