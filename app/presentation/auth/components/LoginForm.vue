@@ -31,6 +31,7 @@ const fieldErrors = reactive<Record<FieldKey, string | null>>({
 
 const formError = ref<string | null>(null)
 const showPassword = ref(false)
+const rememberEmail = ref(false)
 const toast = useAppToast()
 const loginMutation = useLoginMutation()
 const authStore = useAuthStore()
@@ -54,6 +55,15 @@ watch(
     },
     { immediate: true },
 )
+
+// El precargado ocurre después del montaje para que el HTML del servidor,
+// que no ve localStorage, coincida con el primer render del cliente.
+onMounted(() => {
+    if (hasInvitation.value || !authStore.rememberedEmail) return
+
+    rememberEmail.value = true
+    form.email = authStore.rememberedEmail
+})
 
 watch(
     () => form.email,
@@ -110,6 +120,12 @@ async function onSubmit() {
             ...(invitationToken.value ? { invitationToken: invitationToken.value } : {}),
         })
         authStore.setUser(result.user)
+
+        if (rememberEmail.value) {
+            authStore.setRememberedEmail(form.email)
+        } else {
+            authStore.clearRememberedEmail()
+        }
 
         if (result.user.mustChangePassword) {
             toast.info('Crea una contraseña propia para continuar')
@@ -251,6 +267,14 @@ async function onSubmit() {
                 {{ fieldErrors.password }}
             </p>
         </div>
+
+        <label
+            v-if="!hasInvitation"
+            class="flex cursor-pointer items-center gap-2.5 pt-1 text-on-surface-variant"
+        >
+            <input v-model="rememberEmail" type="checkbox" class="size-4 accent-primary" />
+            <span class="text-xs">Recordar mi correo en este dispositivo</span>
+        </label>
 
         <div
             v-if="formError"
