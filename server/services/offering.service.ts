@@ -1,113 +1,20 @@
 import { createError } from 'h3'
 import type {
     CreateOfferingCategoryDto,
-    CreateOfferingDto,
-    OfferingDetailDto,
     UpdateOfferingCategoryDto,
-    UpdateOfferingDto,
 } from '../dto/offering/offering.dto'
 import * as repo from '../repositories/offering.repository'
-import { getMeetingById } from './meeting.service'
 import { ApiErrorCode } from '../types/api-response.types'
 
-function resourceNotFound(resource: string): never {
+// La captura de ofrendas vive en meeting-occurrence.service.ts; aquí solo el catálogo.
+
+function resourceNotFound(): never {
     throw createError({
         statusCode: 404,
-        message: `El ${resource} solicitado no existe`,
+        message: 'La categoría de ofrenda solicitada no existe',
         data: { code: ApiErrorCode.RESOURCE_NOT_FOUND },
     })
 }
-
-function businessRule(message: string): never {
-    throw createError({
-        statusCode: 409,
-        message,
-        data: { code: ApiErrorCode.BUSINESS_RULE_ERROR },
-    })
-}
-
-function sectorForbidden(): never {
-    throw createError({
-        statusCode: 403,
-        message: 'No tienes acceso a las reuniones de este sector',
-        data: { code: ApiErrorCode.FORBIDDEN },
-    })
-}
-
-// Ensures the target meeting belongs to a sector the user is allowed to manage.
-function assertSectorAllowed(sectorId: number, allowedSectorIds?: number[]) {
-    if (allowedSectorIds === undefined) return
-    if (!allowedSectorIds.includes(sectorId)) sectorForbidden()
-}
-
-async function assertCategoriesExist(details: OfferingDetailDto[]) {
-    const ids = [...new Set(details.map((detail) => detail.categoryId))]
-    const existing = await repo.findOfferingCategoryIdsByIds(ids)
-    if (existing.length !== ids.length) {
-        businessRule('Una o más categorías de ofrenda no existen')
-    }
-}
-
-export function getOfferings(filters: { meetingId?: number; sectorIds?: number[] } = {}) {
-    return repo.findOfferings(filters)
-}
-
-export async function getOfferingById(id: number) {
-    const offering = await repo.findOfferingById(id)
-    if (!offering) resourceNotFound('ofrenda')
-    return offering
-}
-
-export async function createOffering(
-    dto: CreateOfferingDto,
-    recordedById: number | null,
-    allowedSectorIds?: number[],
-) {
-    const meeting = await getMeetingById(dto.meetingId)
-    assertSectorAllowed(meeting.sectorId, allowedSectorIds)
-    await assertCategoriesExist(dto.details)
-    return repo.createOffering(dto, recordedById)
-}
-
-export async function createOfferingsBulk(
-    dtos: CreateOfferingDto[],
-    recordedById: number | null,
-    allowedSectorIds?: number[],
-) {
-    const uniqueKeys = new Set<string>()
-    for (const dto of dtos) {
-        const key = `${dto.meetingId}:${dto.date}`
-        if (uniqueKeys.has(key)) {
-            businessRule('No puedes registrar dos veces la misma reunión en la misma fecha')
-        }
-        uniqueKeys.add(key)
-    }
-
-    const meetings = await Promise.all(dtos.map((dto) => getMeetingById(dto.meetingId)))
-    meetings.forEach((meeting) => assertSectorAllowed(meeting.sectorId, allowedSectorIds))
-    await assertCategoriesExist(dtos.flatMap((dto) => dto.details))
-    return repo.createOfferingsBulk(dtos, recordedById)
-}
-
-export async function updateOffering(
-    id: number,
-    dto: UpdateOfferingDto,
-    allowedSectorIds?: number[],
-) {
-    const existing = await getOfferingById(id)
-    const targetMeetingId = dto.meetingId ?? existing.meetingId
-    const meeting = await getMeetingById(targetMeetingId)
-    assertSectorAllowed(meeting.sectorId, allowedSectorIds)
-    if (dto.details !== undefined) await assertCategoriesExist(dto.details)
-    return repo.updateOffering(id, dto)
-}
-
-export async function deleteOffering(id: number) {
-    await getOfferingById(id)
-    return repo.deleteOffering(id)
-}
-
-// --- Offering categories ---
 
 export function getOfferingCategories() {
     return repo.findOfferingCategories()
@@ -115,7 +22,7 @@ export function getOfferingCategories() {
 
 export async function getOfferingCategoryById(id: number) {
     const category = await repo.findOfferingCategoryById(id)
-    if (!category) resourceNotFound('categoría de ofrenda')
+    if (!category) resourceNotFound()
     return category
 }
 
