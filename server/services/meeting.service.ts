@@ -3,10 +3,12 @@ import type {
     CreateMeetingDto,
     CreateMeetingTypeDto,
     MeetingFrequencyValue,
+    MonthlyModeValue,
     UpdateMeetingDto,
     UpdateMeetingTypeDto,
 } from '../dto/meeting/meeting.dto'
 import * as repo from '../repositories/meeting.repository'
+import { resyncMeetingOccurrences } from './meeting-occurrence.service'
 import { getSectorById } from './territory.service'
 import { ApiErrorCode } from '../types/api-response.types'
 
@@ -65,7 +67,30 @@ function assertValidRecurrence(
     })
 }
 
-export function getMeetings(filters: { sectorIds?: number[] } = {}) {
+/// El modo ordinal necesita saber qué día y en qué posición del mes cae la reunión.
+function assertValidMonthlyRule(
+    frequency: MeetingFrequencyValue,
+    monthlyMode: MonthlyModeValue | null,
+    weekOrdinal: number | null,
+    weekday: number | null,
+) {
+    if (frequency !== 'mensual' || monthlyMode !== 'ordinal') return
+    if (weekOrdinal !== null && weekday !== null) return
+
+    throw createError({
+        statusCode: 400,
+        message: 'Una recurrencia mensual por ordinal necesita el día de la semana y su posición',
+        data: {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            fields: {
+                weekOrdinal: ['Indica la posición dentro del mes'],
+                weekday: ['Indica el día de la semana'],
+            },
+        },
+    })
+}
+
+export function getMeetings(filters: { sectorIds?: number[]; meetingIds?: number[] } = {}) {
     return repo.findMeetings(filters)
 }
 
@@ -92,7 +117,17 @@ export async function createMeeting(dto: CreateMeetingDto) {
         normalizedDto.frequency,
         normalizedDto.recurrenceEndDate,
     )
-    return repo.createMeeting(normalizedDto)
+    assertValidMonthlyRule(
+        normalizedDto.frequency,
+        normalizedDto.monthlyMode,
+        normalizedDto.weekOrdinal,
+        normalizedDto.weekday,
+    )
+
+    const meeting = await repo.createMeeting(normalizedDto)
+    // Las fechas pasadas de una reunión recién creada ya son pendientes.
+    await resyncMeetingOccurrences(meeting.id)
+    return meeting
 }
 
 export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
@@ -112,7 +147,17 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
             ? normalizedDto.recurrenceEndDate
             : existing.recurrenceEndDate,
     )
-    return repo.updateMeeting(id, normalizedDto)
+    assertValidMonthlyRule(
+        frequency,
+        normalizedDto.monthlyMode !== undefined ? normalizedDto.monthlyMode : existing.monthlyMode,
+        normalizedDto.weekOrdinal !== undefined ? normalizedDto.weekOrdinal : existing.weekOrdinal,
+        normalizedDto.weekday !== undefined ? normalizedDto.weekday : existing.weekday,
+    )
+
+    const meeting = await repo.updateMeeting(id, normalizedDto)
+    // Cambiar la regla recalcula los pendientes; lo ya registrado no se toca.
+    await resyncMeetingOccurrences(id)
+    return meeting
 }
 
 export async function deleteMeeting(id: number) {
