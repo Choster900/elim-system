@@ -4,7 +4,7 @@ import type {
     CreateMeetingDto,
     CreateMeetingTypeDto,
     MeetingFrequencyValue,
-    MeetingStatusValue,
+    MonthlyModeValue,
     UpdateMeetingDto,
     UpdateMeetingTypeDto,
 } from '../dto/meeting/meeting.dto'
@@ -26,18 +26,14 @@ const FREQUENCY_FROM_DB: Record<string, MeetingFrequencyValue> = {
     MONTHLY: 'mensual',
 }
 
-const STATUS_TO_DB = {
-    programada: 'SCHEDULED',
-    en_curso: 'IN_PROGRESS',
-    completada: 'COMPLETED',
-    cancelada: 'CANCELLED',
+const MONTHLY_MODE_TO_DB = {
+    dia_fijo: 'FIXED_DAY',
+    ordinal: 'ORDINAL',
 } as const
 
-const STATUS_FROM_DB: Record<string, MeetingStatusValue> = {
-    SCHEDULED: 'programada',
-    IN_PROGRESS: 'en_curso',
-    COMPLETED: 'completada',
-    CANCELLED: 'cancelada',
+const MONTHLY_MODE_FROM_DB: Record<string, MonthlyModeValue> = {
+    FIXED_DAY: 'dia_fijo',
+    ORDINAL: 'ordinal',
 }
 
 const meetingInclude = {
@@ -97,8 +93,13 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         latitude: meeting.latitude === null ? null : Number(meeting.latitude),
         longitude: meeting.longitude === null ? null : Number(meeting.longitude),
         frequency: FREQUENCY_FROM_DB[meeting.frequency] ?? 'unica',
+        monthlyMode: meeting.monthlyMode
+            ? (MONTHLY_MODE_FROM_DB[meeting.monthlyMode] ?? null)
+            : null,
+        weekOrdinal: meeting.weekOrdinal,
+        weekday: meeting.weekday,
         expectedAttendees: meeting.expectedAttendees,
-        status: STATUS_FROM_DB[meeting.status] ?? 'programada',
+        isActive: meeting.isActive,
         isPublic: meeting.isPublic,
         notes: meeting.notes,
         color: meeting.color,
@@ -130,19 +131,27 @@ function buildScalarData(dto: UpdateMeetingDto) {
     if (dto.latitude !== undefined) data.latitude = dto.latitude
     if (dto.longitude !== undefined) data.longitude = dto.longitude
     if (dto.frequency !== undefined) data.frequency = FREQUENCY_TO_DB[dto.frequency]
+    if (dto.monthlyMode !== undefined) {
+        data.monthlyMode = dto.monthlyMode ? MONTHLY_MODE_TO_DB[dto.monthlyMode] : null
+    }
+    if (dto.weekOrdinal !== undefined) data.weekOrdinal = dto.weekOrdinal
+    if (dto.weekday !== undefined) data.weekday = dto.weekday
     if (dto.expectedAttendees !== undefined) data.expectedAttendees = dto.expectedAttendees
-    if (dto.status !== undefined) data.status = STATUS_TO_DB[dto.status]
+    if (dto.isActive !== undefined) data.isActive = dto.isActive
     if (dto.isPublic !== undefined) data.isPublic = dto.isPublic
     if (dto.notes !== undefined) data.notes = dto.notes
     if (dto.color !== undefined) data.color = dto.color
     return data
 }
 
-export async function findMeetings(filters: { sectorIds?: number[] } = {}) {
+export async function findMeetings(filters: { sectorIds?: number[]; meetingIds?: number[] } = {}) {
+    // Sector y reunión se suman: un líder ve las suyas aunque no supervise el sector.
+    const scopeClauses: Prisma.MeetingWhereInput[] = []
+    if (filters.sectorIds) scopeClauses.push({ sectorId: { in: filters.sectorIds } })
+    if (filters.meetingIds) scopeClauses.push({ id: { in: filters.meetingIds } })
+
     const meetings = await prisma.meeting.findMany({
-        where: {
-            ...(filters.sectorIds ? { sectorId: { in: filters.sectorIds } } : {}),
-        },
+        where: scopeClauses.length > 0 ? { OR: scopeClauses } : {},
         include: meetingInclude,
         orderBy: [{ date: 'desc' }, { startTime: 'asc' }],
     })
@@ -228,8 +237,11 @@ export async function createMeeting(dto: CreateMeetingDto) {
                 latitude: dto.latitude,
                 longitude: dto.longitude,
                 frequency: FREQUENCY_TO_DB[dto.frequency],
+                monthlyMode: dto.monthlyMode ? MONTHLY_MODE_TO_DB[dto.monthlyMode] : null,
+                weekOrdinal: dto.weekOrdinal,
+                weekday: dto.weekday,
                 expectedAttendees: dto.expectedAttendees,
-                status: STATUS_TO_DB[dto.status],
+                isActive: dto.isActive,
                 isPublic: dto.isPublic,
                 notes: dto.notes,
                 color: dto.color,

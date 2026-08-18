@@ -40,6 +40,21 @@ export function findSupervisedSectorIdsByUserId(userId: number) {
         .then((sectors) => sectors.map((sector) => sector.id))
 }
 
+/// Reuniones que el usuario conduce como líder o acompaña como co-supervisor.
+export function findMeetingIdsByLeaderUserId(userId: number) {
+    return prisma.meeting
+        .findMany({
+            where: {
+                OR: [
+                    { leader: { user: { id: userId } } },
+                    { coSupervisors: { some: { member: { user: { id: userId } } } } },
+                ],
+            },
+            select: { id: true },
+        })
+        .then((meetings) => meetings.map((meeting) => meeting.id))
+}
+
 interface CreateAuthSessionInput {
     tokenId: string
     userId: number
