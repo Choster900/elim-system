@@ -15,6 +15,10 @@ import {
 
 type Value = string | number
 
+// radix-vue tipa `filterFunction` como `ArrayOrWrapped<T>`, un condicional distributivo
+// que con `T = string | number` se expande a `string[] | number[]` (arrays homogéneos).
+type ValueList = string[] | number[]
+
 const props = withDefaults(
     defineProps<{
         modelValue: Value | Value[] | null
@@ -96,18 +100,22 @@ function displayValue(value: Value) {
     return option ? getLabel(option) : ''
 }
 
-function filterValues(values: Value[], term: string) {
+function matchesTerm(value: Value, normalizedTerm: string) {
+    const option = props.options.find((item) => getValue(item) === value)
+    if (!option) return false
+
+    return normalizeSearch(
+        [getLabel(option), getDescription(option)].filter(Boolean).join(' '),
+    ).includes(normalizedTerm)
+}
+
+function filterValues(values: ValueList, term: string): ValueList {
     const normalizedTerm = normalizeSearch(term.trim())
     if (!normalizedTerm) return values
 
-    return values.filter((value) => {
-        const option = props.options.find((item) => getValue(item) === value)
-        if (!option) return false
-
-        return normalizeSearch(
-            [getLabel(option), getDescription(option)].filter(Boolean).join(' '),
-        ).includes(normalizedTerm)
-    })
+    // El filtrado preserva el tipo original de cada elemento; el cast solo reconcilia
+    // `(string | number)[]` con la unión de arrays homogéneos que espera radix-vue.
+    return (values as Value[]).filter((value) => matchesTerm(value, normalizedTerm)) as ValueList
 }
 
 const selectedOptions = computed<T[]>(() => {
