@@ -279,6 +279,12 @@ export async function getDashboardSummary(
                 expectedAttendance > 0 ? round2((currentAttendance / expectedAttendance) * 100) : 0,
             offeringPerAttendee:
                 currentAttendance > 0 ? round2(currentAmount / currentAttendance) : 0,
+            // Disciplina de captura: qué porcentaje de las fechas esperadas fue registrado.
+            recordingCoverage:
+                data.expectedOccurrences > 0
+                    ? round2((data.offerings.length / data.expectedOccurrences) * 100)
+                    : 0,
+            pendingOccurrences: Math.max(0, data.expectedOccurrences - data.offerings.length),
         },
         trends: createTrend(currentOfferings, currentStart, query.periodDays),
         categoryDistribution: buildCategoryDistribution(currentOfferings),
