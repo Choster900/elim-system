@@ -8,7 +8,14 @@ import type {
     UpdateSectorDto,
     UpdateZoneDto,
 } from '../dto/territory/territory.dto'
+import { nextSequentialCode } from '../utils/code/entity-code.util'
 import { mapPrismaError } from '../utils/database/prisma-error.util'
+
+/// Colisión de único o conflicto de serialización: el correlativo se recalcula.
+function isRetryableCodeError(error: unknown) {
+    if (!error || typeof error !== 'object' || !('code' in error)) return false
+    return error.code === 'P2002' || error.code === 'P2034'
+}
 
 export async function findTerritoryHierarchy() {
     const [districts, zones, sectors] = await prisma.$transaction([
@@ -43,11 +50,37 @@ export function findDistrictById(id: number) {
     return prisma.district.findUnique({ where: { id } })
 }
 
-export function createDistrict(dto: CreateDistrictDto) {
+export async function createDistrict(dto: CreateDistrictDto) {
     const { polygon, ...data } = dto
-    return prisma.district
-        .create({ data: { ...data, polygon: polygon as Prisma.InputJsonValue } })
-        .catch(mapPrismaError)
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            return await prisma.$transaction(
+                async (transaction) => {
+                    const codes = await transaction.district.findMany({
+                        where: { code: { startsWith: 'DIS-' } },
+                        select: { code: true },
+                    })
+                    return transaction.district.create({
+                        data: {
+                            ...data,
+                            code: nextSequentialCode(
+                                'DIS',
+                                codes.map((item) => item.code),
+                            ),
+                            polygon: polygon as Prisma.InputJsonValue,
+                        },
+                    })
+                },
+                { isolationLevel: 'Serializable' },
+            )
+        } catch (error) {
+            if (attempt < 2 && isRetryableCodeError(error)) continue
+            mapPrismaError(error)
+        }
+    }
+
+    throw new Error('No fue posible generar un código único para el distrito')
 }
 
 export function updateDistrict(id: number, dto: UpdateDistrictDto) {
@@ -71,11 +104,37 @@ export function findZoneById(id: number) {
     return prisma.zone.findUnique({ where: { id } })
 }
 
-export function createZone(dto: CreateZoneDto) {
+export async function createZone(dto: CreateZoneDto) {
     const { polygon, ...data } = dto
-    return prisma.zone
-        .create({ data: { ...data, polygon: polygon as Prisma.InputJsonValue } })
-        .catch(mapPrismaError)
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            return await prisma.$transaction(
+                async (transaction) => {
+                    const codes = await transaction.zone.findMany({
+                        where: { code: { startsWith: 'ZON-' } },
+                        select: { code: true },
+                    })
+                    return transaction.zone.create({
+                        data: {
+                            ...data,
+                            code: nextSequentialCode(
+                                'ZON',
+                                codes.map((item) => item.code),
+                            ),
+                            polygon: polygon as Prisma.InputJsonValue,
+                        },
+                    })
+                },
+                { isolationLevel: 'Serializable' },
+            )
+        } catch (error) {
+            if (attempt < 2 && isRetryableCodeError(error)) continue
+            mapPrismaError(error)
+        }
+    }
+
+    throw new Error('No fue posible generar un código único para la zona')
 }
 
 export function updateZone(id: number, dto: UpdateZoneDto) {
@@ -99,19 +158,6 @@ export function findSectorById(id: number) {
     return prisma.territorySector.findUnique({ where: { id }, include: { supervisor: true } })
 }
 
-function nextSectorCode(codes: string[]) {
-    const maximum = codes.reduce((current, code) => {
-        const match = /^SEC-(\d+)$/.exec(code)
-        return match ? Math.max(current, Number(match[1])) : current
-    }, 0)
-    return `SEC-${String(maximum + 1).padStart(3, '0')}`
-}
-
-function isRetryableCodeError(error: unknown) {
-    if (!error || typeof error !== 'object' || !('code' in error)) return false
-    return error.code === 'P2002' || error.code === 'P2034'
-}
-
 export async function createSector(dto: CreateSectorDto, supervisorName: string) {
     const { polygon, supervisorId, ...fields } = dto
 
@@ -126,7 +172,10 @@ export async function createSector(dto: CreateSectorDto, supervisorName: string)
                     return transaction.territorySector.create({
                         data: {
                             ...fields,
-                            code: nextSectorCode(codes.map((item) => item.code)),
+                            code: nextSequentialCode(
+                                'SEC',
+                                codes.map((item) => item.code),
+                            ),
                             polygon: polygon as Prisma.InputJsonValue,
                             supervisor: { connect: { id: supervisorId } },
                             supervisorName,

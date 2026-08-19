@@ -1,5 +1,6 @@
 // Catálogo de categorías de ofrenda y ofrendas de ejemplo por reunión.
-// Cada ofrenda documenta la asistencia real y el desglose de lo recogido por categoría.
+// Cada ofrenda documenta la asistencia desglosada por tipo de persona y lo recogido
+// por categoría. El total de asistencia se calcula del desglose, como en la captura.
 
 export const OFFERING_CATEGORY_SEEDS = [
     { code: 'COF-DIEZMOS', name: 'Diezmos', sortOrder: 1, description: 'Diezmos de los miembros.' },
@@ -25,11 +26,11 @@ export const OFFERING_CATEGORY_SEEDS = [
 ]
 
 // Ofrendas de ejemplo, referenciadas por el título de la reunión.
-// details: [{ categoryCode, amount }]
+// details: [{ categoryCode, amount }] · attendance: { typeCode: cantidad }
 export const OFFERING_SEEDS = [
     {
         meetingTitle: 'Servicio Dominical de Adoración',
-        attendance: 298,
+        attendance: { HERMANOS: 180, AMIGOS: 42, NUEVOS: 11, NINOS: 45, JOVENES: 20 },
         notes: 'Servicio con alta asistencia.',
         details: [
             { categoryCode: 'COF-DIEZMOS', amount: 1850.0 },
@@ -39,7 +40,7 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Célula del Buen Pastor',
-        attendance: 16,
+        attendance: { HERMANOS: 9, AMIGOS: 4, NUEVOS: 1, NINOS: 2 },
         notes: '',
         details: [
             { categoryCode: 'COF-OFRENDA', amount: 45.75 },
@@ -48,13 +49,13 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Reunión de Líderes de Sector',
-        attendance: 20,
+        attendance: { HERMANOS: 20 },
         notes: 'Ofrenda de gratitud de los líderes.',
         details: [{ categoryCode: 'COF-OFRENDA', amount: 120.0 }],
     },
     {
         meetingTitle: 'Capacitación de Voluntarios',
-        attendance: 17,
+        attendance: { HERMANOS: 12, JOVENES: 5 },
         notes: '',
         details: [
             { categoryCode: 'COF-OFRENDA', amount: 35.0 },
@@ -63,7 +64,7 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Estudio Bíblico de Jueves',
-        attendance: 42,
+        attendance: { HERMANOS: 28, AMIGOS: 6, NUEVOS: 2, NINOS: 4, JOVENES: 2 },
         notes: '',
         details: [
             { categoryCode: 'COF-DIEZMOS', amount: 260.0 },
@@ -72,7 +73,7 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Servicio de Sanidad y Liberación',
-        attendance: 165,
+        attendance: { HERMANOS: 96, AMIGOS: 24, NUEVOS: 14, NINOS: 18, JOVENES: 13 },
         notes: 'Noche de gratitud, ofrenda especial de primicias.',
         details: [
             { categoryCode: 'COF-DIEZMOS', amount: 920.0 },
@@ -82,6 +83,10 @@ export const OFFERING_SEEDS = [
         ],
     },
 ]
+
+function attendanceTotal(attendance) {
+    return Object.values(attendance).reduce((sum, quantity) => sum + quantity, 0)
+}
 
 export async function seedOfferingCategories(prisma) {
     const categories = await prisma.$transaction(
@@ -109,7 +114,7 @@ function round2(value) {
 }
 
 // Idempotente: una ocurrencia por (reunión, fecha). Si ya existe registrada, se omite.
-export async function seedOfferings(prisma, meetings, categories, recordedById) {
+export async function seedOfferings(prisma, meetings, categories, attendanceTypes, recordedById) {
     let created = 0
 
     for (const seed of OFFERING_SEEDS) {
@@ -130,16 +135,23 @@ export async function seedOfferings(prisma, meetings, categories, recordedById) 
 
         const totalAmount = round2(details.reduce((sum, detail) => sum + detail.amount, 0))
 
+        const attendanceDetails = Object.entries(seed.attendance).map(([typeCode, quantity]) => {
+            const type = attendanceTypes.get(typeCode)
+            if (!type) throw new Error(`Seed attendance type not found: ${typeCode}`)
+            return { typeId: type.id, quantity }
+        })
+
         // La ocurrencia puede existir ya como pendiente si la generación corrió antes.
         const captureData = {
             status: 'RECORDED',
-            attendance: seed.attendance,
+            attendance: attendanceTotal(seed.attendance),
             totalAmount,
             currency: 'USD',
             notes: seed.notes || null,
             recordedById: recordedById ?? null,
             recordedAt: new Date(),
             details: { deleteMany: {}, create: details },
+            attendanceDetails: { deleteMany: {}, create: attendanceDetails },
         }
 
         if (existing) {
@@ -153,6 +165,7 @@ export async function seedOfferings(prisma, meetings, categories, recordedById) 
                     leaderId: meeting.leaderId,
                     ...captureData,
                     details: { create: details },
+                    attendanceDetails: { create: attendanceDetails },
                 },
             })
         }

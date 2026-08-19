@@ -172,7 +172,7 @@ const visibleNavItems = computed(() =>
 
 <template>
     <nav class="fixed inset-x-0 top-0 z-50 border-b border-outline-variant bg-surface">
-        <div class="mx-auto flex max-w-system items-center justify-between px-6 py-4 lg:px-10">
+        <div class="mx-auto flex max-w-system items-center justify-between px-6 py-2.5 lg:px-10">
             <div class="flex items-center gap-10">
                 <AppBrand to="/dashboard" />
 

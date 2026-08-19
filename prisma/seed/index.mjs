@@ -8,6 +8,7 @@ import { seedMembers } from './seeders/member.seeder.mjs'
 import { seedTerritories } from './seeders/territory.seeder.mjs'
 import { seedMeetingTypes, seedMeetings } from './seeders/meeting.seeder.mjs'
 import { seedOfferingCategories, seedOfferings } from './seeders/offering.seeder.mjs'
+import { seedAttendanceTypes } from './seeders/attendance.seeder.mjs'
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
@@ -29,7 +30,14 @@ async function seed() {
     const meetingTypes = await seedMeetingTypes(prisma)
     const meetings = await seedMeetings(prisma, meetingTypes, sectors, members)
     const offeringCategories = await seedOfferingCategories(prisma)
-    const offerings = await seedOfferings(prisma, meetings, offeringCategories, adminUser.id)
+    const attendanceTypes = await seedAttendanceTypes(prisma)
+    const offerings = await seedOfferings(
+        prisma,
+        meetings,
+        offeringCategories,
+        attendanceTypes,
+        adminUser.id,
+    )
 
     return {
         permissions: permissions.length,
@@ -37,6 +45,7 @@ async function seed() {
         members: members.size,
         meetings: meetings.size,
         offeringCategories: offeringCategories.size,
+        attendanceTypes: attendanceTypes.size,
         offerings,
     }
 }
@@ -47,7 +56,8 @@ seed()
         console.log(
             `Seed completed: ${summary.roles} roles, ${summary.permissions} permissions, ` +
                 `${summary.members} members, ${summary.meetings} meetings, ` +
-                `${summary.offeringCategories} offering categories and ${summary.offerings} offerings synchronized.`,
+                `${summary.offeringCategories} offering categories, ` +
+                `${summary.attendanceTypes} attendance types and ${summary.offerings} offerings synchronized.`,
         )
     })
     .catch(async (error) => {

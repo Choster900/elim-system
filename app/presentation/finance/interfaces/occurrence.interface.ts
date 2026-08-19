@@ -1,5 +1,26 @@
 export type OccurrenceStatus = 'pendiente' | 'registrada'
 
+export interface AttendanceTypeOption {
+    id: number
+    code: string
+    name: string
+    description: string | null
+    sortOrder: number
+    isActive: boolean
+}
+
+export interface AttendanceDetail {
+    id: number
+    typeId: number
+    typeName: string | null
+    quantity: number
+}
+
+export interface AttendanceDetailInput {
+    typeId: number
+    quantity: number
+}
+
 export interface OccurrenceDetail {
     id: number
     categoryId: number
@@ -13,12 +34,15 @@ export interface OccurrenceRecord {
     id: number
     meetingId: number
     meetingTitle: string
+    /// Código autogenerado de la reunión: SECNNN-REUNNNN-AAAAMMDD.
+    meetingCode: string
     meetingTypeName: string | null
     meetingColor: string
     startTime: string
     date: string
     status: OccurrenceStatus
     attendance: number | null
+    attendanceDetails: AttendanceDetail[]
     totalAmount: number | null
     currency: string
     notes: string | null
@@ -48,6 +72,7 @@ export interface OccurrenceDetailInput {
 
 export interface RecordOccurrenceInput {
     attendance: number
+    attendanceDetails: AttendanceDetailInput[]
     totalAmount: number | null
     currency: string
     notes: string | null
@@ -69,6 +94,7 @@ export interface OccurrenceFilters {
 export interface PendingGroup {
     meetingId: number
     meetingTitle: string
+    meetingCode: string
     meetingColor: string
     meetingTypeName: string | null
     sectorName: string

@@ -43,7 +43,6 @@ const form = reactive({
 })
 const tempPolygon = ref<LatLng[]>([])
 const nameError = ref(false)
-const codeError = ref(false)
 const supervisorError = ref(false)
 const polygonError = ref(false)
 const isLocating = ref(false)
@@ -71,7 +70,6 @@ function defaultBox(center: LatLng): LatLng[] {
 
 function resetForm() {
     nameError.value = false
-    codeError.value = false
     supervisorError.value = false
     polygonError.value = false
     isLocating.value = false
@@ -281,10 +279,6 @@ function save() {
         nameError.value = true
         return
     }
-    if (props.level !== 'sector' && !form.code.trim()) {
-        codeError.value = true
-        return
-    }
     if (props.level === 'sector' && !form.supervisorId) {
         supervisorError.value = true
         return
@@ -296,7 +290,6 @@ function save() {
     const polygon: Polygon = tempPolygon.value.map((p) => [...p] as LatLng)
     emit('save', {
         name: form.name.trim(),
-        code: form.code.trim().toUpperCase(),
         leaderName: form.leaderName.trim(),
         description: form.description.trim(),
         color: form.color,
@@ -308,6 +301,11 @@ function save() {
 
 const inputClass =
     'w-full rounded-lg border border-outline-variant bg-surface px-3 py-2.5 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:border-primary'
+const codePrefix = computed(() => {
+    if (props.level === 'district') return 'DIS-###'
+    if (props.level === 'zone') return 'ZON-###'
+    return 'SEC-###'
+})
 const labelClass =
     'mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
 </script>
@@ -369,25 +367,19 @@ const labelClass =
 
                 <div v-if="level !== 'sector'" class="mb-4 grid grid-cols-2 gap-3">
                     <div>
-                        <label
+                        <span
                             class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            for="tf-code"
-                            >Código *</label
+                            >Código</span
                         >
-                        <input
-                            id="tf-code"
-                            v-model="form.code"
-                            type="text"
-                            placeholder="Ej. DM"
-                            :class="[
-                                inputClass,
-                                codeError ? 'border-destructive focus:border-destructive' : '',
-                            ]"
-                            @input="codeError = false"
-                        />
-                        <p v-if="codeError" class="mt-1 text-xs text-destructive">
-                            El código es obligatorio.
-                        </p>
+                        <div
+                            class="rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface"
+                        >
+                            {{
+                                mode === 'edit' && form.code
+                                    ? form.code
+                                    : `Se generará automáticamente (${codePrefix})`
+                            }}
+                        </div>
                     </div>
                     <div>
                         <label
@@ -414,7 +406,7 @@ const labelClass =
                             {{
                                 mode === 'edit' && form.code
                                     ? form.code
-                                    : 'Se generará automáticamente al guardar (SEC-###)'
+                                    : `Se generará automáticamente (${codePrefix})`
                             }}
                         </div>
                     </div>

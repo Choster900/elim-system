@@ -289,6 +289,8 @@ export async function seedMeetings(prisma, types, sectors, members) {
         if (existing) {
             meeting = await prisma.meeting.update({ where: { id: existing.id }, data: baseData })
         } else {
+            // El código necesita el id, que aún no existe: se crea con un valor
+            // temporal irrepetible y se reemplaza enseguida, igual que hace la API.
             const coSupervisorIds = seed.coSupervisorCodes
                 .map((code) => members.get(code))
                 .filter(Boolean)
@@ -297,11 +299,21 @@ export async function seedMeetings(prisma, types, sectors, members) {
             meeting = await prisma.meeting.create({
                 data: {
                     ...baseData,
+                    code: `TMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                     ...(coSupervisorIds.length
                         ? { coSupervisors: { create: coSupervisorIds } }
                         : {}),
                 },
             })
+        }
+
+        // Mismo formato que server/utils/code/entity-code.util.ts.
+        const code = `${sector.code.toUpperCase().replace(/[^A-Z0-9]/g, '')}-REU${String(
+            meeting.id,
+        ).padStart(4, '0')}-${seed.date.replace(/-/g, '')}`
+
+        if (meeting.code !== code) {
+            meeting = await prisma.meeting.update({ where: { id: meeting.id }, data: { code } })
         }
 
         result.set(seed.title, meeting)

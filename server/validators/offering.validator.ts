@@ -16,8 +16,14 @@ const detailSchema = Joi.object({
     notes: Joi.string().trim().max(300).allow('', null).default(null),
 })
 
+const attendanceDetailSchema = Joi.object({
+    typeId: Joi.number().integer().positive().required(),
+    quantity: Joi.number().integer().min(0).max(1000000).required(),
+})
+
 const captureFields = {
     attendance: Joi.number().integer().min(0).max(1000000),
+    attendanceDetails: Joi.array().items(attendanceDetailSchema),
     // Solo se usa cuando no hay desglose por categoría.
     totalAmount: Joi.number().min(0).precision(2).allow(null),
     currency: Joi.string().trim().uppercase().min(3).max(10),
@@ -26,7 +32,8 @@ const captureFields = {
 }
 
 export const recordOccurrenceSchema = Joi.object<RecordOccurrenceDto>({
-    attendance: captureFields.attendance.required(),
+    attendance: captureFields.attendance.default(0),
+    attendanceDetails: captureFields.attendanceDetails.default([]),
     totalAmount: captureFields.totalAmount.default(null),
     currency: captureFields.currency.default('USD'),
     notes: captureFields.notes.default(null),
@@ -35,12 +42,16 @@ export const recordOccurrenceSchema = Joi.object<RecordOccurrenceDto>({
     // Sin desglose hay que dar el total global; con desglose, el total se calcula.
     .custom((value: RecordOccurrenceDto, helpers) => {
         if (value.details.length === 0 && value.totalAmount === null) {
+            return helpers.error('any.invalid')
+        }
+        if (value.attendanceDetails.length === 0 && value.attendance === 0) {
             return helpers.error('any.custom')
         }
         return value
     })
     .messages({
-        'any.custom': 'Indica el monto total o al menos una categoría de ofrenda',
+        'any.invalid': 'Indica el monto total o al menos una categoría de ofrenda',
+        'any.custom': 'Indica la asistencia por tipo o el total de personas',
     })
 
 export const bulkRecordOccurrencesSchema = Joi.object<BulkRecordOccurrencesDto>({

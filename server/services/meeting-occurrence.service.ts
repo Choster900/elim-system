@@ -7,6 +7,7 @@ import type {
     UpdateOccurrenceDto,
 } from '../dto/offering/occurrence.dto'
 import * as repo from '../repositories/occurrence.repository'
+import { findAttendanceTypeIdsByIds } from '../repositories/attendance.repository'
 import { findOfferingCategoryIdsByIds } from '../repositories/offering.repository'
 import { ApiErrorCode } from '../types/api-response.types'
 import {
@@ -71,6 +72,15 @@ async function assertCategoriesExist(details: { categoryId: number }[]) {
     const existing = await findOfferingCategoryIdsByIds(ids)
     if (existing.length !== ids.length) {
         businessRule('Una o más categorías de ofrenda no existen')
+    }
+}
+
+async function assertAttendanceTypesExist(details: { typeId: number }[]) {
+    if (details.length === 0) return
+    const ids = [...new Set(details.map((detail) => detail.typeId))]
+    const existing = await findAttendanceTypeIdsByIds(ids)
+    if (existing.length !== ids.length) {
+        businessRule('Uno o más tipos de asistencia no existen')
     }
 }
 
@@ -165,6 +175,7 @@ export async function recordOccurrence(
     }
 
     await assertCategoriesExist(dto.details)
+    await assertAttendanceTypesExist(dto.attendanceDetails)
     return repo.recordOccurrence(id, dto, userId)
 }
 
@@ -189,6 +200,7 @@ export async function recordOccurrencesBulk(
     }
 
     await assertCategoriesExist(dto.entries.flatMap((entry) => entry.details))
+    await assertAttendanceTypesExist(dto.entries.flatMap((entry) => entry.attendanceDetails))
     return repo.recordOccurrencesBulk(dto.entries, userId)
 }
 
@@ -206,5 +218,6 @@ export async function updateOccurrence(
     }
 
     if (dto.details !== undefined) await assertCategoriesExist(dto.details)
+    if (dto.attendanceDetails !== undefined) await assertAttendanceTypesExist(dto.attendanceDetails)
     return repo.updateOccurrence(id, dto, userId)
 }

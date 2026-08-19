@@ -20,6 +20,10 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 name: 'Offerings',
                 description: 'Meeting occurrences: pending dates, capture and history',
             },
+            {
+                name: 'Attendance',
+                description: 'Attendance type catalog used to break down who attended',
+            },
         ],
         paths: {
             '/api/healthcheck': {
@@ -393,6 +397,76 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     },
                 },
             },
+            '/api/attendance-types': {
+                get: {
+                    tags: ['Attendance'],
+                    summary: 'List attendance types',
+                    description:
+                        'Inactive types are returned too; the capture screen filters them.',
+                    security: [{ BearerAuth: [] }],
+                    responses: {
+                        200: { description: 'Attendance type catalog' },
+                        403: { description: 'Requires finance.view' },
+                    },
+                },
+                post: {
+                    tags: ['Attendance'],
+                    summary: 'Create an attendance type',
+                    security: [{ BearerAuth: [] }],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/CreateAttendanceTypeDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Attendance type created' },
+                        403: { description: 'Requires finance.manage' },
+                        409: { description: 'Code or name already in use' },
+                    },
+                },
+            },
+            '/api/attendance-types/{id}': {
+                put: {
+                    tags: ['Attendance'],
+                    summary: 'Update an attendance type',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/UpdateAttendanceTypeDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Attendance type updated' },
+                        403: { description: 'Requires finance.manage' },
+                        404: { description: 'Attendance type not found' },
+                    },
+                },
+                delete: {
+                    tags: ['Attendance'],
+                    summary: 'Delete an attendance type',
+                    description:
+                        'A type with recorded dates cannot be deleted; deactivate it instead.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    responses: {
+                        200: { description: 'Attendance type deleted' },
+                        403: { description: 'Requires finance.manage' },
+                        404: { description: 'Attendance type not found' },
+                        409: { description: 'The type already has recorded attendance' },
+                    },
+                },
+            },
             '/api/meetings/ocurrencias/sincronizar': {
                 post: {
                     tags: ['Offerings'],
@@ -428,6 +502,19 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         },
                         currency: { type: 'string', default: 'USD' },
                         notes: { type: 'string', nullable: true },
+                        attendanceDetails: {
+                            type: 'array',
+                            description:
+                                'Attendance broken down by type. When present, `attendance` is recalculated from it.',
+                            items: {
+                                type: 'object',
+                                required: ['typeId', 'quantity'],
+                                properties: {
+                                    typeId: { type: 'integer' },
+                                    quantity: { type: 'integer', minimum: 0 },
+                                },
+                            },
+                        },
                         details: {
                             type: 'array',
                             items: {
@@ -451,6 +538,27 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             properties: { occurrenceId: { type: 'integer' } },
                         },
                     ],
+                },
+                CreateAttendanceTypeDto: {
+                    type: 'object',
+                    required: ['code', 'name'],
+                    properties: {
+                        code: { type: 'string', example: 'HERMANOS' },
+                        name: { type: 'string', example: 'Hermanos' },
+                        description: { type: 'string', nullable: true },
+                        sortOrder: { type: 'integer', minimum: 0, default: 0 },
+                        isActive: { type: 'boolean', default: true },
+                    },
+                },
+                UpdateAttendanceTypeDto: {
+                    type: 'object',
+                    properties: {
+                        code: { type: 'string' },
+                        name: { type: 'string' },
+                        description: { type: 'string', nullable: true },
+                        sortOrder: { type: 'integer', minimum: 0 },
+                        isActive: { type: 'boolean' },
+                    },
                 },
                 Permission: {
                     type: 'object',

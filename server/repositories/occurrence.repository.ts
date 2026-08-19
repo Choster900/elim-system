@@ -21,6 +21,7 @@ const occurrenceInclude = {
     recordedBy: { include: { member: true } },
     updatedBy: { include: { member: true } },
     details: { include: { category: true }, orderBy: { category: { sortOrder: 'asc' } } },
+    attendanceDetails: { include: { type: true }, orderBy: { type: { sortOrder: 'asc' } } },
 } satisfies Prisma.MeetingOccurrenceInclude
 
 type OccurrenceWithRelations = Prisma.MeetingOccurrenceGetPayload<{
@@ -37,6 +38,12 @@ function toIsoDate(value: Date) {
 
 function round2(value: number) {
     return Math.round(value * 100) / 100
+}
+
+/// El desglose de asistencia manda sobre el total escrito a mano.
+function resolveAttendance(details: { quantity: number }[], attendance: number) {
+    if (details.length === 0) return attendance
+    return details.reduce((sum, detail) => sum + detail.quantity, 0)
 }
 
 /// El desglose manda sobre el total capturado a mano; sin desglose se usa el global.
@@ -66,6 +73,7 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
         id: occurrence.id,
         meetingId: occurrence.meetingId,
         meetingTitle: occurrence.meeting.title,
+        meetingCode: occurrence.meeting.code,
         meetingTypeName: occurrence.meeting.type?.name ?? null,
         meetingColor: occurrence.meeting.color,
         startTime: occurrence.meeting.startTime.toISOString().slice(11, 16),
@@ -90,6 +98,12 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
         recordedAt: occurrence.recordedAt,
         updatedById: occurrence.updatedById,
         updatedByName: personName(occurrence.updatedBy),
+        attendanceDetails: occurrence.attendanceDetails.map((detail) => ({
+            id: detail.id,
+            typeId: detail.typeId,
+            typeName: detail.type?.name ?? null,
+            quantity: detail.quantity,
+        })),
         details: occurrence.details.map((detail) => ({
             id: detail.id,
             categoryId: detail.categoryId,
@@ -227,7 +241,7 @@ export async function findOccurrenceById(id: number) {
 function recordData(dto: RecordOccurrenceDto, userId: number | null) {
     return {
         status: 'RECORDED' as const,
-        attendance: dto.attendance,
+        attendance: resolveAttendance(dto.attendanceDetails, dto.attendance),
         totalAmount: resolveTotal(dto.details, dto.totalAmount),
         currency: dto.currency,
         notes: dto.notes,
@@ -239,6 +253,13 @@ function recordData(dto: RecordOccurrenceDto, userId: number | null) {
                 categoryId: detail.categoryId,
                 amount: detail.amount,
                 notes: detail.notes,
+            })),
+        },
+        attendanceDetails: {
+            deleteMany: {},
+            create: dto.attendanceDetails.map((detail) => ({
+                typeId: detail.typeId,
+                quantity: detail.quantity,
             })),
         },
     }
@@ -276,7 +297,18 @@ export function updateOccurrence(id: number, dto: UpdateOccurrenceDto, userId: n
     }
 
     if (userId === null) delete data.updatedBy
-    if (dto.attendance !== undefined) data.attendance = dto.attendance
+    if (dto.attendanceDetails !== undefined) {
+        data.attendance = resolveAttendance(dto.attendanceDetails, dto.attendance ?? 0)
+        data.attendanceDetails = {
+            deleteMany: {},
+            create: dto.attendanceDetails.map((detail) => ({
+                typeId: detail.typeId,
+                quantity: detail.quantity,
+            })),
+        }
+    } else if (dto.attendance !== undefined) {
+        data.attendance = dto.attendance
+    }
     if (dto.currency !== undefined) data.currency = dto.currency
     if (dto.notes !== undefined) data.notes = dto.notes
     if (dto.details !== undefined) {

@@ -124,6 +124,8 @@ function requestPayload(level: TerritoryLevel, input: TerritoryInput, parentId?:
               }
             : {
                   ...input,
+                  // El código lo genera el servidor; enviarlo lo rechaza el validador.
+                  code: undefined,
                   supervisorId: undefined,
                   leaderName: input.leaderName || null,
                   description: input.description || null,
@@ -166,7 +168,7 @@ export async function updateTerritoryEntity(
                   polygon: fields.polygon,
                   isActive: fields.isActive,
               }
-            : { ...fields, supervisorId: undefined }
+            : { ...fields, code: undefined, supervisorId: undefined }
     if (level === 'zona' && parentId) payload.districtId = Number(parentId)
     if (level === 'sector' && parentId) payload.zoneId = Number(parentId)
 

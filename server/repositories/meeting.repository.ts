@@ -8,6 +8,7 @@ import type {
     UpdateMeetingDto,
     UpdateMeetingTypeDto,
 } from '../dto/meeting/meeting.dto'
+import { buildMeetingCode } from '../utils/code/entity-code.util'
 import { mapPrismaError } from '../utils/database/prisma-error.util'
 
 const FREQUENCY_TO_DB = {
@@ -84,6 +85,7 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         coSupervisorIds: meeting.coSupervisors.map((item) => item.memberId),
         title: meeting.title,
         description: meeting.description,
+        code: meeting.code,
         date: toIsoDate(meeting.date),
         recurrenceEndDate:
             meeting.recurrenceEndDate === null ? null : toIsoDate(meeting.recurrenceEndDate),
@@ -220,40 +222,59 @@ export async function isMeetingLeader(memberId: number) {
 }
 
 export async function createMeeting(dto: CreateMeetingDto) {
-    return prisma.meeting
-        .create({
-            data: {
-                type: { connect: { id: dto.typeId } },
-                sector: { connect: { id: dto.sectorId } },
-                leader: { connect: { id: dto.leaderId } },
-                supervisor: { connect: { id: dto.supervisorId } },
-                title: dto.title,
-                description: dto.description,
-                date: dateOf(dto.date),
-                recurrenceEndDate: dto.recurrenceEndDate ? dateOf(dto.recurrenceEndDate) : null,
-                startTime: timeOf(dto.startTime),
-                endTime: timeOf(dto.endTime),
-                location: dto.location,
-                latitude: dto.latitude,
-                longitude: dto.longitude,
-                frequency: FREQUENCY_TO_DB[dto.frequency],
-                monthlyMode: dto.monthlyMode ? MONTHLY_MODE_TO_DB[dto.monthlyMode] : null,
-                weekOrdinal: dto.weekOrdinal,
-                weekday: dto.weekday,
-                expectedAttendees: dto.expectedAttendees,
-                isActive: dto.isActive,
-                isPublic: dto.isPublic,
-                notes: dto.notes,
-                color: dto.color,
-                ...(dto.coSupervisorIds.length
-                    ? {
-                          coSupervisors: {
-                              create: dto.coSupervisorIds.map((memberId) => ({ memberId })),
-                          },
-                      }
-                    : {}),
-            },
-            include: meetingInclude,
+    // El código lleva el id, que no existe hasta insertar: se crea con un valor
+    // temporal irrepetible y se reemplaza en la misma transacción.
+    const placeholder = `TMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    return prisma
+        .$transaction(async (transaction) => {
+            const created = await transaction.meeting.create({
+                data: {
+                    code: placeholder,
+                    type: { connect: { id: dto.typeId } },
+                    sector: { connect: { id: dto.sectorId } },
+                    leader: { connect: { id: dto.leaderId } },
+                    supervisor: { connect: { id: dto.supervisorId } },
+                    title: dto.title,
+                    description: dto.description,
+                    date: dateOf(dto.date),
+                    recurrenceEndDate: dto.recurrenceEndDate ? dateOf(dto.recurrenceEndDate) : null,
+                    startTime: timeOf(dto.startTime),
+                    endTime: timeOf(dto.endTime),
+                    location: dto.location,
+                    latitude: dto.latitude,
+                    longitude: dto.longitude,
+                    frequency: FREQUENCY_TO_DB[dto.frequency],
+                    monthlyMode: dto.monthlyMode ? MONTHLY_MODE_TO_DB[dto.monthlyMode] : null,
+                    weekOrdinal: dto.weekOrdinal,
+                    weekday: dto.weekday,
+                    expectedAttendees: dto.expectedAttendees,
+                    isActive: dto.isActive,
+                    isPublic: dto.isPublic,
+                    notes: dto.notes,
+                    color: dto.color,
+                    ...(dto.coSupervisorIds.length
+                        ? {
+                              coSupervisors: {
+                                  create: dto.coSupervisorIds.map((memberId) => ({ memberId })),
+                              },
+                          }
+                        : {}),
+                },
+                include: meetingInclude,
+            })
+
+            return transaction.meeting.update({
+                where: { id: created.id },
+                data: {
+                    code: buildMeetingCode(
+                        created.sector.code,
+                        created.id,
+                        toIsoDate(created.date),
+                    ),
+                },
+                include: meetingInclude,
+            })
         })
         .then(toMeetingRecord)
         .catch(mapPrismaError)
@@ -272,8 +293,29 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
         }
     }
 
-    return prisma.meeting
-        .update({ where: { id }, data, include: meetingInclude })
+    // Mover la reunión de sector o cambiarle la fecha de inicio cambia su código:
+    // se decidió que refleje dónde y cuándo está hoy, no dónde nació.
+    return prisma
+        .$transaction(async (transaction) => {
+            const updated = await transaction.meeting.update({
+                where: { id },
+                data,
+                include: meetingInclude,
+            })
+
+            const expectedCode = buildMeetingCode(
+                updated.sector.code,
+                updated.id,
+                toIsoDate(updated.date),
+            )
+            if (updated.code === expectedCode) return updated
+
+            return transaction.meeting.update({
+                where: { id },
+                data: { code: expectedCode },
+                include: meetingInclude,
+            })
+        })
         .then(toMeetingRecord)
         .catch(mapPrismaError)
 }

@@ -1,6 +1,7 @@
 import type { AxiosInstance } from 'axios'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type {
+    AttendanceTypeOption,
     BulkRecordEntry,
     OccurrenceFilters,
     OccurrenceRecord,
@@ -94,6 +95,16 @@ export async function updateOccurrence(
         input,
     )
     return responseData(response.data, 'No fue posible corregir la fecha')
+}
+
+export async function getAttendanceTypes(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<AttendanceTypeOption[]> {
+    const response = await apiClient.get<ApiResponse<AttendanceTypeOption[]>>('/attendance-types', {
+        signal,
+    })
+    return responseData(response.data, 'No fue posible cargar los tipos de asistencia')
 }
 
 export async function getOfferingCategories(

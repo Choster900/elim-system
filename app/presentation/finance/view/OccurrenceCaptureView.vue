@@ -6,15 +6,18 @@ import {
     Check,
     CircleDot,
     Clock,
+    HandCoins,
     Loader2,
     MapPin,
     UserRound,
+    Users,
 } from '@lucide/vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatLocalIsoDate } from '~/utils/date/date-format.util'
 import { useRecordOccurrencesBulkMutation } from '../composables/useOccurrenceMutations'
 import {
+    useAttendanceTypesQuery,
     useOfferingCategoriesQuery,
     usePendingOccurrencesQuery,
 } from '../composables/useOccurrenceQueries'
@@ -26,7 +29,10 @@ interface CaptureRow {
     date: string
     /// Una fila sin marcar no se envía: llenar 2 de 4 es lo normal.
     selected: boolean
-    attendance: number | null
+    /// Asistencia desglosada por tipo; el total de la fecha es la suma del desglose.
+    attendanceByType: Record<number, number | null>
+    /// Respaldo cuando el catálogo de tipos está vacío: total escrito a mano.
+    attendanceTotal: number | null
     amounts: Record<number, number | null>
 }
 
@@ -34,6 +40,7 @@ const route = useRoute()
 const toast = useAppToast()
 const pendingQuery = usePendingOccurrencesQuery()
 const categoriesQuery = useOfferingCategoriesQuery()
+const attendanceTypesQuery = useAttendanceTypesQuery()
 const bulkMutation = useRecordOccurrencesBulkMutation()
 
 const meetingId = computed(() => {
@@ -44,6 +51,14 @@ const meetingId = computed(() => {
 const categories = computed(() =>
     (categoriesQuery.data.value ?? []).filter((category) => category.isActive),
 )
+
+/// Solo los tipos vigentes se capturan; los desactivados sobreviven en el histórico.
+const attendanceTypes = computed(() =>
+    (attendanceTypesQuery.data.value ?? []).filter((type) => type.isActive),
+)
+
+/// Sin catálogo vigente se cae al total escrito a mano en vez de bloquear la captura.
+const hasAttendanceTypes = computed(() => attendanceTypes.value.length > 0)
 
 /// Las fechas pendientes de esta reunión, de la más antigua a la más reciente.
 const occurrences = computed(() =>
@@ -62,7 +77,12 @@ useHead({
     ),
 })
 
-const isLoading = computed(() => pendingQuery.isPending.value || categoriesQuery.isPending.value)
+const isLoading = computed(
+    () =>
+        pendingQuery.isPending.value ||
+        categoriesQuery.isPending.value ||
+        attendanceTypesQuery.isPending.value,
+)
 const isSaving = computed(() => bulkMutation.isPending.value)
 
 const rows = ref<CaptureRow[]>([])
@@ -73,13 +93,14 @@ function buildRows() {
         occurrenceId: occurrence.id,
         date: occurrence.date,
         selected: false,
-        attendance: null,
+        attendanceByType: Object.fromEntries(attendanceTypes.value.map((type) => [type.id, null])),
+        attendanceTotal: null,
         amounts: Object.fromEntries(categories.value.map((category) => [category.id, null])),
     }))
     formError.value = null
 }
 
-watch([occurrences, categories], buildRows, { immediate: true })
+watch([occurrences, categories, attendanceTypes], buildRows, { immediate: true })
 
 const selectedRows = computed(() => rows.value.filter((row) => row.selected))
 const allSelected = computed(
@@ -90,9 +111,38 @@ function rowTotal(row: CaptureRow) {
     return Object.values(row.amounts).reduce<number>((sum, amount) => sum + (amount ?? 0), 0)
 }
 
+/// El desglose manda: el total de la fecha es lo que suman sus tipos.
+function rowAttendance(row: CaptureRow) {
+    if (!hasAttendanceTypes.value) return row.attendanceTotal ?? 0
+    return Object.values(row.attendanceByType).reduce<number>(
+        (sum, quantity) => sum + (quantity ?? 0),
+        0,
+    )
+}
+
+/// Un cero escrito a propósito cuenta; lo que no cuenta es dejarlo todo en blanco.
+function hasAttendance(row: CaptureRow) {
+    if (!hasAttendanceTypes.value) return row.attendanceTotal !== null
+    return Object.values(row.attendanceByType).some((quantity) => quantity !== null)
+}
+
 const grandTotal = computed(() => selectedRows.value.reduce((sum, row) => sum + rowTotal(row), 0))
 const totalAttendance = computed(() =>
-    selectedRows.value.reduce((sum, row) => sum + (row.attendance ?? 0), 0),
+    selectedRows.value.reduce((sum, row) => sum + rowAttendance(row), 0),
+)
+
+/// Cuántas personas de cada tipo suman las fechas marcadas, para el resumen lateral.
+const attendanceBreakdown = computed(() =>
+    attendanceTypes.value
+        .map((type) => ({
+            id: type.id,
+            name: type.name,
+            quantity: selectedRows.value.reduce(
+                (sum, row) => sum + (row.attendanceByType[type.id] ?? 0),
+                0,
+            ),
+        }))
+        .filter((entry) => entry.quantity > 0),
 )
 
 /// Marcar la fila al escribir evita el paso extra de tildar la casilla.
@@ -159,7 +209,7 @@ async function onSubmit() {
         return
     }
 
-    const incomplete = selectedRows.value.find((row) => row.attendance === null)
+    const incomplete = selectedRows.value.find((row) => !hasAttendance(row))
     if (incomplete) {
         formError.value = `Falta la asistencia del ${weekdayOf(incomplete.date)} ${dayOf(incomplete.date)} de ${monthOf(incomplete.date)}.`
         return
@@ -174,9 +224,18 @@ async function onSubmit() {
                 notes: null,
             }))
 
+        // Solo viaja el tipo que alguien llenó; un blanco no es un cero registrado.
+        const attendanceDetails = Object.entries(row.attendanceByType)
+            .filter(([, quantity]) => quantity !== null)
+            .map(([typeId, quantity]) => ({
+                typeId: Number(typeId),
+                quantity: quantity as number,
+            }))
+
         return {
             occurrenceId: row.occurrenceId,
-            attendance: row.attendance as number,
+            attendance: rowAttendance(row),
+            attendanceDetails,
             // Sin desglose el total va en cero: hubo reunión y no hubo ofrenda.
             totalAmount: details.length > 0 ? null : 0,
             currency: 'USD',
@@ -199,6 +258,8 @@ const inputClass =
     'w-full rounded-md border border-outline-variant bg-surface px-3 py-2 text-sm tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/40 focus:border-primary focus:ring-1 focus:ring-primary/40'
 const labelClass =
     'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
+const groupLabelClass =
+    'mb-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant'
 </script>
 
 <template>
@@ -256,6 +317,11 @@ const labelClass =
                             >
                                 {{ meeting.meetingTitle }}
                             </h1>
+                            <p
+                                class="mt-1.5 font-mono text-xs uppercase tracking-wider text-on-surface-variant"
+                            >
+                                {{ meeting.meetingCode }}
+                            </p>
                             <div
                                 class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-on-surface-variant"
                             >
@@ -398,33 +464,77 @@ const labelClass =
                                     </p>
                                 </div>
 
-                                <div v-if="row.selected" class="shrink-0 text-right">
-                                    <p
-                                        class="font-display text-xl font-semibold tabular-nums text-primary"
-                                    >
-                                        ${{ formatMoney(rowTotal(row)) }}
-                                    </p>
-                                    <p
-                                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                    >
-                                        total
-                                    </p>
+                                <div v-if="row.selected" class="flex shrink-0 items-center gap-5">
+                                    <div class="text-right">
+                                        <p
+                                            class="font-display text-xl font-semibold tabular-nums text-on-surface"
+                                        >
+                                            {{ rowAttendance(row) }}
+                                        </p>
+                                        <p
+                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                        >
+                                            personas
+                                        </p>
+                                    </div>
+                                    <span class="h-8 w-px bg-outline-variant" />
+                                    <div class="text-right">
+                                        <p
+                                            class="font-display text-xl font-semibold tabular-nums text-primary"
+                                        >
+                                            ${{ formatMoney(rowTotal(row)) }}
+                                        </p>
+                                        <p
+                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                        >
+                                            total
+                                        </p>
+                                    </div>
                                 </div>
                             </label>
 
                             <!-- Captura -->
-                            <div class="px-5 py-4">
-                                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                                    <div>
+                            <div class="flex flex-col gap-6 px-5 py-4">
+                                <!-- Asistencia por tipo: el total de la fecha es su suma -->
+                                <div>
+                                    <p :class="[groupLabelClass, 'flex items-center gap-1.5']">
+                                        <Users class="size-3.5" />
+                                        Asistencia *
+                                    </p>
+                                    <div
+                                        v-if="hasAttendanceTypes"
+                                        class="grid gap-4 sm:grid-cols-3 xl:grid-cols-5"
+                                    >
+                                        <div v-for="type in attendanceTypes" :key="type.id">
+                                            <label
+                                                :class="labelClass"
+                                                :for="`asis-${row.occurrenceId}-${type.id}`"
+                                                :title="type.description ?? undefined"
+                                            >
+                                                {{ type.name }}
+                                            </label>
+                                            <input
+                                                :id="`asis-${row.occurrenceId}-${type.id}`"
+                                                v-model.number="row.attendanceByType[type.id]"
+                                                type="number"
+                                                min="0"
+                                                placeholder="0"
+                                                :class="inputClass"
+                                                @input="touchRow(row)"
+                                            />
+                                        </div>
+                                    </div>
+                                    <!-- Sin catálogo de tipos se captura el total a mano -->
+                                    <div v-else class="sm:max-w-[220px]">
                                         <label
                                             :class="labelClass"
                                             :for="`asistencia-${row.occurrenceId}`"
                                         >
-                                            Asistencia *
+                                            Total de personas
                                         </label>
                                         <input
                                             :id="`asistencia-${row.occurrenceId}`"
-                                            v-model.number="row.attendance"
+                                            v-model.number="row.attendanceTotal"
                                             type="number"
                                             min="0"
                                             placeholder="0"
@@ -432,29 +542,38 @@ const labelClass =
                                             @input="touchRow(row)"
                                         />
                                     </div>
-                                    <div v-for="category in categories" :key="category.id">
-                                        <label
-                                            :class="labelClass"
-                                            :for="`cat-${row.occurrenceId}-${category.id}`"
-                                        >
-                                            {{ category.name }}
-                                        </label>
-                                        <div class="relative">
-                                            <span
-                                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-on-surface-variant/60"
+                                </div>
+
+                                <div v-if="categories.length > 0">
+                                    <p :class="[groupLabelClass, 'flex items-center gap-1.5']">
+                                        <HandCoins class="size-3.5" />
+                                        Ofrenda
+                                    </p>
+                                    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                        <div v-for="category in categories" :key="category.id">
+                                            <label
+                                                :class="labelClass"
+                                                :for="`cat-${row.occurrenceId}-${category.id}`"
                                             >
-                                                $
-                                            </span>
-                                            <input
-                                                :id="`cat-${row.occurrenceId}-${category.id}`"
-                                                v-model.number="row.amounts[category.id]"
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                placeholder="0.00"
-                                                :class="[inputClass, 'pl-7']"
-                                                @input="touchRow(row)"
-                                            />
+                                                {{ category.name }}
+                                            </label>
+                                            <div class="relative">
+                                                <span
+                                                    class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-on-surface-variant/60"
+                                                >
+                                                    $
+                                                </span>
+                                                <input
+                                                    :id="`cat-${row.occurrenceId}-${category.id}`"
+                                                    v-model.number="row.amounts[category.id]"
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    placeholder="0.00"
+                                                    :class="[inputClass, 'pl-7']"
+                                                    @input="touchRow(row)"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -486,6 +605,23 @@ const labelClass =
                                 <dd class="font-semibold tabular-nums text-on-surface">
                                     {{ totalAttendance }}
                                 </dd>
+                            </div>
+                            <div
+                                v-if="attendanceBreakdown.length > 0"
+                                class="-mt-2 flex flex-col gap-1.5 border-l border-outline-variant pl-3"
+                            >
+                                <div
+                                    v-for="entry in attendanceBreakdown"
+                                    :key="entry.id"
+                                    class="flex items-baseline justify-between gap-4"
+                                >
+                                    <dt class="text-xs text-on-surface-variant">
+                                        {{ entry.name }}
+                                    </dt>
+                                    <dd class="text-xs tabular-nums text-on-surface-variant">
+                                        {{ entry.quantity }}
+                                    </dd>
+                                </div>
                             </div>
                             <div
                                 class="flex items-baseline justify-between gap-4 border-t border-outline-variant pt-4"

@@ -85,6 +85,7 @@ const groups = computed<PendingGroup[]>(() => {
             return {
                 meetingId: first.meetingId,
                 meetingTitle: first.meetingTitle,
+                meetingCode: first.meetingCode,
                 meetingColor: first.meetingColor,
                 meetingTypeName: first.meetingTypeName,
                 sectorName: first.sectorName,
@@ -284,6 +285,11 @@ const selectClass =
                             :style="{ backgroundColor: group.meetingColor }"
                         />
                         <div class="min-w-0 flex-1">
+                            <p
+                                class="truncate font-mono text-[10px] uppercase tracking-wider text-on-surface-variant/70"
+                            >
+                                {{ group.meetingCode }}
+                            </p>
                             <h3 class="truncate text-base font-semibold text-on-surface">
                                 {{ group.meetingTitle }}
                             </h3>

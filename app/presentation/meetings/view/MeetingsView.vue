@@ -145,13 +145,22 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         accessor: (row) => row.date,
     },
     {
+        key: 'code',
+        label: 'Código',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        accessor: (row) => row.code,
+        width: '220px',
+    },
+    {
         key: 'title',
         label: 'Reunión',
         sortable: true,
         filterable: true,
         filterType: 'text',
         accessor: (row) => row.title,
-        width: '480px',
+        width: '420px',
     },
     {
         key: 'type',
@@ -399,6 +408,12 @@ async function toggleActive(m: MeetingRecord) {
                             </p>
                         </div>
                     </div>
+                </template>
+
+                <template #cell-code="{ row }">
+                    <span class="font-mono text-xs tabular-nums text-on-surface-variant">
+                        {{ (row as MeetingRecord).code }}
+                    </span>
                 </template>
 
                 <template #cell-title="{ row }">

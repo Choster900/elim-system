@@ -49,7 +49,7 @@ function goToNewsletter() {
 
 <template>
     <nav class="system-nav-blur fixed inset-x-0 top-0 z-50 border-b border-outline-variant">
-        <div class="mx-auto flex max-w-system items-center justify-between px-6 py-5 lg:px-10">
+        <div class="mx-auto flex max-w-system items-center justify-between px-6 py-3 lg:px-10">
             <AppBrand />
 
             <div class="hidden items-center gap-8 md:flex">
@@ -121,7 +121,10 @@ function goToNewsletter() {
             </UiButton>
         </div>
 
-        <div v-if="isOpen" class="border-t border-outline-variant bg-surface-container-low px-6 py-5 md:hidden">
+        <div
+            v-if="isOpen"
+            class="border-t border-outline-variant bg-surface-container-low px-6 py-5 md:hidden"
+        >
             <div class="flex flex-col gap-4">
                 <template v-for="group in navGroups" :key="group.label">
                     <NuxtLink
@@ -133,7 +136,9 @@ function goToNewsletter() {
                         {{ group.label }}
                     </NuxtLink>
                     <div v-else class="space-y-3">
-                        <p class="text-sm font-semibold uppercase text-primary">{{ group.label }}</p>
+                        <p class="text-sm font-semibold uppercase text-primary">
+                            {{ group.label }}
+                        </p>
                         <NuxtLink
                             v-for="item in group.items"
                             :key="item.label"

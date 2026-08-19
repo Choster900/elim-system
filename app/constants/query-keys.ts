@@ -39,6 +39,11 @@ const dashboard = {
         ['dashboard', 'summary', periodDays, districtId] as const,
 }
 
+const attendanceTypes = {
+    all: ['attendance-types'] as const,
+    list: ['attendance-types', 'list'] as const,
+}
+
 const offeringCategories = {
     all: ['offering-categories'] as const,
     list: ['offering-categories', 'list'] as const,
@@ -65,6 +70,7 @@ export const queryKeys = {
     members,
     territories,
     occurrences,
+    attendanceTypes,
     offeringCategories,
     dashboard,
     users,

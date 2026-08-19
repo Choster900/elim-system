@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## No daily notes for this repository
+
+**This project is personal and unrelated to the user's job. Never write an Obsidian
+daily note or a Jira entry for work done here.** Do not invoke the
+`obsidian-jira-daily-report` skill, and do not touch anything under
+`C:\Users\DEV\Desktop\DITOBANX\`.
+
+The global `~/.claude/CLAUDE.md` says a task is not closed until it has an entry in
+the day's note. **That rule does not apply to this repository** — it is scoped to
+the user's work projects. A task here is closed when the code is done and verified.
+
+Why this is written down: notes for this repo were landing in the same daily file
+that another session used for real work, and each side's rewrites kept erasing the
+other's entries.
+
 ## Commands
 
 ```bash

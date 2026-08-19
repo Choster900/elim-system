@@ -102,7 +102,7 @@ const visible = computed(() => {
         if (selectedSector.value && item.sectorId !== selectedSector.value) return false
         if (!term) return true
 
-        return [item.meetingTitle, item.sectorName, item.recordedByName ?? '']
+        return [item.meetingCode, item.meetingTitle, item.sectorName, item.recordedByName ?? '']
             .join(' ')
             .toLocaleLowerCase('es')
             .includes(term)
@@ -153,7 +153,7 @@ const byMeeting = computed(() => {
 
     for (const item of visible.value) {
         const current = map.get(item.meetingId) ?? {
-            label: item.meetingTitle,
+            label: `${item.meetingCode} · ${item.meetingTitle}`,
             value: 0,
             dates: 0,
         }
@@ -179,6 +179,24 @@ const bySector = computed(() => {
     return [...map.entries()].map(([label, value]) => ({ id: label, label, value }))
 })
 
+/// Composición de la asistencia: cuántas personas de cada tipo hay tras el total.
+const byAttendanceType = computed(() => {
+    const map = new Map<number, { label: string; value: number }>()
+
+    for (const item of visible.value) {
+        for (const detail of item.attendanceDetails) {
+            const current = map.get(detail.typeId) ?? {
+                label: detail.typeName ?? 'Sin tipo',
+                value: 0,
+            }
+            current.value += detail.quantity
+            map.set(detail.typeId, current)
+        }
+    }
+
+    return [...map.entries()].map(([id, entry]) => ({ id, ...entry }))
+})
+
 function formatMoney(value: number) {
     return value.toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -187,8 +205,9 @@ function openMeeting(meetingId: number) {
     return navigateTo(`/finanzas/ofrendas/reunion/${meetingId}`)
 }
 
+// Solo lo usa el buscador de texto; los selectores de territorio son UiSearchSelect.
 const controlClass =
-    'rounded-md border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-50'
+    'rounded-md border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary'
 const filterLabelClass =
     'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
 </script>
@@ -219,57 +238,36 @@ const filterLabelClass =
         <section class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4">
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div>
-                    <label :class="filterLabelClass" for="filtro-distrito">Distrito</label>
-                    <select
-                        id="filtro-distrito"
+                    <span :class="filterLabelClass">Distrito</span>
+                    <UiSearchSelect
                         v-model="selectedDistrict"
-                        :class="[controlClass, 'w-full']"
-                    >
-                        <option :value="null">Todos</option>
-                        <option
-                            v-for="option in districtOptions"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ option.label }}
-                        </option>
-                    </select>
+                        :options="districtOptions"
+                        clearable
+                        placeholder="Todos los distritos"
+                        search-placeholder="Buscar distrito..."
+                    />
                 </div>
                 <div>
-                    <label :class="filterLabelClass" for="filtro-zona">Zona</label>
-                    <select
-                        id="filtro-zona"
+                    <span :class="filterLabelClass">Zona</span>
+                    <UiSearchSelect
                         v-model="selectedZone"
-                        :class="[controlClass, 'w-full']"
+                        :options="zoneOptions"
+                        clearable
                         :disabled="zoneOptions.length === 0"
-                    >
-                        <option :value="null">Todas</option>
-                        <option
-                            v-for="option in zoneOptions"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ option.label }}
-                        </option>
-                    </select>
+                        placeholder="Todas las zonas"
+                        search-placeholder="Buscar zona..."
+                    />
                 </div>
                 <div>
-                    <label :class="filterLabelClass" for="filtro-sector">Sector</label>
-                    <select
-                        id="filtro-sector"
+                    <span :class="filterLabelClass">Sector</span>
+                    <UiSearchSelect
                         v-model="selectedSector"
-                        :class="[controlClass, 'w-full']"
+                        :options="sectorOptions"
+                        clearable
                         :disabled="sectorOptions.length === 0"
-                    >
-                        <option :value="null">Todos</option>
-                        <option
-                            v-for="option in sectorOptions"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ option.label }}
-                        </option>
-                    </select>
+                        placeholder="Todos los sectores"
+                        search-placeholder="Buscar sector..."
+                    />
                 </div>
                 <div>
                     <span :class="filterLabelClass">Entre fechas</span>
@@ -289,8 +287,8 @@ const filterLabelClass =
                     <input
                         v-model="search"
                         type="search"
-                        placeholder="Buscar por reunión, sector o quién registró"
-                        aria-label="Buscar por reunión, sector o quién registró"
+                        placeholder="Buscar por código, reunión, sector o quién registró"
+                        aria-label="Buscar por código, reunión, sector o quién registró"
                         :class="[controlClass, 'w-full py-2 pl-9 pr-3']"
                     />
                 </div>
@@ -444,6 +442,21 @@ const filterLabelClass =
                         :items="bySector"
                         label="Ofrenda acumulada por sector"
                         empty-message="Sin sectores registrados."
+                    />
+                </UiCard>
+            </section>
+
+            <!-- Quiénes son los que asisten -->
+            <section v-if="byAttendanceType.length > 0" class="mt-4">
+                <UiCard class="p-6">
+                    <h2 class="mb-5 text-sm font-semibold text-on-surface">
+                        Composición de la asistencia
+                    </h2>
+                    <RankedBarList
+                        :items="byAttendanceType"
+                        format="number"
+                        label="Asistencia acumulada por tipo"
+                        empty-message="Las fechas visibles no tienen desglose de asistencia."
                     />
                 </UiCard>
             </section>

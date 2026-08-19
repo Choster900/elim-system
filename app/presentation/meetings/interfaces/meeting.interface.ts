@@ -3,6 +3,8 @@ export type MonthlyMode = 'dia_fijo' | 'ordinal'
 
 export interface MeetingRecord {
     id: number
+    /// Autogenerado por el servidor: SECNNN-REUNNNN-AAAAMMDD.
+    code: string
     typeId: number
     sectorId: number
     leaderId: number

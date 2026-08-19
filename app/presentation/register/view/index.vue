@@ -20,7 +20,9 @@ const form = reactive({
         <div class="system-glass-panel rounded-lg p-8 md:p-12">
             <form class="space-y-6" novalidate @submit.prevent>
                 <div class="mb-10 text-center">
-                    <h1 class="font-display text-4xl font-semibold text-on-surface">Crear cuenta</h1>
+                    <h1 class="font-display text-4xl font-semibold text-on-surface">
+                        Crear cuenta
+                    </h1>
                     <p class="mt-2 text-on-surface-variant">Únete a la comunidad Sistema</p>
                 </div>
 
@@ -29,7 +31,9 @@ const form = reactive({
                         Nombre completo
                     </UiLabel>
                     <div class="relative">
-                        <UserRound class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant" />
+                        <UserRound
+                            class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant"
+                        />
                         <UiInput
                             id="name"
                             v-model="form.name"
@@ -46,7 +50,9 @@ const form = reactive({
                         Correo electrónico
                     </UiLabel>
                     <div class="relative">
-                        <Mail class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant" />
+                        <Mail
+                            class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant"
+                        />
                         <UiInput
                             id="register-email"
                             v-model="form.email"
@@ -60,11 +66,16 @@ const form = reactive({
 
                 <div class="grid gap-6 md:grid-cols-2">
                     <div class="space-y-2">
-                        <UiLabel for="register-password" class="text-xs uppercase text-on-surface-variant">
+                        <UiLabel
+                            for="register-password"
+                            class="text-xs uppercase text-on-surface-variant"
+                        >
                             Contraseña
                         </UiLabel>
                         <div class="relative">
-                            <Lock class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant" />
+                            <Lock
+                                class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant"
+                            />
                             <UiInput
                                 id="register-password"
                                 v-model="form.password"
@@ -77,11 +88,16 @@ const form = reactive({
                     </div>
 
                     <div class="space-y-2">
-                        <UiLabel for="confirm-password" class="text-xs uppercase text-on-surface-variant">
+                        <UiLabel
+                            for="confirm-password"
+                            class="text-xs uppercase text-on-surface-variant"
+                        >
                             Confirmar
                         </UiLabel>
                         <div class="relative">
-                            <Lock class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant" />
+                            <Lock
+                                class="pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 text-on-surface-variant"
+                            />
                             <UiInput
                                 id="confirm-password"
                                 v-model="form.confirmPassword"
@@ -100,7 +116,10 @@ const form = reactive({
 
                 <p class="text-center text-sm text-on-surface-variant">
                     ¿Ya tienes cuenta?
-                    <NuxtLink to="/login" class="font-semibold text-primary underline-offset-4 hover:underline">
+                    <NuxtLink
+                        to="/login"
+                        class="font-semibold text-primary underline-offset-4 hover:underline"
+                    >
                         Iniciar sesión
                     </NuxtLink>
                 </p>

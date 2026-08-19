@@ -3,6 +3,7 @@ import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import type { OccurrenceFilters } from '../interfaces/occurrence.interface'
 import {
+    getAttendanceTypes,
     getMeetingHistory,
     getOccurrence,
     getOccurrences,
@@ -48,6 +49,15 @@ export function useMeetingHistoryQuery(meetingId: Ref<number | null>) {
         queryKey: computed(() => queryKeys.occurrences.meetingHistory(meetingId.value ?? 0)),
         queryFn: ({ signal }) => getMeetingHistory(apiClient, meetingId.value!, signal),
         enabled: computed(() => meetingId.value !== null),
+    })
+}
+
+export function useAttendanceTypesQuery() {
+    const apiClient = useApiClient()
+
+    return useQuery({
+        queryKey: queryKeys.attendanceTypes.list,
+        queryFn: ({ signal }) => getAttendanceTypes(apiClient, signal),
     })
 }
 

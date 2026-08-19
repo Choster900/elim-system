@@ -276,9 +276,9 @@ function paletteFor(level: EntityLevel) {
 
 // ===== search =====
 const normalizedQuery = computed(() => query.value.trim().toLowerCase())
-function matches(name: string) {
+function matches(...values: string[]) {
     const q = normalizedQuery.value
-    return !q || name.toLowerCase().includes(q)
+    return !q || values.some((value) => value.toLowerCase().includes(q))
 }
 
 // ===== columns =====
@@ -286,6 +286,7 @@ interface ColumnItem {
     id: string
     level: Level
     name: string
+    code: string
     color: string
     sub: string
     badge: string
@@ -307,7 +308,7 @@ const columns = computed<Column[]>(() => {
     const cols: Column[] = []
 
     // Distritos
-    const dItems = districts.value.filter((d) => matches(d.name))
+    const dItems = districts.value.filter((d) => matches(d.name, d.code))
     cols.push({
         level: 'distrito',
         label: 'Distritos',
@@ -321,6 +322,7 @@ const columns = computed<Column[]>(() => {
             id: d.id,
             level: 'distrito',
             name: d.name,
+            code: d.code,
             color: d.color,
             sub: `${plural(zonesOf(d.id).length, 'zona', 'zonas')}${d.isActive ? '' : ' · Inactivo'}`,
             badge: String(districtMeetings(d)),
@@ -330,7 +332,7 @@ const columns = computed<Column[]>(() => {
 
     // Zonas
     const dist = selDist.value
-    const zItems = dist ? zonesOf(dist.id).filter((z) => matches(z.name)) : []
+    const zItems = dist ? zonesOf(dist.id).filter((z) => matches(z.name, z.code)) : []
     cols.push({
         level: 'zona',
         label: 'Zonas',
@@ -349,6 +351,7 @@ const columns = computed<Column[]>(() => {
             id: z.id,
             level: 'zona',
             name: z.name,
+            code: z.code,
             color: z.color,
             sub: `${plural(sectorsOf(z.id).length, 'sector', 'sectores')}${z.isActive ? '' : ' · Inactivo'}`,
             badge: String(zoneMeetings(z)),
@@ -358,7 +361,7 @@ const columns = computed<Column[]>(() => {
 
     // Sectores
     const zone = selZone.value
-    const sItems = zone ? sectorsOf(zone.id).filter((s) => matches(s.name)) : []
+    const sItems = zone ? sectorsOf(zone.id).filter((s) => matches(s.name, s.code)) : []
     cols.push({
         level: 'sector',
         label: 'Sectores',
@@ -377,6 +380,7 @@ const columns = computed<Column[]>(() => {
             id: s.id,
             level: 'sector',
             name: s.name,
+            code: s.code,
             color: s.color,
             sub: `${plural(meetingsOf(s.id).length, 'reunión', 'reuniones')}${s.isActive ? '' : ' · Inactivo'}`,
             badge: String(meetingsOf(s.id).length),
@@ -1319,6 +1323,10 @@ onBeforeUnmount(() => {
                             :style="{ backgroundColor: it.color }"
                         />
                         <span class="min-w-0 flex-1">
+                            <span
+                                class="block truncate font-mono text-[10px] uppercase tracking-wider text-on-surface-variant/70"
+                                >{{ it.code }}</span
+                            >
                             <span class="block truncate text-sm font-semibold text-on-surface">{{
                                 it.name
                             }}</span>

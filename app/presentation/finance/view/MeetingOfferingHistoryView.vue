@@ -98,6 +98,24 @@ const byCategory = computed(() => {
     return [...map.entries()].map(([id, entry]) => ({ id, ...entry }))
 })
 
+/// Quiénes llenan la reunión: acumulado por tipo de asistencia en toda su historia.
+const byAttendanceType = computed(() => {
+    const map = new Map<number, { label: string; value: number }>()
+
+    for (const occurrence of recorded.value) {
+        for (const detail of occurrence.attendanceDetails) {
+            const current = map.get(detail.typeId) ?? {
+                label: detail.typeName ?? 'Sin tipo',
+                value: 0,
+            }
+            current.value += detail.quantity
+            map.set(detail.typeId, current)
+        }
+    }
+
+    return [...map.entries()].map(([id, entry]) => ({ id, ...entry }))
+})
+
 function formatMoney(value: number) {
     return value.toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -149,6 +167,12 @@ function formatMoney(value: number) {
                         >
                             {{ meetingTitle }}
                         </h1>
+                        <p
+                            v-if="meeting?.meetingCode"
+                            class="mt-1.5 font-mono text-xs uppercase tracking-wider text-on-surface-variant"
+                        >
+                            {{ meeting?.meetingCode }}
+                        </p>
                         <div
                             class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-on-surface-variant"
                         >
@@ -281,8 +305,11 @@ function formatMoney(value: number) {
                 </UiCard>
             </section>
 
-            <section v-if="byCategory.length > 0" class="mt-4">
-                <UiCard class="p-6">
+            <section
+                v-if="byCategory.length > 0 || byAttendanceType.length > 0"
+                class="mt-4 grid gap-4 xl:grid-cols-2"
+            >
+                <UiCard v-if="byCategory.length > 0" class="p-6">
                     <h2 class="mb-5 text-sm font-semibold text-on-surface">
                         Reparto por categoría
                     </h2>
@@ -290,6 +317,15 @@ function formatMoney(value: number) {
                         :items="byCategory"
                         label="Ofrenda acumulada por categoría"
                         empty-message="Esta reunión no tiene desglose por categoría."
+                    />
+                </UiCard>
+                <UiCard v-if="byAttendanceType.length > 0" class="p-6">
+                    <h2 class="mb-5 text-sm font-semibold text-on-surface">Asistencia por tipo</h2>
+                    <RankedBarList
+                        :items="byAttendanceType"
+                        format="number"
+                        label="Asistencia acumulada por tipo"
+                        empty-message="Esta reunión no tiene desglose de asistencia."
                     />
                 </UiCard>
             </section>

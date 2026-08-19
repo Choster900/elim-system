@@ -434,6 +434,9 @@ model MeetingType {
 
 model Meeting {
   id                Int                   @id(map: "pk_reu_reunion") @default(autoincrement()) @map("reu_id")
+  /// Código autogenerado con el formato SECNNN-REUNNNN-AAAAMMDD; se recalcula si
+  /// la reunión cambia de sector o de fecha de inicio.
+  code              String                @unique(map: "uk_reu_codigo") @map("reu_codigo") @db.VarChar(100)
   typeId            Int                   @map("reu_id_tir")
   sectorId          Int                   @map("reu_id_sec")
   /// Miembro con rol comunitario LEADER responsable de conducir la reunión.
@@ -511,34 +514,35 @@ model OfferingCategory {
 
 /// Cada fecha en que una reunión debía realizarse, con su captura de asistencia y ofrenda.
 model MeetingOccurrence {
-  id           Int              @id(map: "pk_reo_reunion_ocurrencia") @default(autoincrement()) @map("reo_id")
-  meetingId    Int              @map("reo_id_reu")
+  id                Int                @id(map: "pk_reo_reunion_ocurrencia") @default(autoincrement()) @map("reo_id")
+  meetingId         Int                @map("reo_id_reu")
   /// Fecha programada según la regla de recurrencia de la reunión.
-  date         DateTime         @map("reo_fecha") @db.Date
-  status       OccurrenceStatus @default(PENDING) @map("reo_estado")
+  date              DateTime           @map("reo_fecha") @db.Date
+  status            OccurrenceStatus   @default(PENDING) @map("reo_estado")
   /// Personas que asistieron; nulo mientras la ocurrencia siga pendiente.
-  attendance   Int?             @map("reo_asistencia")
+  attendance        Int?               @map("reo_asistencia")
   /// Ofrenda total del día; nulo mientras la ocurrencia siga pendiente.
-  totalAmount  Decimal?         @map("reo_monto_total") @db.Decimal(12, 2)
-  currency     String           @default("USD") @map("reo_moneda") @db.VarChar(10)
-  notes        String?          @map("reo_nota") @db.VarChar(600)
+  totalAmount       Decimal?           @map("reo_monto_total") @db.Decimal(12, 2)
+  currency          String             @default("USD") @map("reo_moneda") @db.VarChar(10)
+  notes             String?            @map("reo_nota") @db.VarChar(600)
   /// Sector responsable en esa fecha; se conserva aunque la reunión cambie de sector.
-  sectorId     Int              @map("reo_id_sec")
+  sectorId          Int                @map("reo_id_sec")
   /// Líder responsable en esa fecha; se conserva aunque la reunión cambie de líder.
-  leaderId     Int?             @map("reo_id_mie_lider")
+  leaderId          Int?               @map("reo_id_mie_lider")
   /// Usuario que capturó los datos por primera vez.
-  recordedById Int?             @map("reo_id_usu_registro")
-  recordedAt   DateTime?        @map("reo_fecha_registro")
+  recordedById      Int?               @map("reo_id_usu_registro")
+  recordedAt        DateTime?          @map("reo_fecha_registro")
   /// Último usuario que corrigió los datos ya capturados.
-  updatedById  Int?             @map("reo_id_usu_modificacion")
-  createdAt    DateTime         @default(now()) @map("reo_fecha_creacion")
-  updatedAt    DateTime         @updatedAt @map("reo_fecha_modificacion")
-  meeting      Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "fk_reo_id_reu")
-  sector       TerritorySector  @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reo_id_sec")
-  leader       Member?          @relation("OccurrenceLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reo_id_mie_lider")
-  recordedBy   User?            @relation("OccurrenceRecorder", fields: [recordedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_registro")
-  updatedBy    User?            @relation("OccurrenceEditor", fields: [updatedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_modificacion")
-  details      OfferingDetail[]
+  updatedById       Int?               @map("reo_id_usu_modificacion")
+  createdAt         DateTime           @default(now()) @map("reo_fecha_creacion")
+  updatedAt         DateTime           @updatedAt @map("reo_fecha_modificacion")
+  meeting           Meeting            @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "fk_reo_id_reu")
+  sector            TerritorySector    @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reo_id_sec")
+  leader            Member?            @relation("OccurrenceLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reo_id_mie_lider")
+  recordedBy        User?              @relation("OccurrenceRecorder", fields: [recordedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_registro")
+  updatedBy         User?              @relation("OccurrenceEditor", fields: [updatedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_modificacion")
+  details           OfferingDetail[]
+  attendanceDetails AttendanceDetail[]
 
   @@unique([meetingId, date], map: "uk_reo_reunion_fecha")
   @@index([status, date], map: "ix_reo_estado_fecha")
@@ -546,6 +550,40 @@ model MeetingOccurrence {
   @@index([sectorId], map: "ix_reo_sector")
   @@index([recordedById], map: "ix_reo_usuario_registro")
   @@map("reo_reunion_ocurrencia")
+}
+
+/// Catálogo de tipos de asistencia: hermanos, amigos, nuevos, niños, jóvenes.
+model AttendanceType {
+  id          Int                @id(map: "pk_tas_tipo_asistencia") @default(autoincrement()) @map("tas_id")
+  code        String             @unique(map: "uk_tas_codigo") @map("tas_codigo") @db.VarChar(100)
+  name        String             @unique(map: "uk_tas_nombre") @map("tas_nombre") @db.VarChar(100)
+  description String?            @map("tas_descripcion") @db.VarChar(300)
+  isActive    Boolean            @default(true) @map("tas_activo")
+  sortOrder   Int                @default(0) @map("tas_orden")
+  createdAt   DateTime           @default(now()) @map("tas_fecha_creacion")
+  updatedAt   DateTime           @updatedAt @map("tas_fecha_modificacion")
+  details     AttendanceDetail[]
+
+  @@index([isActive], map: "ix_tas_activo")
+  @@map("tas_tipo_asistencia")
+}
+
+/// Cuántas personas de cada tipo asistieron a una fecha concreta.
+model AttendanceDetail {
+  id           Int               @id(map: "pk_dea_detalle_asistencia") @default(autoincrement()) @map("dea_id")
+  occurrenceId Int               @map("dea_id_reo")
+  typeId       Int               @map("dea_id_tas")
+  quantity     Int               @map("dea_cantidad")
+  notes        String?           @map("dea_nota") @db.VarChar(300)
+  createdAt    DateTime          @default(now()) @map("dea_fecha_creacion")
+  updatedAt    DateTime          @updatedAt @map("dea_fecha_modificacion")
+  occurrence   MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade, map: "fk_dea_id_reo")
+  type         AttendanceType    @relation(fields: [typeId], references: [id], onDelete: Restrict, map: "fk_dea_id_tas")
+
+  @@unique([occurrenceId, typeId], map: "uk_dea_ocurrencia_tipo")
+  @@index([occurrenceId], map: "ix_dea_ocurrencia")
+  @@index([typeId], map: "ix_dea_tipo")
+  @@map("dea_detalle_asistencia")
 }
 
 model OfferingDetail {

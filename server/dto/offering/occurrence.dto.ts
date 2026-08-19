@@ -4,9 +4,16 @@ export interface OccurrenceDetailDto {
     notes: string | null
 }
 
-/// Captura de una ocurrencia pendiente: asistencia más el desglose de la ofrenda.
+export interface AttendanceDetailInputDto {
+    typeId: number
+    quantity: number
+}
+
+/// Captura de una ocurrencia: asistencia y ofrenda, cada una con su desglose.
 export interface RecordOccurrenceDto {
+    /// Total de personas. Si viene desglose, se calcula de él y este valor se ignora.
     attendance: number
+    attendanceDetails: AttendanceDetailInputDto[]
     /// Ofrenda global cuando no se desglosa por categoría; si hay desglose, se calcula de él.
     totalAmount: number | null
     currency: string

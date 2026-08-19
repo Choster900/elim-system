@@ -67,7 +67,9 @@ function scrollToId(id: string) {
 
 <template>
     <main>
-        <header class="relative flex min-h-[92vh] items-center justify-center overflow-hidden px-6 pb-24 pt-32">
+        <header
+            class="relative flex min-h-[92vh] items-center justify-center overflow-hidden px-6 pb-24 pt-32"
+        >
             <img
                 :src="heroMainImage"
                 alt="Interior moderno de iglesia con luz cálida"
@@ -76,11 +78,14 @@ function scrollToId(id: string) {
             <div class="system-hero-overlay absolute inset-0" />
 
             <div class="relative z-10 mx-auto max-w-4xl text-center">
-                <h1 class="font-display text-4xl font-bold leading-tight text-on-background md:text-6xl">
+                <h1
+                    class="font-display text-4xl font-bold leading-tight text-on-background md:text-6xl"
+                >
                     Donde la tradición se encuentra con la modernidad
                 </h1>
                 <p class="mx-auto mt-6 max-w-2xl text-lg leading-8 text-on-surface-variant">
-                    Únete a nuestra comunidad y descubre un espacio de paz y propósito diseñado para el alma contemporánea.
+                    Únete a nuestra comunidad y descubre un espacio de paz y propósito diseñado para
+                    el alma contemporánea.
                 </p>
 
                 <div class="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
@@ -115,7 +120,9 @@ function scrollToId(id: string) {
         <section id="ministerios" class="bg-background py-24 lg:py-32">
             <div class="mx-auto mb-14 flex max-w-system items-end justify-between px-6 lg:px-10">
                 <div>
-                    <span class="mb-4 block text-xs font-semibold uppercase text-primary">Comunidad activa</span>
+                    <span class="mb-4 block text-xs font-semibold uppercase text-primary"
+                        >Comunidad activa</span
+                    >
                     <h2 class="font-display text-3xl font-semibold text-on-background md:text-4xl">
                         Ministerios y Eventos
                     </h2>
@@ -176,8 +183,13 @@ function scrollToId(id: string) {
             </div>
         </section>
 
-        <section id="vision" class="relative overflow-hidden bg-surface-container-lowest py-24 lg:py-32">
-            <div class="pointer-events-none absolute -right-20 top-0 hidden opacity-[0.05] lg:block">
+        <section
+            id="vision"
+            class="relative overflow-hidden bg-surface-container-lowest py-24 lg:py-32"
+        >
+            <div
+                class="pointer-events-none absolute -right-20 top-0 hidden opacity-[0.05] lg:block"
+            >
                 <span class="font-display text-[360px] font-bold leading-none text-primary">R</span>
             </div>
 
@@ -197,15 +209,23 @@ function scrollToId(id: string) {
                 </div>
 
                 <div class="order-1 md:order-2">
-                    <span class="mb-6 block text-xs font-semibold uppercase text-primary">Nuestra visión</span>
-                    <h2 class="mb-8 font-display text-4xl font-semibold leading-tight text-on-background">
+                    <span class="mb-6 block text-xs font-semibold uppercase text-primary"
+                        >Nuestra visión</span
+                    >
+                    <h2
+                        class="mb-8 font-display text-4xl font-semibold leading-tight text-on-background"
+                    >
                         Un refugio para el alma en el ruido de la ciudad.
                     </h2>
                     <p class="mb-6 text-lg leading-8 text-on-surface-variant">
-                        En SISTEMA, creemos que la espiritualidad no es algo del pasado, sino una brújula esencial para navegar el presente. Somos una comunidad que valora la profundidad teológica, la estética moderna y la inclusión radical.
+                        En SISTEMA, creemos que la espiritualidad no es algo del pasado, sino una
+                        brújula esencial para navegar el presente. Somos una comunidad que valora la
+                        profundidad teológica, la estética moderna y la inclusión radical.
                     </p>
                     <p class="mb-10 leading-8 text-on-surface-variant">
-                        Nuestro espacio está diseñado para ser acogedor y contemporáneo, permitiendo que cada persona encuentre su propio ritmo de conexión con lo divino y con los demás.
+                        Nuestro espacio está diseñado para ser acogedor y contemporáneo, permitiendo
+                        que cada persona encuentre su propio ritmo de conexión con lo divino y con
+                        los demás.
                     </p>
                     <NuxtLink
                         to="#"
@@ -224,7 +244,8 @@ function scrollToId(id: string) {
                     ¿Buscas algo más profundo?
                 </h3>
                 <p class="mx-auto mb-10 max-w-2xl leading-7 text-on-surface-variant">
-                    Suscríbete a nuestro boletín semanal de reflexiones y mantente al tanto de nuestros próximos eventos.
+                    Suscríbete a nuestro boletín semanal de reflexiones y mantente al tanto de
+                    nuestros próximos eventos.
                 </p>
                 <form class="mx-auto flex max-w-xl flex-col gap-4 md:flex-row" @submit.prevent>
                     <UiInput
@@ -238,6 +259,5 @@ function scrollToId(id: string) {
                 </form>
             </div>
         </section>
-
     </main>
 </template>

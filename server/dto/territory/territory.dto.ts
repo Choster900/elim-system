@@ -3,7 +3,6 @@ export type TerritoryPolygonDto = TerritoryPointDto[]
 
 export interface TerritoryBaseDto {
     name: string
-    code: string
     leaderName: string | null
     description: string | null
     color: string
@@ -20,7 +19,7 @@ export interface CreateZoneDto extends TerritoryBaseDto {
 
 export type UpdateZoneDto = Partial<CreateZoneDto>
 
-type SectorBaseDto = Omit<TerritoryBaseDto, 'code' | 'leaderName'>
+type SectorBaseDto = Omit<TerritoryBaseDto, 'leaderName'>
 
 export interface CreateSectorDto extends SectorBaseDto {
     zoneId: number

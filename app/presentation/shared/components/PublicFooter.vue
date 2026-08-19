@@ -12,7 +12,8 @@ import AppBrand from './AppBrand.vue'
             <div class="max-w-xs">
                 <AppBrand class="mb-6" />
                 <p class="mt-6 text-base leading-7 text-on-surface-variant">
-                    Una expresión contemporánea de la fe milenaria. Encuéntranos en el corazón de la ciudad.
+                    Una expresión contemporánea de la fe milenaria. Encuéntranos en el corazón de la
+                    ciudad.
                 </p>
                 <div class="mt-8 flex gap-4">
                     <NuxtLink
@@ -42,16 +43,28 @@ import AppBrand from './AppBrand.vue'
             <div class="grid grid-cols-2 gap-12 md:gap-24">
                 <div class="flex flex-col gap-4">
                     <span class="text-xs font-semibold uppercase text-primary">Recursos</span>
-                    <NuxtLink to="#" class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline">
+                    <NuxtLink
+                        to="#"
+                        class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline"
+                    >
                         Ubicación
                     </NuxtLink>
-                    <NuxtLink to="#" class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline">
+                    <NuxtLink
+                        to="#"
+                        class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline"
+                    >
                         Horarios de Servicio
                     </NuxtLink>
-                    <NuxtLink to="#" class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline">
+                    <NuxtLink
+                        to="#"
+                        class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline"
+                    >
                         Privacidad
                     </NuxtLink>
-                    <NuxtLink to="#" class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline">
+                    <NuxtLink
+                        to="#"
+                        class="text-on-surface-variant underline-offset-4 hover:text-primary hover:underline"
+                    >
                         Contacto
                     </NuxtLink>
                 </div>
