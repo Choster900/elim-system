@@ -2,7 +2,6 @@
 import {
     AlertTriangle,
     ArrowLeft,
-    CalendarClock,
     Check,
     CircleDot,
     Clock,
@@ -34,6 +33,8 @@ interface CaptureRow {
     /// Respaldo cuando el catálogo de tipos está vacío: total escrito a mano.
     attendanceTotal: number | null
     amounts: Record<number, number | null>
+    /// Respaldo cuando el catálogo de ofrendas está vacío.
+    offeringTotal: number | null
 }
 
 const route = useRoute()
@@ -51,6 +52,7 @@ const meetingId = computed(() => {
 const categories = computed(() =>
     (categoriesQuery.data.value ?? []).filter((category) => category.isActive),
 )
+const hasCategories = computed(() => categories.value.length > 0)
 
 /// Solo los tipos vigentes se capturan; los desactivados sobreviven en el histórico.
 const attendanceTypes = computed(() =>
@@ -96,6 +98,7 @@ function buildRows() {
         attendanceByType: Object.fromEntries(attendanceTypes.value.map((type) => [type.id, null])),
         attendanceTotal: null,
         amounts: Object.fromEntries(categories.value.map((category) => [category.id, null])),
+        offeringTotal: null,
     }))
     formError.value = null
 }
@@ -108,6 +111,7 @@ const allSelected = computed(
 )
 
 function rowTotal(row: CaptureRow) {
+    if (!hasCategories.value) return row.offeringTotal ?? 0
     return Object.values(row.amounts).reduce<number>((sum, amount) => sum + (amount ?? 0), 0)
 }
 
@@ -130,25 +134,77 @@ const grandTotal = computed(() => selectedRows.value.reduce((sum, row) => sum + 
 const totalAttendance = computed(() =>
     selectedRows.value.reduce((sum, row) => sum + rowAttendance(row), 0),
 )
-
-/// Cuántas personas de cada tipo suman las fechas marcadas, para el resumen lateral.
-const attendanceBreakdown = computed(() =>
-    attendanceTypes.value
-        .map((type) => ({
-            id: type.id,
-            name: type.name,
-            quantity: selectedRows.value.reduce(
-                (sum, row) => sum + (row.attendanceByType[type.id] ?? 0),
-                0,
-            ),
-        }))
-        .filter((entry) => entry.quantity > 0),
+const attendanceColumnCount = computed(() =>
+    hasAttendanceTypes.value ? attendanceTypes.value.length + 1 : 1,
 )
+const offeringColumnCount = computed(() => (hasCategories.value ? categories.value.length + 1 : 1))
+
+function attendanceTypeTotal(typeId: number) {
+    return selectedRows.value.reduce((sum, row) => sum + (row.attendanceByType[typeId] ?? 0), 0)
+}
+
+function categoryTotal(categoryId: number) {
+    return selectedRows.value.reduce((sum, row) => sum + (row.amounts[categoryId] ?? 0), 0)
+}
 
 /// Marcar la fila al escribir evita el paso extra de tildar la casilla.
 function touchRow(row: CaptureRow) {
     row.selected = true
     formError.value = null
+}
+
+function numericInputValue(event: Event, integer = false) {
+    const input = event.currentTarget as HTMLInputElement
+    if (input.value === '') return null
+
+    const value = Number(input.value)
+    if (!Number.isFinite(value)) return null
+    return integer ? Math.max(0, Math.trunc(value)) : Math.max(0, value)
+}
+
+function setAttendanceValue(row: CaptureRow, typeId: number, event: Event) {
+    row.attendanceByType[typeId] = numericInputValue(event, true)
+    touchRow(row)
+}
+
+function setAttendanceTotal(row: CaptureRow, event: Event) {
+    row.attendanceTotal = numericInputValue(event, true)
+    touchRow(row)
+}
+
+function setOfferingValue(row: CaptureRow, categoryId: number, event: Event) {
+    row.amounts[categoryId] = numericInputValue(event)
+    touchRow(row)
+}
+
+function setOfferingTotal(row: CaptureRow, event: Event) {
+    row.offeringTotal = numericInputValue(event)
+    touchRow(row)
+}
+
+/// Enter baja por la misma columna; Shift + Enter sube. Tab conserva el recorrido horizontal.
+function moveVertically(event: KeyboardEvent) {
+    if (event.key !== 'Enter') return
+
+    const current = event.currentTarget as HTMLInputElement
+    const column = current.dataset.captureColumn
+    if (!column) return
+
+    const cells = Array.from(
+        document.querySelectorAll<HTMLInputElement>(`input[data-capture-column="${column}"]`),
+    )
+    const index = cells.indexOf(current)
+    const next = cells[index + (event.shiftKey ? -1 : 1)]
+    if (!next) return
+
+    event.preventDefault()
+    next.focus()
+    next.select()
+}
+
+function selectCellContents(event: FocusEvent) {
+    const input = event.currentTarget as HTMLInputElement
+    input.select()
 }
 
 function toggleAll() {
@@ -236,8 +292,8 @@ async function onSubmit() {
             occurrenceId: row.occurrenceId,
             attendance: rowAttendance(row),
             attendanceDetails,
-            // Sin desglose el total va en cero: hubo reunión y no hubo ofrenda.
-            totalAmount: details.length > 0 ? null : 0,
+            // Sin catálogo se guarda el total manual; con catálogo manda el desglose.
+            totalAmount: details.length > 0 ? null : (row.offeringTotal ?? 0),
             currency: 'USD',
             notes: null,
             details,
@@ -254,16 +310,12 @@ async function onSubmit() {
     }
 }
 
-const inputClass =
-    'w-full rounded-md border border-outline-variant bg-surface px-3 py-2 text-sm tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/40 focus:border-primary focus:ring-1 focus:ring-primary/40'
-const labelClass =
-    'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
-const groupLabelClass =
-    'mb-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant'
+const cellInputClass =
+    'h-11 w-full min-w-[120px] border-0 bg-transparent px-3 text-right text-sm font-semibold tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/35 focus:bg-primary/[0.07] focus:ring-2 focus:ring-inset focus:ring-primary/60'
 </script>
 
 <template>
-    <main class="mx-auto w-full max-w-system px-6 pb-32 pt-24 lg:px-10">
+    <main class="mx-auto w-full max-w-[1800px] px-4 pb-32 pt-24 sm:px-6 lg:px-8">
         <button
             type="button"
             class="mb-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
@@ -331,7 +383,7 @@ const groupLabelClass =
                                 </span>
                                 <span class="inline-flex items-center gap-1.5">
                                     <Clock class="size-3.5" />
-                                    {{ meeting.startTime }}
+                                    {{ meeting.startTime }}–{{ meeting.endTime }}
                                 </span>
                                 <span
                                     v-if="meeting.leaderName"
@@ -386,293 +438,497 @@ const groupLabelClass =
                 </div>
             </section>
 
-            <div class="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
-                <!-- Fechas -->
-                <section>
-                    <div class="mb-4 flex items-center justify-between">
-                        <h2 class="font-display text-xl font-semibold text-on-surface">
-                            Fechas pendientes
-                        </h2>
+            <section
+                class="mt-6 overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-sm"
+            >
+                <div
+                    class="flex flex-col gap-5 bg-primary/[0.07] px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between"
+                >
+                    <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
+                        <div>
+                            <p
+                                class="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant"
+                            >
+                                Total a registrar
+                            </p>
+                            <p
+                                class="mt-1 font-display text-3xl font-semibold tabular-nums text-primary"
+                            >
+                                ${{ formatMoney(grandTotal) }}
+                            </p>
+                        </div>
+
+                        <span class="hidden h-11 w-px bg-outline-variant sm:block" />
+
+                        <div class="flex items-center gap-8">
+                            <div>
+                                <p class="text-xl font-semibold tabular-nums text-on-surface">
+                                    {{ selectedRows.length }}/{{ pendingCount }}
+                                </p>
+                                <p
+                                    class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    fechas
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-xl font-semibold tabular-nums text-on-surface">
+                                    {{ totalAttendance }}
+                                </p>
+                                <p
+                                    class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    asistencia
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <UiButton
+                        type="button"
+                        class="hidden h-11 shrink-0 rounded px-7 text-xs uppercase tracking-wider sm:inline-flex"
+                        :disabled="isSaving"
+                        @click="onSubmit"
+                    >
+                        <Loader2 v-if="isSaving" class="mr-2 size-4 animate-spin" />
+                        <Check v-else class="mr-2 size-4" />
+                        Registrar {{ selectedRows.length || '' }}
+                    </UiButton>
+                </div>
+
+                <p
+                    v-if="formError"
+                    role="alert"
+                    class="flex items-start gap-2 border-t border-destructive/30 bg-destructive/10 px-5 py-3 text-xs text-destructive sm:px-6"
+                >
+                    <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
+                    <span>{{ formError }}</span>
+                </p>
+            </section>
+
+            <div class="mt-8 min-w-0">
+                <section class="min-w-0">
+                    <div
+                        class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+                    >
+                        <div>
+                            <h2 class="font-display text-xl font-semibold text-on-surface">
+                                Matriz de captura
+                            </h2>
+                            <p class="mt-1 text-sm leading-relaxed text-on-surface-variant">
+                                Escribe directo en las celdas. Tab avanza y Enter baja por la misma
+                                columna.
+                            </p>
+                        </div>
                         <button
                             type="button"
-                            class="text-xs font-semibold uppercase tracking-wider text-primary transition-opacity hover:opacity-70"
+                            class="self-start text-xs font-semibold uppercase tracking-wider text-primary transition-opacity hover:opacity-70 sm:self-auto"
                             @click="toggleAll"
                         >
                             {{ allSelected ? 'Desmarcar todas' : 'Marcar todas' }}
                         </button>
                     </div>
 
-                    <p class="mb-5 text-sm leading-relaxed text-on-surface-variant">
-                        Registra solo las fechas de las que tengas el dato exacto. Las que dejes sin
-                        marcar seguirán pendientes y podrás llenarlas después.
-                    </p>
-
-                    <div class="flex flex-col gap-4">
-                        <article
-                            v-for="row in rows"
-                            :key="row.occurrenceId"
-                            class="overflow-hidden rounded-xl border transition-all"
-                            :class="
-                                row.selected
-                                    ? 'border-primary/50 bg-primary/[0.04] shadow-sm'
-                                    : 'border-outline-variant bg-surface-container-low'
-                            "
+                    <div
+                        class="overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-sm"
+                    >
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant bg-surface-container-low px-4 py-3"
                         >
-                            <!-- Cabecera de la fecha -->
-                            <label
-                                class="flex cursor-pointer items-center gap-4 border-b px-5 py-4 transition-colors"
-                                :class="
-                                    row.selected
-                                        ? 'border-primary/20 bg-primary/[0.06]'
-                                        : 'border-outline-variant bg-surface'
-                                "
+                            <p class="text-xs text-on-surface-variant">
+                                Al escribir, la fecha queda marcada automáticamente.
+                            </p>
+                            <span class="text-xs tabular-nums text-on-surface-variant">
+                                Seleccionadas
+                                <strong class="ml-1 text-on-surface">
+                                    {{ selectedRows.length }}/{{ pendingCount }}
+                                </strong>
+                            </span>
+                        </div>
+
+                        <div class="max-h-[68vh] overflow-auto overscroll-contain">
+                            <table
+                                data-testid="occurrence-capture-matrix"
+                                class="w-full min-w-max border-separate border-spacing-0 text-sm"
                             >
-                                <input
-                                    v-model="row.selected"
-                                    type="checkbox"
-                                    class="size-4 shrink-0 accent-primary"
-                                />
-
-                                <div
-                                    class="flex size-12 shrink-0 flex-col items-center justify-center rounded-lg border"
-                                    :class="
-                                        row.selected
-                                            ? 'border-primary/40 bg-primary/10'
-                                            : 'border-outline-variant bg-surface-container'
-                                    "
-                                >
-                                    <span
-                                        class="font-display text-lg font-semibold leading-none tabular-nums"
-                                        :class="row.selected ? 'text-primary' : 'text-on-surface'"
-                                    >
-                                        {{ dayOf(row.date) }}
-                                    </span>
-                                    <span
-                                        class="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant"
-                                    >
-                                        {{ monthOf(row.date) }}
-                                    </span>
-                                </div>
-
-                                <div class="min-w-0 flex-1">
-                                    <p class="text-sm font-semibold capitalize text-on-surface">
-                                        {{ weekdayOf(row.date) }}
-                                    </p>
-                                    <p class="mt-0.5 text-xs tabular-nums text-on-surface-variant">
-                                        {{ yearOf(row.date) }} ·
-                                        {{ behindLabel(daysSince(row.date)) }}
-                                    </p>
-                                </div>
-
-                                <div v-if="row.selected" class="flex shrink-0 items-center gap-5">
-                                    <div class="text-right">
-                                        <p
-                                            class="font-display text-xl font-semibold tabular-nums text-on-surface"
+                                <caption class="sr-only">
+                                    Fechas pendientes con asistencia y ofrendas por categoría
+                                </caption>
+                                <thead class="sticky top-0 z-30 bg-surface shadow-sm">
+                                    <tr>
+                                        <th
+                                            rowspan="2"
+                                            scope="col"
+                                            class="sticky left-0 z-40 w-[240px] min-w-[240px] border-b border-r border-outline-variant bg-surface-container px-4 py-3 text-left"
                                         >
-                                            {{ rowAttendance(row) }}
-                                        </p>
-                                        <p
-                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                            <label class="flex cursor-pointer items-center gap-2.5">
+                                                <input
+                                                    type="checkbox"
+                                                    :checked="allSelected"
+                                                    class="size-4 shrink-0 accent-primary"
+                                                    aria-label="Seleccionar todas las fechas"
+                                                    @change="toggleAll"
+                                                />
+                                                <span
+                                                    class="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+                                                >
+                                                    Fecha pendiente
+                                                </span>
+                                            </label>
+                                        </th>
+                                        <th
+                                            :colspan="attendanceColumnCount"
+                                            scope="colgroup"
+                                            class="border-b border-r border-outline-variant bg-secondary/10 px-4 py-2.5 text-left"
                                         >
-                                            personas
-                                        </p>
-                                    </div>
-                                    <span class="h-8 w-px bg-outline-variant" />
-                                    <div class="text-right">
-                                        <p
-                                            class="font-display text-xl font-semibold tabular-nums text-primary"
+                                            <span
+                                                class="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface"
+                                            >
+                                                <Users class="size-3.5 text-secondary" />
+                                                Asistencia
+                                            </span>
+                                        </th>
+                                        <th
+                                            :colspan="offeringColumnCount"
+                                            scope="colgroup"
+                                            class="border-b border-outline-variant bg-primary/10 px-4 py-2.5 text-left"
                                         >
-                                            ${{ formatMoney(rowTotal(row)) }}
-                                        </p>
-                                        <p
-                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                        >
-                                            total
-                                        </p>
-                                    </div>
-                                </div>
-                            </label>
-
-                            <!-- Captura -->
-                            <div class="flex flex-col gap-6 px-5 py-4">
-                                <!-- Asistencia por tipo: el total de la fecha es su suma -->
-                                <div>
-                                    <p :class="[groupLabelClass, 'flex items-center gap-1.5']">
-                                        <Users class="size-3.5" />
-                                        Asistencia *
-                                    </p>
-                                    <div
-                                        v-if="hasAttendanceTypes"
-                                        class="grid gap-4 sm:grid-cols-3 xl:grid-cols-5"
-                                    >
-                                        <div v-for="type in attendanceTypes" :key="type.id">
-                                            <label
-                                                :class="labelClass"
-                                                :for="`asis-${row.occurrenceId}-${type.id}`"
+                                            <span
+                                                class="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface"
+                                            >
+                                                <HandCoins class="size-3.5 text-primary" />
+                                                Ofrendas
+                                            </span>
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        <template v-if="hasAttendanceTypes">
+                                            <th
+                                                v-for="type in attendanceTypes"
+                                                :key="`attendance-heading-${type.id}`"
+                                                scope="col"
+                                                class="min-w-[112px] border-b border-r border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
                                                 :title="type.description ?? undefined"
                                             >
                                                 {{ type.name }}
-                                            </label>
-                                            <input
-                                                :id="`asis-${row.occurrenceId}-${type.id}`"
-                                                v-model.number="row.attendanceByType[type.id]"
-                                                type="number"
-                                                min="0"
-                                                placeholder="0"
-                                                :class="inputClass"
-                                                @input="touchRow(row)"
-                                            />
-                                        </div>
-                                    </div>
-                                    <!-- Sin catálogo de tipos se captura el total a mano -->
-                                    <div v-else class="sm:max-w-[220px]">
-                                        <label
-                                            :class="labelClass"
-                                            :for="`asistencia-${row.occurrenceId}`"
+                                            </th>
+                                            <th
+                                                scope="col"
+                                                class="min-w-[104px] border-b border-r border-outline-variant bg-secondary/10 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
+                                            >
+                                                Total
+                                            </th>
+                                        </template>
+                                        <th
+                                            v-else
+                                            scope="col"
+                                            class="min-w-[130px] border-b border-r border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
                                         >
-                                            Total de personas
-                                        </label>
-                                        <input
-                                            :id="`asistencia-${row.occurrenceId}`"
-                                            v-model.number="row.attendanceTotal"
-                                            type="number"
-                                            min="0"
-                                            placeholder="0"
-                                            :class="inputClass"
-                                            @input="touchRow(row)"
-                                        />
-                                    </div>
-                                </div>
+                                            Total personas
+                                        </th>
 
-                                <div v-if="categories.length > 0">
-                                    <p :class="[groupLabelClass, 'flex items-center gap-1.5']">
-                                        <HandCoins class="size-3.5" />
-                                        Ofrenda
-                                    </p>
-                                    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                                        <div v-for="category in categories" :key="category.id">
-                                            <label
-                                                :class="labelClass"
-                                                :for="`cat-${row.occurrenceId}-${category.id}`"
+                                        <template v-if="hasCategories">
+                                            <th
+                                                v-for="category in categories"
+                                                :key="`offering-heading-${category.id}`"
+                                                scope="col"
+                                                class="min-w-[132px] border-b border-r border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant last:border-r-0"
+                                                :title="category.description ?? undefined"
                                             >
                                                 {{ category.name }}
+                                            </th>
+                                            <th
+                                                scope="col"
+                                                class="min-w-[122px] border-b border-outline-variant bg-primary/10 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
+                                            >
+                                                Total
+                                            </th>
+                                        </template>
+                                        <th
+                                            v-else
+                                            scope="col"
+                                            class="min-w-[140px] border-b border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
+                                        >
+                                            Total ofrenda
+                                        </th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    <tr
+                                        v-for="row in rows"
+                                        :key="row.occurrenceId"
+                                        class="group transition-colors"
+                                        :class="
+                                            row.selected
+                                                ? 'bg-primary/[0.035]'
+                                                : 'bg-surface hover:bg-surface-container-low'
+                                        "
+                                    >
+                                        <th
+                                            scope="row"
+                                            class="sticky left-0 z-10 border-b border-r border-outline-variant p-0 text-left transition-colors"
+                                            :class="
+                                                row.selected
+                                                    ? 'bg-primary/[0.08]'
+                                                    : 'bg-surface group-hover:bg-surface-container-low'
+                                            "
+                                        >
+                                            <label
+                                                class="flex min-h-[64px] cursor-pointer items-center gap-3 px-3 py-2"
+                                            >
+                                                <input
+                                                    v-model="row.selected"
+                                                    type="checkbox"
+                                                    class="size-4 shrink-0 accent-primary"
+                                                    :aria-label="`Seleccionar ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
+                                                />
+                                                <span
+                                                    class="flex size-10 shrink-0 flex-col items-center justify-center rounded-md border"
+                                                    :class="
+                                                        row.selected
+                                                            ? 'border-primary/40 bg-primary/10 text-primary'
+                                                            : 'border-outline-variant bg-surface-container text-on-surface'
+                                                    "
+                                                >
+                                                    <strong
+                                                        class="font-display text-base leading-none tabular-nums"
+                                                    >
+                                                        {{ dayOf(row.date) }}
+                                                    </strong>
+                                                    <span
+                                                        class="mt-0.5 text-[8px] font-bold uppercase tracking-wide"
+                                                    >
+                                                        {{ monthOf(row.date) }}
+                                                    </span>
+                                                </span>
+                                                <span class="min-w-0">
+                                                    <span
+                                                        class="block truncate text-xs font-semibold capitalize text-on-surface"
+                                                    >
+                                                        {{ weekdayOf(row.date) }}
+                                                    </span>
+                                                    <span
+                                                        class="mt-0.5 block text-[10px] font-normal tabular-nums text-on-surface-variant"
+                                                    >
+                                                        {{ yearOf(row.date) }} ·
+                                                        {{ behindLabel(daysSince(row.date)) }}
+                                                    </span>
+                                                </span>
                                             </label>
+                                        </th>
+
+                                        <template v-if="hasAttendanceTypes">
+                                            <td
+                                                v-for="type in attendanceTypes"
+                                                :key="`attendance-${row.occurrenceId}-${type.id}`"
+                                                class="border-b border-r border-outline-variant p-0"
+                                            >
+                                                <input
+                                                    :id="`asis-${row.occurrenceId}-${type.id}`"
+                                                    :value="row.attendanceByType[type.id] ?? ''"
+                                                    type="number"
+                                                    inputmode="numeric"
+                                                    min="0"
+                                                    step="1"
+                                                    placeholder="0"
+                                                    autocomplete="off"
+                                                    :aria-label="`${type.name} del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
+                                                    :data-capture-column="`attendance-${type.id}`"
+                                                    :class="cellInputClass"
+                                                    @input="
+                                                        setAttendanceValue(row, type.id, $event)
+                                                    "
+                                                    @keydown="moveVertically"
+                                                    @focus="selectCellContents"
+                                                />
+                                            </td>
+                                            <td
+                                                class="border-b border-r border-outline-variant bg-secondary/[0.06] px-3 text-right"
+                                            >
+                                                <strong
+                                                    class="text-sm font-bold tabular-nums text-on-surface"
+                                                >
+                                                    {{ rowAttendance(row) }}
+                                                </strong>
+                                            </td>
+                                        </template>
+                                        <td
+                                            v-else
+                                            class="border-b border-r border-outline-variant p-0"
+                                        >
+                                            <input
+                                                :value="row.attendanceTotal ?? ''"
+                                                type="number"
+                                                inputmode="numeric"
+                                                min="0"
+                                                step="1"
+                                                placeholder="0"
+                                                autocomplete="off"
+                                                :aria-label="`Asistencia total del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
+                                                data-capture-column="attendance-total"
+                                                :class="cellInputClass"
+                                                @input="setAttendanceTotal(row, $event)"
+                                                @keydown="moveVertically"
+                                                @focus="selectCellContents"
+                                            />
+                                        </td>
+
+                                        <template v-if="hasCategories">
+                                            <td
+                                                v-for="category in categories"
+                                                :key="`offering-${row.occurrenceId}-${category.id}`"
+                                                class="border-b border-r border-outline-variant p-0"
+                                            >
+                                                <div class="relative">
+                                                    <span
+                                                        class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant/60"
+                                                    >
+                                                        $
+                                                    </span>
+                                                    <input
+                                                        :id="`cat-${row.occurrenceId}-${category.id}`"
+                                                        :value="row.amounts[category.id] ?? ''"
+                                                        type="number"
+                                                        inputmode="decimal"
+                                                        min="0"
+                                                        step="0.01"
+                                                        placeholder="0.00"
+                                                        autocomplete="off"
+                                                        :aria-label="`${category.name} del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
+                                                        :data-capture-column="`offering-${category.id}`"
+                                                        :class="[cellInputClass, 'pl-6']"
+                                                        @input="
+                                                            setOfferingValue(
+                                                                row,
+                                                                category.id,
+                                                                $event,
+                                                            )
+                                                        "
+                                                        @keydown="moveVertically"
+                                                        @focus="selectCellContents"
+                                                    />
+                                                </div>
+                                            </td>
+                                            <td
+                                                class="border-b border-outline-variant bg-primary/[0.06] px-3 text-right"
+                                            >
+                                                <strong
+                                                    class="whitespace-nowrap text-sm font-bold tabular-nums text-primary"
+                                                >
+                                                    ${{ formatMoney(rowTotal(row)) }}
+                                                </strong>
+                                            </td>
+                                        </template>
+                                        <td v-else class="border-b border-outline-variant p-0">
                                             <div class="relative">
                                                 <span
-                                                    class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-on-surface-variant/60"
+                                                    class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant/60"
                                                 >
                                                     $
                                                 </span>
                                                 <input
-                                                    :id="`cat-${row.occurrenceId}-${category.id}`"
-                                                    v-model.number="row.amounts[category.id]"
+                                                    :value="row.offeringTotal ?? ''"
                                                     type="number"
+                                                    inputmode="decimal"
                                                     min="0"
                                                     step="0.01"
                                                     placeholder="0.00"
-                                                    :class="[inputClass, 'pl-7']"
-                                                    @input="touchRow(row)"
+                                                    autocomplete="off"
+                                                    :aria-label="`Ofrenda total del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
+                                                    data-capture-column="offering-total"
+                                                    :class="[cellInputClass, 'pl-6']"
+                                                    @input="setOfferingTotal(row, $event)"
+                                                    @keydown="moveVertically"
+                                                    @focus="selectCellContents"
                                                 />
                                             </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </article>
+                                        </td>
+                                    </tr>
+                                </tbody>
+
+                                <tfoot class="sticky bottom-0 z-20 bg-surface-container shadow-sm">
+                                    <tr>
+                                        <th
+                                            scope="row"
+                                            class="sticky left-0 z-30 border-r border-t border-outline-variant bg-surface-container px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface"
+                                        >
+                                            Totales seleccionados
+                                        </th>
+                                        <template v-if="hasAttendanceTypes">
+                                            <td
+                                                v-for="type in attendanceTypes"
+                                                :key="`attendance-total-${type.id}`"
+                                                class="border-r border-t border-outline-variant px-3 py-3 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
+                                            >
+                                                {{ attendanceTypeTotal(type.id) }}
+                                            </td>
+                                            <td
+                                                class="border-r border-t border-outline-variant bg-secondary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-on-surface"
+                                            >
+                                                {{ totalAttendance }}
+                                            </td>
+                                        </template>
+                                        <td
+                                            v-else
+                                            class="border-r border-t border-outline-variant bg-secondary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-on-surface"
+                                        >
+                                            {{ totalAttendance }}
+                                        </td>
+
+                                        <template v-if="hasCategories">
+                                            <td
+                                                v-for="category in categories"
+                                                :key="`offering-total-${category.id}`"
+                                                class="border-r border-t border-outline-variant px-3 py-3 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
+                                            >
+                                                ${{ formatMoney(categoryTotal(category.id)) }}
+                                            </td>
+                                            <td
+                                                class="border-t border-outline-variant bg-primary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-primary"
+                                            >
+                                                ${{ formatMoney(grandTotal) }}
+                                            </td>
+                                        </template>
+                                        <td
+                                            v-else
+                                            class="border-t border-outline-variant bg-primary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-primary"
+                                        >
+                                            ${{ formatMoney(grandTotal) }}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div
+                        class="sticky bottom-3 z-40 mt-4 flex items-center justify-between gap-4 rounded-xl border border-outline-variant bg-surface/95 p-3 shadow-lg backdrop-blur sm:hidden"
+                    >
+                        <div class="min-w-0">
+                            <p
+                                class="text-[9px] font-bold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                {{ selectedRows.length }} fechas · {{ totalAttendance }} personas
+                            </p>
+                            <p
+                                class="mt-0.5 truncate font-display text-xl font-semibold tabular-nums text-primary"
+                            >
+                                ${{ formatMoney(grandTotal) }}
+                            </p>
+                        </div>
+                        <UiButton
+                            type="button"
+                            class="h-11 shrink-0 rounded px-5 text-xs uppercase tracking-wider"
+                            :disabled="isSaving"
+                            @click="onSubmit"
+                        >
+                            <Loader2 v-if="isSaving" class="mr-2 size-4 animate-spin" />
+                            <Check v-else class="mr-2 size-4" />
+                            Registrar
+                        </UiButton>
                     </div>
                 </section>
-
-                <!-- Resumen -->
-                <aside class="lg:sticky lg:top-24 lg:self-start">
-                    <div
-                        class="rounded-xl border border-outline-variant bg-surface-container-low p-6"
-                    >
-                        <h2
-                            class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                        >
-                            Resumen
-                        </h2>
-
-                        <dl class="mt-5 flex flex-col gap-4">
-                            <div class="flex items-baseline justify-between gap-4">
-                                <dt class="text-sm text-on-surface-variant">Fechas marcadas</dt>
-                                <dd class="font-semibold tabular-nums text-on-surface">
-                                    {{ selectedRows.length }} / {{ pendingCount }}
-                                </dd>
-                            </div>
-                            <div class="flex items-baseline justify-between gap-4">
-                                <dt class="text-sm text-on-surface-variant">Asistencia</dt>
-                                <dd class="font-semibold tabular-nums text-on-surface">
-                                    {{ totalAttendance }}
-                                </dd>
-                            </div>
-                            <div
-                                v-if="attendanceBreakdown.length > 0"
-                                class="-mt-2 flex flex-col gap-1.5 border-l border-outline-variant pl-3"
-                            >
-                                <div
-                                    v-for="entry in attendanceBreakdown"
-                                    :key="entry.id"
-                                    class="flex items-baseline justify-between gap-4"
-                                >
-                                    <dt class="text-xs text-on-surface-variant">
-                                        {{ entry.name }}
-                                    </dt>
-                                    <dd class="text-xs tabular-nums text-on-surface-variant">
-                                        {{ entry.quantity }}
-                                    </dd>
-                                </div>
-                            </div>
-                            <div
-                                class="flex items-baseline justify-between gap-4 border-t border-outline-variant pt-4"
-                            >
-                                <dt class="text-sm text-on-surface-variant">Total a registrar</dt>
-                                <dd
-                                    class="font-display text-2xl font-semibold tabular-nums text-on-surface"
-                                >
-                                    ${{ formatMoney(grandTotal) }}
-                                </dd>
-                            </div>
-                        </dl>
-
-                        <p
-                            v-if="formError"
-                            role="alert"
-                            class="mt-5 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-                        >
-                            <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
-                            <span>{{ formError }}</span>
-                        </p>
-
-                        <div class="mt-6 flex flex-col gap-2">
-                            <UiButton
-                                type="button"
-                                class="h-11 w-full rounded text-xs uppercase tracking-wider"
-                                :disabled="isSaving"
-                                @click="onSubmit"
-                            >
-                                <Loader2 v-if="isSaving" class="mr-2 size-4 animate-spin" />
-                                <Check v-else class="mr-2 size-4" />
-                                Registrar {{ selectedRows.length || '' }}
-                            </UiButton>
-                            <UiButton
-                                variant="outline"
-                                type="button"
-                                class="h-11 w-full rounded text-xs uppercase tracking-wider"
-                                @click="navigateTo('/finanzas/ofrendas')"
-                            >
-                                Cancelar
-                            </UiButton>
-                        </div>
-
-                        <p
-                            class="mt-5 flex items-start gap-2 text-[11px] leading-relaxed text-on-surface-variant"
-                        >
-                            <CalendarClock class="mt-0.5 size-3.5 shrink-0" />
-                            Lo que no marques queda pendiente. Nadie pierde la fecha.
-                        </p>
-                    </div>
-                </aside>
             </div>
         </template>
     </main>
