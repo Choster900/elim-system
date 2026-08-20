@@ -17,6 +17,7 @@ import {
     type MonthlyModeValue,
     type RecurrenceFrequency,
 } from '../utils/date/recurrence.util'
+import { hasOccurrenceEnded } from '../utils/date/business-time.util'
 
 /// Cuánto historial se reconstruye la primera vez que se sincroniza una reunión.
 const GENERATION_FLOOR_MONTHS = 3
@@ -66,6 +67,15 @@ function maxIsoDate(left: string, right: string) {
     return left > right ? left : right
 }
 
+function assertOccurrenceEnded(occurrence: repo.OccurrenceRecord, now = new Date()): void {
+    if (hasOccurrenceEnded(occurrence, now)) return
+
+    businessRule(
+        `La reunión ${occurrence.meetingTitle} del ${occurrence.date} todavía no ha terminado; ` +
+            `podrás registrar la ofrenda y la asistencia después de las ${occurrence.endTime}`,
+    )
+}
+
 async function assertCategoriesExist(details: { categoryId: number }[]) {
     if (details.length === 0) return
     const ids = [...new Set(details.map((detail) => detail.categoryId))]
@@ -89,8 +99,8 @@ async function assertAttendanceTypesExist(details: { typeId: number }[]) {
  * todavía no existen como fila. Nunca genera fechas futuras: una fecha que no ha
  * ocurrido no es un pendiente.
  */
-export async function syncOccurrences(options: { meetingIds?: number[] } = {}) {
-    const today = todayIsoDate()
+export async function syncOccurrences(options: { meetingIds?: number[] } = {}, now = new Date()) {
+    const today = todayIsoDate(now)
     const floor = isoDateMonthsAgo(today, GENERATION_FLOOR_MONTHS)
     const meetings = await repo.findMeetingsForGeneration(options.meetingIds)
 
@@ -129,9 +139,10 @@ export async function resyncMeetingOccurrences(meetingId: number) {
     return syncOccurrences({ meetingIds: [meetingId] })
 }
 
-export async function getPendingOccurrences(scope: OccurrenceScopeFilter) {
-    await syncOccurrences()
-    return repo.findPendingOccurrences(scope)
+export async function getPendingOccurrences(scope: OccurrenceScopeFilter, now = new Date()) {
+    await syncOccurrences({}, now)
+    const occurrences = await repo.findPendingOccurrences(scope)
+    return occurrences.filter((occurrence) => hasOccurrenceEnded(occurrence, now))
 }
 
 export function getOccurrences(scope: OccurrenceScopeFilter, filters: OccurrenceFiltersDto = {}) {
@@ -174,6 +185,8 @@ export async function recordOccurrence(
         businessRule('Esta fecha ya fue registrada; solo un supervisor puede corregirla')
     }
 
+    assertOccurrenceEnded(occurrence)
+
     await assertCategoriesExist(dto.details)
     await assertAttendanceTypesExist(dto.attendanceDetails)
     return repo.recordOccurrence(id, dto, userId)
@@ -198,6 +211,9 @@ export async function recordOccurrencesBulk(
             `La fecha ${alreadyRecorded.date} de ${alreadyRecorded.meetingTitle} ya fue registrada`,
         )
     }
+
+    const now = new Date()
+    for (const occurrence of occurrences) assertOccurrenceEnded(occurrence, now)
 
     await assertCategoriesExist(dto.entries.flatMap((entry) => entry.details))
     await assertAttendanceTypesExist(dto.entries.flatMap((entry) => entry.attendanceDetails))

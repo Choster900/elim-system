@@ -2,6 +2,8 @@
 // Función pura y sin dependencias: toda la aritmética es en UTC sobre fechas ISO
 // (yyyy-mm-dd) para que el resultado no dependa de la zona horaria del servidor.
 
+import { businessIsoDate } from './business-time.util'
+
 export type RecurrenceFrequency = 'unica' | 'diaria' | 'semanal' | 'quincenal' | 'mensual'
 export type MonthlyModeValue = 'dia_fijo' | 'ordinal'
 
@@ -128,10 +130,9 @@ export function expectedDatesFor(rule: RecurrenceRule, from: string, to: string)
     return dates
 }
 
-/// Fecha de hoy en ISO, en la zona horaria del servidor.
-export function todayIsoDate() {
-    const now = new Date()
-    return toIsoDate(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+/// Fecha de hoy en ISO, en la zona horaria oficial de la operación.
+export function todayIsoDate(now = new Date()) {
+    return businessIsoDate(now)
 }
 
 /// Desplaza una fecha ISO hacia atrás un número de meses.

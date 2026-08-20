@@ -11,12 +11,14 @@ import {
     getPendingOccurrences,
 } from '../services/occurrence.service'
 
-export function usePendingOccurrencesQuery() {
+export function usePendingOccurrencesQuery(options: { autoRefresh?: boolean } = {}) {
     const apiClient = useApiClient()
 
     return useQuery({
         queryKey: queryKeys.occurrences.pending,
         queryFn: ({ signal }) => getPendingOccurrences(apiClient, signal),
+        refetchInterval: options.autoRefresh ? 60_000 : false,
+        refetchOnWindowFocus: options.autoRefresh ?? false,
     })
 }
 

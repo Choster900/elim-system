@@ -77,6 +77,7 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
         meetingTypeName: occurrence.meeting.type?.name ?? null,
         meetingColor: occurrence.meeting.color,
         startTime: occurrence.meeting.startTime.toISOString().slice(11, 16),
+        endTime: occurrence.meeting.endTime.toISOString().slice(11, 16),
         date: toIsoDate(occurrence.date),
         status: occurrence.status === 'RECORDED' ? 'registrada' : 'pendiente',
         attendance: occurrence.attendance,

@@ -25,7 +25,7 @@ useHead({
 })
 
 const authStore = useAuthStore()
-const pendingQuery = usePendingOccurrencesQuery()
+const pendingQuery = usePendingOccurrencesQuery({ autoRefresh: true })
 
 const canRecord = computed(() => authStore.hasPermission(routePermissionCodes.financeRecord))
 

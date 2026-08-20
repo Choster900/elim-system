@@ -28,7 +28,7 @@ const occurrences = {
     all: ['occurrences'] as const,
     pending: ['occurrences', 'pending'] as const,
     lists: ['occurrences', 'list'] as const,
-    list: (filters: Record<string, unknown>) => ['occurrences', 'list', filters] as const,
+    list: <TFilters extends object>(filters: TFilters) => ['occurrences', 'list', filters] as const,
     detail: (id: number) => ['occurrences', 'detail', id] as const,
     meetingHistory: (meetingId: number) => ['occurrences', 'meeting', meetingId] as const,
 }

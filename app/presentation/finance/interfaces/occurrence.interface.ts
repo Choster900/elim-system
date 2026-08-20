@@ -39,6 +39,7 @@ export interface OccurrenceRecord {
     meetingTypeName: string | null
     meetingColor: string
     startTime: string
+    endTime: string
     date: string
     status: OccurrenceStatus
     attendance: number | null
