@@ -1,75 +1,72 @@
-import { getHeader, getQuery, readBody, type H3Event } from 'h3'
+import { getHeader, getQuery, getRequestURL, getResponseStatus, readBody, type H3Event } from 'h3'
 import { getSanitizedRequestUrl, printApiLog } from '../utils/logging/api-log.util'
 
 const API_PREFIX = '/api'
-const REQUEST_START_KEY = '__apiRequestStartedAtMs'
-const OMITTED_MULTIPART_BODY = '[multipart body omitted]'
-const OMITTED_BINARY_BODY = '[binary body omitted]'
-const UNAVAILABLE_BODY = '[body unavailable]'
+const LOG_CONTEXT_KEY = '__apiRequestLogContext'
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-async function getRequestBodyForLog(event: H3Event, method: string) {
-    if (!BODY_METHODS.has(method)) {
-        return null
-    }
+interface RequestLogContext {
+    startedAt: number
+    method: string
+    path: string
+}
+
+async function requestBody(event: H3Event, method: string) {
+    if (!BODY_METHODS.has(method)) return null
 
     const contentType = getHeader(event, 'content-type')?.toLowerCase() ?? ''
-    if (contentType.startsWith('multipart/form-data')) {
-        return OMITTED_MULTIPART_BODY
-    }
-    if (contentType.startsWith('application/octet-stream')) {
-        return OMITTED_BINARY_BODY
-    }
+    if (contentType.startsWith('multipart/form-data')) return '[multipart body omitted]'
+    if (contentType.startsWith('application/octet-stream')) return '[binary body omitted]'
 
     try {
         return (await readBody(event)) ?? null
     } catch {
-        return UNAVAILABLE_BODY
+        return '[body unavailable]'
     }
 }
 
 export default defineNitroPlugin((nitroApp) => {
-    const isDev = process.env.NODE_ENV === 'development'
-    if (!isDev) {
-        return
-    }
+    if (process.env.NODE_ENV === 'production') return
+
+    console.log('[api] Request/response logging enabled')
 
     nitroApp.hooks.hook('request', async (event) => {
-        if (!event.path.startsWith(API_PREFIX)) {
-            return
-        }
-
-        ;(event.context as Record<string, unknown>)[REQUEST_START_KEY] = Date.now()
+        const path = getRequestURL(event).pathname
+        if (path !== API_PREFIX && !path.startsWith(`${API_PREFIX}/`)) return
 
         const method = event.node.req.method || 'GET'
-        const query = getQuery(event)
-        const hasQuery = Object.keys(query).length > 0
-        const body = await getRequestBodyForLog(event, method)
+        ;(event.context as Record<string, unknown>)[LOG_CONTEXT_KEY] = {
+            startedAt: Date.now(),
+            method,
+            path,
+        } satisfies RequestLogContext
 
         printApiLog('API_REQUEST', {
             method,
-            path: event.path,
+            path,
             url: getSanitizedRequestUrl(event),
-            query: hasQuery ? query : null,
-            body,
+            query: Object.keys(getQuery(event)).length ? getQuery(event) : null,
+            body: await requestBody(event, method),
         })
     })
 
     nitroApp.hooks.hook('afterResponse', (event, response) => {
-        if (!event.path.startsWith(API_PREFIX)) {
-            return
-        }
+        const context = (event.context as Record<string, unknown>)[LOG_CONTEXT_KEY] as
+            | RequestLogContext
+            | undefined
+        if (!context) return
 
-        const startedAt = (event.context as Record<string, unknown>)[REQUEST_START_KEY]
-        const durationMs = typeof startedAt === 'number' ? Date.now() - startedAt : null
-        const responseBody = response && 'body' in response ? response.body : null
-
-        printApiLog('API_RESPONSE', {
-            method: event.node.req.method || 'GET',
-            path: event.path,
-            status: event.node.res.statusCode,
-            durationMs,
-            response: responseBody,
-        })
+        const status = getResponseStatus(event)
+        printApiLog(
+            'API_RESPONSE',
+            {
+                method: context.method,
+                path: context.path,
+                status,
+                durationMs: Date.now() - context.startedAt,
+                response: response?.body ?? null,
+            },
+            status >= 500 ? 'error' : status >= 400 ? 'warn' : 'log',
+        )
     })
 })
