@@ -1,30 +1,23 @@
 import { getRequestURL, type H3Event } from 'h3'
 
-const LOG_SEPARATOR = '----------------------------------------------------------------'
-const LOG_INDENT = '\t'
+const LOG_SEPARATOR = '-'.repeat(64)
 const REDACTED_VALUE = '[REDACTED]'
 const MAX_LOG_STRING_LENGTH = 2_000
 
 type ApiLogLabel = 'API_REQUEST' | 'API_RESPONSE'
+type ApiLogLevel = 'log' | 'warn' | 'error'
 
 export function isSensitiveLogKey(key: string) {
     const normalizedKey = key.replace(/[^a-z0-9]/gi, '').toLowerCase()
 
     return (
-        normalizedKey.includes('password') ||
-        normalizedKey.includes('passwd') ||
-        normalizedKey === 'pwd' ||
-        normalizedKey === 'authorization' ||
-        normalizedKey === 'cookie' ||
-        normalizedKey === 'setcookie' ||
-        normalizedKey === 'token' ||
-        normalizedKey === 'jwt' ||
+        ['password', 'passwd', 'secret', 'credential'].some((part) =>
+            normalizedKey.includes(part),
+        ) ||
+        ['pwd', 'authorization', 'cookie', 'setcookie', 'jwt', 'apikey'].includes(normalizedKey) ||
         normalizedKey.endsWith('token') ||
         normalizedKey.endsWith('tokenhash') ||
-        normalizedKey.includes('secret') ||
-        normalizedKey === 'apikey' ||
-        normalizedKey.endsWith('privatekey') ||
-        normalizedKey.includes('credential')
+        normalizedKey.endsWith('privatekey')
     )
 }
 
@@ -47,6 +40,26 @@ export function sanitizeForLog(value: unknown, seen = new WeakSet<object>()): un
 
     if (typeof value !== 'object' || value === null) {
         return value
+    }
+
+    if (value instanceof Error) {
+        const error = value as Error & {
+            statusCode?: number
+            statusMessage?: string
+            data?: unknown
+        }
+
+        seen.add(value)
+        const sanitizedError = {
+            name: error.name,
+            message: truncateLogString(error.message),
+            statusCode: error.statusCode,
+            statusMessage: error.statusMessage,
+            data: sanitizeForLog(error.data, seen),
+            stack: error.stack ? truncateLogString(error.stack) : undefined,
+        }
+        seen.delete(value)
+        return sanitizedError
     }
 
     if (value instanceof Date) {
@@ -91,10 +104,14 @@ export function getSanitizedRequestUrl(event: H3Event) {
     return url.toString()
 }
 
-export function printApiLog(label: ApiLogLabel, payload: Record<string, unknown>) {
-    const prettyPayload = JSON.stringify(sanitizeForLog(payload), null, LOG_INDENT)
+export function printApiLog(
+    label: ApiLogLabel,
+    payload: Record<string, unknown>,
+    level: ApiLogLevel = 'log',
+) {
+    const prettyPayload = JSON.stringify(sanitizeForLog(payload), null, '\t')
     const timestamp = new Date().toISOString()
     const lines = [LOG_SEPARATOR, `[${label}] ${timestamp}`, prettyPayload, LOG_SEPARATOR]
 
-    console.log(lines.join('\n'))
+    console[level](lines.join('\n'))
 }
