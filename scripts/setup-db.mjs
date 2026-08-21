@@ -35,13 +35,13 @@ async function main() {
     const client = makeClient(DATABASE_URL)
 
     try {
-        await client.$connect()
+        // Driver adapters can initialize lazily; a real query verifies host, database and credentials.
+        await client.$queryRaw`SELECT 1`
         console.log('[setup-db] Database connection verified')
         return
     } catch (error) {
         const isNotFound =
-            error?.errorCode === 'P1003' ||
-            error?.message?.toLowerCase().includes('does not exist')
+            error?.errorCode === 'P1003' || error?.message?.toLowerCase().includes('does not exist')
 
         if (!isNotFound) {
             console.error('[setup-db] Cannot connect to database:', error.message)
