@@ -22,7 +22,16 @@ export async function findTerritoryHierarchy() {
         prisma.district.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] }),
         prisma.zone.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] }),
         prisma.territorySector.findMany({
-            include: { supervisor: true },
+            include: {
+                supervisor: {
+                    select: {
+                        firstName: true,
+                        middleName: true,
+                        lastName: true,
+                        secondLastName: true,
+                    },
+                },
+            },
             orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
         }),
     ])
@@ -30,14 +39,14 @@ export async function findTerritoryHierarchy() {
     return {
         districts,
         zones,
-        sectors: sectors.map((sector) => ({
+        sectors: sectors.map(({ supervisor, ...sector }) => ({
             ...sector,
-            supervisorName: sector.supervisor
+            supervisorName: supervisor
                 ? [
-                      sector.supervisor.firstName,
-                      sector.supervisor.middleName,
-                      sector.supervisor.lastName,
-                      sector.supervisor.secondLastName,
+                      supervisor.firstName,
+                      supervisor.middleName,
+                      supervisor.lastName,
+                      supervisor.secondLastName,
                   ]
                       .filter(Boolean)
                       .join(' ')
@@ -155,11 +164,11 @@ export function deleteZone(id: number) {
 }
 
 export function findSectorById(id: number) {
-    return prisma.territorySector.findUnique({ where: { id }, include: { supervisor: true } })
+    return prisma.territorySector.findUnique({ where: { id } })
 }
 
 export async function createSector(dto: CreateSectorDto, supervisorName: string) {
-    const { polygon, supervisorId, ...fields } = dto
+    const { polygon, supervisorId, zoneId, ...fields } = dto
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -177,10 +186,10 @@ export async function createSector(dto: CreateSectorDto, supervisorName: string)
                                 codes.map((item) => item.code),
                             ),
                             polygon: polygon as Prisma.InputJsonValue,
+                            zone: { connect: { id: zoneId } },
                             supervisor: { connect: { id: supervisorId } },
                             supervisorName,
                         },
-                        include: { supervisor: true },
                     })
                 },
                 { isolationLevel: 'Serializable' },
@@ -210,7 +219,6 @@ export async function updateSector(id: number, dto: UpdateSectorDto, supervisorN
             const sector = await transaction.territorySector.update({
                 where: { id },
                 data,
-                include: { supervisor: true },
             })
 
             if (supervisorId !== undefined) {

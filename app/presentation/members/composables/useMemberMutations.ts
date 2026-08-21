@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
-import type { MemberInput } from '../interfaces/member.interface'
+import type { MemberImportRequestRow, MemberInput } from '../interfaces/member.interface'
 import { createMember, deleteMember, importMembers, updateMember } from '../services/member.service'
 
 interface UpdateMemberVariables {
@@ -48,7 +48,7 @@ export function useImportMembersMutation() {
 
     return useMutation({
         mutationKey: [...queryKeys.members.all, 'import'],
-        mutationFn: (members: MemberInput[]) => importMembers(apiClient, members),
+        mutationFn: (rows: MemberImportRequestRow[]) => importMembers(apiClient, rows),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
     })
 }

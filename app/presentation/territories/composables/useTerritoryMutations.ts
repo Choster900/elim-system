@@ -1,7 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
-import type { TerritoryInput, TerritoryLevel } from '../interfaces/territory.interface'
+import type {
+    TerritoryHierarchy,
+    TerritoryInput,
+    TerritoryLevel,
+} from '../interfaces/territory.interface'
+import type { TerritoryImportPreview } from '../services/territory-excel.service'
+import { importTerritories } from '../services/territory-excel.service'
 import {
     createTerritoryEntity,
     deleteTerritoryEntity,
@@ -25,6 +31,11 @@ interface DeleteTerritoryVariables {
     id: string
 }
 
+interface ImportTerritoriesVariables {
+    preview: TerritoryImportPreview
+    hierarchy: TerritoryHierarchy
+}
+
 export function useCreateTerritoryMutation() {
     const apiClient = useApiClient()
     const queryClient = useQueryClient()
@@ -33,7 +44,12 @@ export function useCreateTerritoryMutation() {
         mutationKey: [...queryKeys.territories.all, 'create'],
         mutationFn: ({ level, input, parentId }: CreateTerritoryVariables) =>
             createTerritoryEntity(apiClient, level, input, parentId),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.territories.all }),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.territories.all }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.members.catalogs }),
+            ])
+        },
     })
 }
 
@@ -45,7 +61,13 @@ export function useUpdateTerritoryMutation() {
         mutationKey: [...queryKeys.territories.all, 'update'],
         mutationFn: ({ level, id, input }: UpdateTerritoryVariables) =>
             updateTerritoryEntity(apiClient, level, id, input),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.territories.all }),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.territories.all }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.meetings.all }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.members.catalogs }),
+            ])
+        },
     })
 }
 
@@ -57,6 +79,28 @@ export function useDeleteTerritoryMutation() {
         mutationKey: [...queryKeys.territories.all, 'delete'],
         mutationFn: ({ level, id }: DeleteTerritoryVariables) =>
             deleteTerritoryEntity(apiClient, level, id),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.territories.all }),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.territories.all }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.members.catalogs }),
+            ])
+        },
+    })
+}
+
+export function useImportTerritoriesMutation() {
+    const apiClient = useApiClient()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationKey: [...queryKeys.territories.all, 'import'],
+        mutationFn: ({ preview, hierarchy }: ImportTerritoriesVariables) =>
+            importTerritories(apiClient, preview, hierarchy),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.territories.all }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.members.catalogs }),
+            ])
+        },
     })
 }

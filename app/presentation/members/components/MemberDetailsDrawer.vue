@@ -145,7 +145,12 @@ const age = computed(() => (props.member ? getMemberAge(props.member.birthDate) 
                         <p class="flex items-start gap-3">
                             <MapPin class="mt-0.5 size-4 shrink-0 text-on-surface-variant" />
                             {{
-                                [member.address, member.municipality, member.department]
+                                [
+                                    member.address,
+                                    member.municipality,
+                                    member.department,
+                                    member.country,
+                                ]
                                     .filter(Boolean)
                                     .join(', ') || 'Sin dirección'
                             }}

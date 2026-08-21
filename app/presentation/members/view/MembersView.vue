@@ -35,6 +35,7 @@ import {
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { formatInitials } from '~/utils/string/text-format.util'
 import MemberDetailsDrawer from '../components/MemberDetailsDrawer.vue'
@@ -44,14 +45,22 @@ import {
     useImportMembersMutation,
     useUpdateMemberMutation,
 } from '../composables/useMemberMutations'
+import { useMemberCatalogsQuery } from '../composables/useMemberCatalogsQuery'
 import { useMembersQuery } from '../composables/useMembersQuery'
 import { memberRoleOptions, memberStatusOptions } from '../constants/member.constants'
-import type { Member, MemberInput, MemberStatus } from '../interfaces/member.interface'
+import type {
+    Member,
+    MemberImportResult,
+    MemberInput,
+    MemberStatus,
+} from '../interfaces/member.interface'
 import {
+    downloadMemberImportFailures,
     downloadMembersTemplate,
     exportMembersWorkbook,
     parseMembersWorkbook,
     type MemberImportPreview,
+    type MemberRetryFailure,
 } from '../services/member-excel.service'
 import {
     getMemberAge,
@@ -65,21 +74,25 @@ defineOptions({ name: 'MembersView' })
 useHead({ title: 'Miembros · Sistema' })
 
 const toast = useAppToast()
+const authStore = useAuthStore()
 const membersQuery = useMembersQuery()
+const catalogsQuery = useMemberCatalogsQuery()
 const updateMemberMutation = useUpdateMemberMutation()
 const deleteMemberMutation = useDeleteMemberMutation()
 const importMembersMutation = useImportMembersMutation()
 
 const members = computed(() => membersQuery.data.value ?? [])
+const memberCatalogs = computed(() => catalogsQuery.data.value ?? null)
 const loading = computed(() => membersQuery.isPending.value)
 const saving = computed(() => updateMemberMutation.isPending.value)
+const canCreate = computed(() => authStore.hasPermission('members.create'))
+const canImportExport = computed(() => authStore.hasPermission('members.import_export'))
 
 if (import.meta.server) {
     onServerPrefetch(() =>
-        membersQuery
-            .suspense()
-            .then(() => undefined)
-            .catch(() => undefined),
+        Promise.allSettled([membersQuery.suspense(), catalogsQuery.suspense()]).then(
+            () => undefined,
+        ),
     )
 }
 
@@ -240,9 +253,13 @@ const exporting = ref(false)
 const downloadingTemplate = ref(false)
 
 async function exportExcel() {
+    if (!memberCatalogs.value) {
+        toast.error('Los catálogos todavía no están disponibles')
+        return
+    }
     exporting.value = true
     try {
-        await exportMembersWorkbook(members.value)
+        await exportMembersWorkbook(members.value, memberCatalogs.value)
         toast.success('Directorio exportado a Excel')
     } catch {
         toast.error('No fue posible generar el archivo Excel')
@@ -252,9 +269,13 @@ async function exportExcel() {
 }
 
 async function downloadTemplate() {
+    if (!memberCatalogs.value) {
+        toast.error('Los catálogos todavía no están disponibles')
+        return
+    }
     downloadingTemplate.value = true
     try {
-        await downloadMembersTemplate()
+        await downloadMembersTemplate(memberCatalogs.value)
         toast.success('Plantilla de importación descargada')
     } catch {
         toast.error('No fue posible generar la plantilla')
@@ -268,7 +289,30 @@ const importOpen = ref(false)
 const importing = computed(() => importMembersMutation.isPending.value)
 const parsingFile = ref(false)
 const importFileName = ref('')
-const importPreview = ref<MemberImportPreview>({ members: [], errors: [] })
+const importPreview = ref<MemberImportPreview>({ rows: [], fileErrors: [] })
+const importResult = ref<MemberImportResult | null>(null)
+const retryFailures = ref<MemberRetryFailure[]>([])
+const downloadingFailures = ref(false)
+const validImportRows = computed(() =>
+    importPreview.value.rows.filter((row) => row.issues.length === 0),
+)
+const invalidImportRows = computed(() =>
+    importPreview.value.rows.filter((row) => row.issues.length > 0),
+)
+const previewErrors = computed(() => {
+    if (importResult.value) {
+        return retryFailures.value.flatMap((failure) =>
+            failure.reasons.map((reason) => `Fila ${failure.rowNumber}: ${reason}`),
+        )
+    }
+
+    return [
+        ...importPreview.value.fileErrors,
+        ...invalidImportRows.value.flatMap((row) =>
+            row.issues.map((issue) => `Fila ${row.rowNumber}: ${issue}`),
+        ),
+    ]
+})
 
 function pickImportFile() {
     importInput.value?.click()
@@ -279,11 +323,17 @@ async function onImportFile(event: Event) {
     const file = input.files?.[0]
     input.value = ''
     if (!file) return
+    if (!memberCatalogs.value) {
+        toast.error('No fue posible cargar los catálogos para validar el archivo')
+        return
+    }
 
     parsingFile.value = true
     importFileName.value = file.name
+    importResult.value = null
+    retryFailures.value = []
     try {
-        importPreview.value = await parseMembersWorkbook(file)
+        importPreview.value = await parseMembersWorkbook(file, memberCatalogs.value)
         importOpen.value = true
     } catch {
         toast.error('No pudimos leer el archivo. Verifica que sea un Excel .xlsx válido.')
@@ -293,17 +343,67 @@ async function onImportFile(event: Event) {
 }
 
 async function confirmImport() {
-    if (!importPreview.value.members.length || importPreview.value.errors.length) return
+    if (!validImportRows.value.length || !memberCatalogs.value) return
     try {
-        const result = await importMembersMutation.mutateAsync(importPreview.value.members)
-        if (result) {
-            toast.success(
-                `Importación completa: ${result.created} creados y ${result.updated} actualizados`,
-            )
+        const serverResult = await importMembersMutation.mutateAsync(
+            validImportRows.value.map((row) => ({
+                rowNumber: row.rowNumber,
+                member: row.member,
+            })),
+        )
+        const failures: MemberRetryFailure[] = [
+            ...invalidImportRows.value.map((row) => ({
+                rowNumber: row.rowNumber,
+                reasons: row.issues,
+            })),
+            ...serverResult.failures,
+        ].sort((left, right) => left.rowNumber - right.rowNumber)
+        retryFailures.value = failures
+        importResult.value = {
+            ...serverResult,
+            rejected: failures.length,
+            total: importPreview.value.rows.length,
+            failures,
         }
-        importOpen.value = false
+
+        if (failures.length) {
+            await downloadMemberImportFailures(
+                importPreview.value.rows,
+                failures,
+                memberCatalogs.value,
+            )
+            toast.warning(
+                `${serverResult.created + serverResult.updated} miembros guardados y ${failures.length} pendientes. Se descargó el archivo de corrección.`,
+            )
+        } else {
+            toast.success(
+                `Importación completa: ${serverResult.created} creados y ${serverResult.updated} actualizados`,
+            )
+            importOpen.value = false
+        }
     } catch {
-        toast.error('No fue posible importar los miembros. Revisa datos duplicados o inválidos.')
+        toast.error('No fue posible iniciar la importación. Ninguna fila adicional fue procesada.')
+    }
+}
+
+async function downloadPendingMembers() {
+    if (!memberCatalogs.value) return
+    const failures = retryFailures.value.length
+        ? retryFailures.value
+        : invalidImportRows.value.map((row) => ({
+              rowNumber: row.rowNumber,
+              reasons: row.issues,
+          }))
+    if (!failures.length) return
+
+    downloadingFailures.value = true
+    try {
+        await downloadMemberImportFailures(importPreview.value.rows, failures, memberCatalogs.value)
+        toast.success('Archivo de miembros pendientes descargado')
+    } catch {
+        toast.error('No fue posible generar el archivo de miembros pendientes')
+    } finally {
+        downloadingFailures.value = false
     }
 }
 </script>
@@ -329,6 +429,7 @@ async function confirmImport() {
 
             <div class="flex flex-wrap gap-2">
                 <input
+                    v-if="canImportExport"
                     ref="importInput"
                     type="file"
                     accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -336,31 +437,37 @@ async function confirmImport() {
                     @change="onImportFile"
                 />
                 <UiButton
+                    v-if="canImportExport"
                     variant="outline"
                     type="button"
                     :loading="downloadingTemplate"
+                    :disabled="catalogsQuery.isPending.value"
                     @click="downloadTemplate"
                 >
                     <FileDown class="size-4" /> Plantilla
                 </UiButton>
                 <UiButton
+                    v-if="canImportExport"
                     variant="outline"
                     type="button"
                     :loading="parsingFile"
+                    :disabled="catalogsQuery.isPending.value"
                     @click="pickImportFile"
                 >
                     <Upload class="size-4" /> Importar
                 </UiButton>
                 <UiButton
+                    v-if="canImportExport"
                     variant="outline"
                     type="button"
                     :loading="exporting"
-                    :disabled="!members.length"
+                    :disabled="!members.length || catalogsQuery.isPending.value"
                     @click="exportExcel"
                 >
                     <Download class="size-4" /> Exportar
                 </UiButton>
                 <NuxtLink
+                    v-if="canCreate"
                     to="/comunidad/miembros/nuevo"
                     class="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     data-testid="create-member-link"
@@ -667,19 +774,45 @@ async function confirmImport() {
                             </DialogDescription>
                         </div>
                     </div>
-                    <div class="mt-6 grid grid-cols-2 gap-3">
+                    <div v-if="importResult" class="mt-6 grid grid-cols-3 gap-3">
+                        <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-4">
+                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                Creados
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-emerald-600">
+                                {{ importResult.created }}
+                            </p>
+                        </div>
+                        <div class="rounded border border-primary/30 bg-primary/5 p-4">
+                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                Actualizados
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-primary">
+                                {{ importResult.updated }}
+                            </p>
+                        </div>
+                        <div class="rounded border border-destructive/40 bg-destructive/5 p-4">
+                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                Pendientes
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-destructive">
+                                {{ importResult.rejected }}
+                            </p>
+                        </div>
+                    </div>
+                    <div v-else class="mt-6 grid grid-cols-2 gap-3">
                         <div class="rounded border border-outline-variant bg-surface-container p-4">
                             <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                 Registros válidos
                             </p>
                             <p class="mt-1 font-display text-2xl font-semibold text-on-surface">
-                                {{ importPreview.members.length }}
+                                {{ validImportRows.length }}
                             </p>
                         </div>
                         <div
                             class="rounded border p-4"
                             :class="
-                                importPreview.errors.length
+                                previewErrors.length
                                     ? 'border-destructive/40 bg-destructive/5'
                                     : 'border-outline-variant bg-surface-container'
                             "
@@ -690,32 +823,34 @@ async function confirmImport() {
                             <p
                                 class="mt-1 font-display text-2xl font-semibold"
                                 :class="
-                                    importPreview.errors.length
-                                        ? 'text-destructive'
-                                        : 'text-on-surface'
+                                    previewErrors.length ? 'text-destructive' : 'text-on-surface'
                                 "
                             >
-                                {{ importPreview.errors.length }}
+                                {{ invalidImportRows.length }}
                             </p>
                         </div>
                     </div>
                     <div
-                        v-if="importPreview.errors.length"
+                        v-if="previewErrors.length"
                         class="mt-4 rounded border border-destructive/30 bg-destructive/5 p-4"
                     >
                         <p class="text-xs font-semibold text-destructive">
-                            Corrige estos problemas antes de importar:
+                            {{
+                                importResult
+                                    ? 'Filas que continúan pendientes:'
+                                    : 'Estas filas se devolverán para corregirlas:'
+                            }}
                         </p>
                         <ul
                             class="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-on-surface-variant"
                         >
-                            <li v-for="error in importPreview.errors" :key="error">
+                            <li v-for="error in previewErrors" :key="error">
                                 {{ error }}
                             </li>
                         </ul>
                     </div>
                     <p
-                        v-else
+                        v-else-if="!importResult"
                         class="mt-4 rounded border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
                     >
                         Los registros que coincidan por
@@ -723,23 +858,54 @@ async function confirmImport() {
                         actualizados. Los demás serán creados con un código automático cuando sea
                         necesario.
                     </p>
-                    <div class="mt-6 flex justify-end gap-2">
+                    <p
+                        v-if="!importResult && invalidImportRows.length && validImportRows.length"
+                        class="mt-4 rounded border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        Los {{ validImportRows.length }} registros válidos se guardarán. Las
+                        {{ invalidImportRows.length }} filas con problemas quedarán en un nuevo
+                        Excel junto con el motivo, listas para corregir y volver a importar.
+                    </p>
+                    <p
+                        v-if="importResult && importResult.rejected"
+                        class="mt-4 rounded border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        Los miembros creados o actualizados ya no aparecen en el archivo de
+                        pendientes. Puedes corregir ese archivo y subirlo nuevamente.
+                    </p>
+                    <div class="mt-6 flex flex-wrap justify-end gap-2">
                         <DialogClose as-child>
                             <UiButton variant="outline" type="button">
-                                Cancelar
-                            </UiButton> </DialogClose
-                        ><UiButton
+                                {{ importResult ? 'Cerrar' : 'Cancelar' }}
+                            </UiButton>
+                        </DialogClose>
+                        <UiButton
+                            v-if="
+                                (importResult && importResult.rejected) ||
+                                (!importResult &&
+                                    !validImportRows.length &&
+                                    invalidImportRows.length)
+                            "
+                            variant="outline"
+                            type="button"
+                            :loading="downloadingFailures"
+                            @click="downloadPendingMembers"
+                        >
+                            <Download class="size-4" /> Descargar pendientes
+                        </UiButton>
+                        <UiButton
+                            v-if="!importResult"
                             type="button"
                             :loading="importing"
                             :disabled="
                                 importing ||
-                                !importPreview.members.length ||
-                                !!importPreview.errors.length
+                                !validImportRows.length ||
+                                !!importPreview.fileErrors.length
                             "
                             @click="confirmImport"
                         >
                             <Upload class="size-4" /> Importar
-                            {{ importPreview.members.length }} miembro(s)
+                            {{ validImportRows.length }} miembro(s)
                         </UiButton>
                     </div>
                 </DialogContent>

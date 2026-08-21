@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Save, UserRound, X } from '@lucide/vue'
 import {
-    elSalvadorDepartments,
     memberGenderOptions,
     memberMaritalStatusOptions,
     memberRoleOptions,
     memberStatusOptions,
 } from '../constants/member.constants'
+import { useMemberCatalogsQuery } from '../composables/useMemberCatalogsQuery'
 import type {
     Member,
     MemberCommunityRole,
@@ -26,12 +26,13 @@ interface FormState {
     preferredName: string
     documentNumber: string
     birthDate: string | null
-    gender: MemberGender
+    gender: MemberGender | ''
     maritalStatus: MemberMaritalStatus
     phone: string
     alternatePhone: string
     email: string
     address: string
+    country: string
     municipality: string
     department: string
     occupation: string
@@ -64,6 +65,25 @@ const emit = defineEmits<{
     save: [payload: MemberInput]
 }>()
 
+const catalogsQuery = useMemberCatalogsQuery()
+const catalogs = computed(() => catalogsQuery.data.value)
+const countryOptions = computed(() => catalogs.value?.countries ?? [])
+const departmentOptions = computed(() =>
+    (catalogs.value?.departments ?? []).filter((item) => item.countryCode === form.country),
+)
+const municipalityOptions = computed(() =>
+    (catalogs.value?.municipalities ?? []).filter(
+        (item) => item.departmentCode === form.department,
+    ),
+)
+const districtOptions = computed(() => catalogs.value?.districts ?? [])
+const zoneOptions = computed(() =>
+    (catalogs.value?.zones ?? []).filter((item) => item.districtCode === form.district),
+)
+const sectorOptions = computed(() =>
+    (catalogs.value?.sectors ?? []).filter((item) => item.zoneCode === form.zone),
+)
+
 function emptyForm(): FormState {
     return {
         code: '',
@@ -74,12 +94,13 @@ function emptyForm(): FormState {
         preferredName: '',
         documentNumber: '',
         birthDate: null,
-        gender: 'UNSPECIFIED',
+        gender: '',
         maritalStatus: 'UNSPECIFIED',
         phone: '',
         alternatePhone: '',
         email: '',
         address: '',
+        country: 'SV',
         municipality: '',
         department: '',
         occupation: '',
@@ -100,12 +121,20 @@ function emptyForm(): FormState {
 }
 
 const form = reactive<FormState>(emptyForm())
-const errors = reactive({ firstName: false, lastName: false, email: false })
+const errors = reactive({
+    firstName: false,
+    lastName: false,
+    gender: false,
+    sector: false,
+    email: false,
+})
 
 function resetForm() {
     Object.assign(form, emptyForm())
     errors.firstName = false
     errors.lastName = false
+    errors.gender = false
+    errors.sector = false
     errors.email = false
     if (!props.member) return
 
@@ -124,8 +153,9 @@ function resetForm() {
         alternatePhone: props.member.alternatePhone ?? '',
         email: props.member.email ?? '',
         address: props.member.address ?? '',
-        municipality: props.member.municipality ?? '',
-        department: props.member.department ?? '',
+        country: props.member.countryCode ?? 'SV',
+        municipality: props.member.municipalityCode ?? '',
+        department: props.member.departmentCode ?? '',
         occupation: props.member.occupation ?? '',
         status: props.member.status,
         roles: normalizeMemberRoles(props.member.roles ?? []),
@@ -133,9 +163,9 @@ function resetForm() {
         joinedAt: toInputDate(props.member.joinedAt),
         conversionDate: toInputDate(props.member.conversionDate),
         baptismDate: toInputDate(props.member.baptismDate),
-        district: props.member.district ?? '',
-        zone: props.member.zone ?? '',
-        sector: props.member.sector ?? '',
+        district: props.member.districtCode ?? '',
+        zone: props.member.zoneCode ?? '',
+        sector: props.member.sectorCode ?? '',
         smallGroup: props.member.smallGroup ?? '',
         emergencyContactName: props.member.emergencyContactName ?? '',
         emergencyContactPhone: props.member.emergencyContactPhone ?? '',
@@ -147,6 +177,44 @@ watch(
     () => props.open,
     (isOpen) => isOpen && resetForm(),
     { immediate: true },
+)
+
+watch(
+    () => form.country,
+    (countryCode) => {
+        const department = catalogs.value?.departments.find(
+            (item) => item.value === form.department,
+        )
+        if (department && department.countryCode !== countryCode) form.department = ''
+    },
+)
+
+watch(
+    () => form.department,
+    (departmentCode) => {
+        const municipality = catalogs.value?.municipalities.find(
+            (item) => item.value === form.municipality,
+        )
+        if (municipality && municipality.departmentCode !== departmentCode) {
+            form.municipality = ''
+        }
+    },
+)
+
+watch(
+    () => form.district,
+    (districtCode) => {
+        const zone = catalogs.value?.zones.find((item) => item.value === form.zone)
+        if (zone && zone.districtCode !== districtCode) form.zone = ''
+    },
+)
+
+watch(
+    () => form.zone,
+    (zoneCode) => {
+        const sector = catalogs.value?.sectors.find((item) => item.value === form.sector)
+        if (sector && sector.zoneCode !== zoneCode) form.sector = ''
+    },
 )
 
 function optional(value: string) {
@@ -172,8 +240,12 @@ function normalizeMemberRoles(roles: Array<MemberCommunityRole | string | null |
 function submit() {
     errors.firstName = !form.firstName.trim()
     errors.lastName = !form.lastName.trim()
+    errors.gender = !form.gender
+    errors.sector = !form.sector
     errors.email = !!form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())
-    if (errors.firstName || errors.lastName || errors.email) return
+    if (errors.firstName || errors.lastName || errors.gender || errors.sector || errors.email) {
+        return
+    }
 
     emit('save', {
         code: form.code.trim() || undefined,
@@ -184,12 +256,13 @@ function submit() {
         preferredName: optional(form.preferredName),
         documentNumber: optional(form.documentNumber),
         birthDate: form.birthDate,
-        gender: form.gender,
+        gender: form.gender as MemberGender,
         maritalStatus: form.maritalStatus,
         phone: optional(form.phone),
         alternatePhone: optional(form.alternatePhone),
         email: optional(form.email),
         address: optional(form.address),
+        country: optional(form.country),
         municipality: optional(form.municipality),
         department: optional(form.department),
         occupation: optional(form.occupation),
@@ -202,8 +275,6 @@ function submit() {
         joinedAt: form.joinedAt,
         conversionDate: form.conversionDate,
         baptismDate: form.baptismDate,
-        district: optional(form.district),
-        zone: optional(form.zone),
         sector: optional(form.sector),
         smallGroup: optional(form.smallGroup),
         emergencyContactName: optional(form.emergencyContactName),
@@ -371,12 +442,16 @@ const currentYear = new Date().getFullYear()
                             />
                         </div>
                         <div>
-                            <span :class="labelClass">Género</span>
+                            <span :class="labelClass">Género *</span>
                             <UiSearchSelect
                                 v-model="form.gender"
                                 :options="memberGenderOptions"
                                 :searchable="false"
+                                placeholder="Selecciona género"
                             />
+                            <p v-if="errors.gender" class="mt-1 text-xs text-destructive">
+                                Selecciona femenino o masculino.
+                            </p>
                         </div>
                         <div>
                             <span :class="labelClass">Estado civil</span>
@@ -454,32 +529,54 @@ const currentYear = new Date().getFullYear()
                                 placeholder="Selecciona fecha"
                             />
                         </div>
+                        <div class="sm:col-span-2 lg:col-span-3">
+                            <div class="rounded border border-primary/20 bg-primary/5 px-4 py-3">
+                                <p class="text-xs font-semibold text-on-surface">
+                                    Asignación territorial
+                                </p>
+                                <p class="mt-1 text-xs leading-relaxed text-on-surface-variant">
+                                    Distrito y zona solo ayudan a filtrar. El miembro queda asociado
+                                    únicamente al sector seleccionado.
+                                </p>
+                            </div>
+                        </div>
                         <div>
-                            <label :class="labelClass" for="member-district">Distrito</label>
-                            <input
-                                id="member-district"
+                            <span :class="labelClass">Distrito</span>
+                            <UiSearchSelect
                                 v-model="form.district"
-                                :class="inputClass"
-                                placeholder="Distrito Metropolitano"
+                                :options="districtOptions"
+                                clearable
+                                placeholder="Selecciona distrito"
+                                search-placeholder="Buscar distrito..."
                             />
                         </div>
                         <div>
-                            <label :class="labelClass" for="member-zone">Zona</label>
-                            <input
-                                id="member-zone"
+                            <span :class="labelClass">Zona</span>
+                            <UiSearchSelect
                                 v-model="form.zone"
-                                :class="inputClass"
-                                placeholder="Zona Norte"
+                                :options="zoneOptions"
+                                :disabled="!form.district"
+                                clearable
+                                placeholder="Selecciona zona"
+                                search-placeholder="Buscar zona..."
+                                empty-message="Este distrito no tiene zonas activas"
                             />
                         </div>
                         <div>
-                            <label :class="labelClass" for="member-sector">Sector</label>
-                            <input
-                                id="member-sector"
+                            <span :class="labelClass">Sector *</span>
+                            <UiSearchSelect
                                 v-model="form.sector"
-                                :class="inputClass"
-                                placeholder="Sector Centro"
+                                :options="sectorOptions"
+                                :disabled="!form.zone"
+                                :invalid="errors.sector"
+                                clearable
+                                placeholder="Selecciona sector"
+                                search-placeholder="Buscar sector..."
+                                empty-message="Esta zona no tiene sectores activos"
                             />
+                            <p v-if="errors.sector" class="mt-1 text-xs text-destructive">
+                                Selecciona el sector al que pertenece el miembro.
+                            </p>
                         </div>
                         <div class="sm:col-span-2 lg:col-span-3">
                             <label :class="labelClass" for="member-small-group"
@@ -537,23 +634,36 @@ const currentYear = new Date().getFullYear()
                             </p>
                         </div>
                         <div>
-                            <label :class="labelClass" for="member-department">Departamento</label>
+                            <span :class="labelClass">País</span>
                             <UiSearchSelect
-                                id="member-department"
-                                v-model="form.department"
-                                :options="elSalvadorDepartments"
+                                v-model="form.country"
+                                :options="countryOptions"
                                 clearable
-                                placeholder="Selecciona departamento"
+                                placeholder="Selecciona país"
+                                search-placeholder="Buscar país..."
                             />
                         </div>
                         <div>
-                            <label :class="labelClass" for="member-municipality"
-                                >Municipio / distrito municipal</label
-                            >
-                            <input
-                                id="member-municipality"
+                            <span :class="labelClass">Departamento</span>
+                            <UiSearchSelect
+                                v-model="form.department"
+                                :options="departmentOptions"
+                                :disabled="!form.country"
+                                clearable
+                                placeholder="Selecciona departamento"
+                                search-placeholder="Buscar departamento..."
+                            />
+                        </div>
+                        <div>
+                            <span :class="labelClass">Municipio</span>
+                            <UiSearchSelect
                                 v-model="form.municipality"
-                                :class="inputClass"
+                                :options="municipalityOptions"
+                                :disabled="!form.department"
+                                clearable
+                                placeholder="Selecciona municipio"
+                                search-placeholder="Buscar municipio..."
+                                empty-message="Este departamento no tiene municipios configurados"
                             />
                         </div>
                         <div class="sm:col-span-2 lg:col-span-3">

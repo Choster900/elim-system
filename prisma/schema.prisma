@@ -104,9 +104,6 @@ model Member {
   joinedAt              DateTime?             @map("mie_fecha_ingreso") @db.Date
   conversionDate        DateTime?             @map("mie_fecha_conversion") @db.Date
   baptismDate           DateTime?             @map("mie_fecha_bautismo") @db.Date
-  district              String?               @map("mie_distrito") @db.VarChar(100)
-  zone                  String?               @map("mie_zona") @db.VarChar(100)
-  sector                String?               @map("mie_sector") @db.VarChar(100) // TODO: o solo el mimebro se alia al sector o el sector al mimebro
   smallGroup            String?               @map("mie_grupo_pequeno") @db.VarChar(100)
   emergencyContactName  String?               @map("mie_contacto_emergencia") @db.VarChar(100)
   emergencyContactPhone String?               @map("mie_telefono_emergencia") @db.VarChar(100)
@@ -130,7 +127,6 @@ model Member {
   @@index([lastName, firstName], map: "ix_mie_nombre")
   @@index([birthDate], map: "ix_mie_fecha_nacimiento")
   @@index([joinedAt], map: "ix_mie_fecha_ingreso")
-  @@index([district, zone, sector], map: "ix_mie_territorio")
   @@index([territorySectorId], map: "ix_mie_sector")
   @@map("mie_miembro")
 }

@@ -1,21 +1,45 @@
 // Datos de prueba de miembros de la comunidad.
 // Los códigos (`code`) son la clave de idempotencia usada en el upsert y también
 // permiten que los seeders de territorios y reuniones referencien a un miembro.
-const LEADER_ROLE_SEED = {
-    code: 'LEADER',
-    name: 'Líder',
-    description: 'Miembro autorizado para conducir reuniones.',
+const COMMUNITY_ROLE_SEEDS = [
+    ['MEMBER', 'Miembro', 'Persona que forma parte de la comunidad.'],
+    ['PASTOR', 'Pastor', 'Responsable pastoral de la comunidad.'],
+    ['LEADER', 'Líder', 'Miembro autorizado para conducir reuniones.'],
+    ['HOST', 'Anfitrión', 'Miembro que recibe reuniones en su hogar o local.'],
+    [
+        'SUPERVISOR',
+        'Supervisor',
+        'Miembro responsable de supervisar todas las reuniones de un sector.',
+    ],
+    ['DEACON', 'Diácono', 'Miembro que sirve en funciones de diaconado.'],
+    ['VOLUNTEER', 'Voluntario', 'Miembro que apoya actividades de servicio.'],
+    ['TEACHER', 'Maestro', 'Miembro responsable de enseñanza.'],
+    ['WORSHIP', 'Alabanza', 'Miembro que sirve en el equipo de alabanza.'],
+    ['YOUTH_LEADER', 'Líder de jóvenes', 'Responsable del acompañamiento juvenil.'],
+    ['CHILDREN_LEADER', 'Líder infantil', 'Responsable del ministerio infantil.'],
+].map(([code, name, description]) => ({
+    code,
+    name,
+    description,
     isActive: true,
     isSystem: true,
-}
+}))
 
-const SUPERVISOR_ROLE_SEED = {
-    code: 'SUPERVISOR',
-    name: 'Supervisor',
-    description: 'Miembro responsable de supervisar todas las reuniones de un sector.',
+const MINISTRY_SEEDS = [
+    ['ALABANZA', 'Alabanza'],
+    ['JOVENES', 'Jóvenes'],
+    ['NINEZ', 'Niñez'],
+    ['HOSPITALIDAD', 'Hospitalidad'],
+    ['INTERCESION', 'Intercesión'],
+    ['MISIONES', 'Misiones'],
+    ['EVANGELISMO', 'Evangelismo'],
+    ['DIACONADO', 'Diaconado'],
+].map(([code, name]) => ({
+    code,
+    name,
+    description: `Ministerio de ${name.toLowerCase()}.`,
     isActive: true,
-    isSystem: true,
-}
+}))
 
 // Estos miembros ya conducen territorios o reuniones dentro de los datos semilla.
 const COMMUNITY_LEADER_CODES = new Set([
@@ -304,7 +328,7 @@ function buildMemberData(seed) {
         middleName: seed.middleName ?? null,
         lastName: seed.lastName,
         secondLastName: seed.secondLastName ?? null,
-        gender: seed.gender ?? 'UNSPECIFIED',
+        gender: seed.gender,
         maritalStatus: seed.maritalStatus ?? 'UNSPECIFIED',
         phone: seed.phone ?? null,
         email: seed.email ?? null,
@@ -321,16 +345,27 @@ function buildMemberData(seed) {
 
 // Devuelve un Map<code, member> para que otros seeders resuelvan líderes/supervisores.
 export async function seedMembers(prisma) {
-    const leaderRole = await prisma.communityRole.upsert({
-        where: { code: LEADER_ROLE_SEED.code },
-        create: LEADER_ROLE_SEED,
-        update: LEADER_ROLE_SEED,
-    })
-    const supervisorRole = await prisma.communityRole.upsert({
-        where: { code: SUPERVISOR_ROLE_SEED.code },
-        create: SUPERVISOR_ROLE_SEED,
-        update: SUPERVISOR_ROLE_SEED,
-    })
+    const communityRoles = await prisma.$transaction(
+        COMMUNITY_ROLE_SEEDS.map((role) =>
+            prisma.communityRole.upsert({
+                where: { code: role.code },
+                create: role,
+                update: role,
+            }),
+        ),
+    )
+    await prisma.$transaction(
+        MINISTRY_SEEDS.map((ministry) =>
+            prisma.ministry.upsert({
+                where: { code: ministry.code },
+                create: ministry,
+                update: ministry,
+            }),
+        ),
+    )
+    const leaderRole = communityRoles.find((role) => role.code === 'LEADER')
+    const supervisorRole = communityRoles.find((role) => role.code === 'SUPERVISOR')
+    if (!leaderRole || !supervisorRole) throw new Error('Community role catalog was not created.')
 
     const members = await prisma.$transaction(
         MEMBER_SEEDS.map((seed) => {

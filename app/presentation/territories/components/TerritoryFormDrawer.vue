@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Eraser, LoaderCircle, LocateFixed, Undo2, X } from '@lucide/vue'
+import { AlertTriangle, Eraser, LoaderCircle, LocateFixed, RefreshCw, Undo2, X } from '@lucide/vue'
 import type {
     LatLng,
     Polygon,
@@ -22,11 +22,12 @@ const props = defineProps<{
     leaderLabel: string
     supervisorOptions: TerritorySupervisorOption[]
     supervisorsLoading?: boolean
+    supervisorsError?: string
     saving?: boolean
 }>()
 
 const emit = defineEmits<{
-    (e: 'close'): void
+    (e: 'close' | 'retry-supervisors'): void
     (e: 'save', payload: TerritoryInput): void
 }>()
 
@@ -290,6 +291,7 @@ function save() {
     const polygon: Polygon = tempPolygon.value.map((p) => [...p] as LatLng)
     emit('save', {
         name: form.name.trim(),
+        code: form.code,
         leaderName: form.leaderName.trim(),
         description: form.description.trim(),
         color: form.color,
@@ -302,10 +304,17 @@ function save() {
 const inputClass =
     'w-full rounded-lg border border-outline-variant bg-surface px-3 py-2.5 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:border-primary'
 const codePrefix = computed(() => {
-    if (props.level === 'district') return 'DIS-###'
-    if (props.level === 'zone') return 'ZON-###'
+    if (props.level === 'distrito') return 'DIS-###'
+    if (props.level === 'zona') return 'ZON-###'
     return 'SEC-###'
 })
+const formTitle = computed(() => {
+    if (props.mode === 'edit') return `Editar ${props.levelLabel}`
+    return `${props.level === 'zona' ? 'Nueva' : 'Nuevo'} ${props.levelLabel}`
+})
+const nameLabel = computed(
+    () => `Nombre ${props.level === 'zona' ? 'de la' : 'del'} ${props.levelLabel}`,
+)
 const labelClass =
     'mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
 </script>
@@ -314,7 +323,7 @@ const labelClass =
     <template v-if="open">
         <div class="fixed inset-0 z-[60] bg-black/50" @click="emit('close')" />
         <aside
-            class="territory-form-drawer fixed inset-y-0 right-0 z-[61] flex w-[460px] max-w-[94vw] flex-col bg-surface-container-low shadow-2xl"
+            class="territory-form-drawer fixed inset-y-0 right-0 z-[61] flex w-[680px] max-w-[96vw] flex-col bg-surface-container-low shadow-2xl"
         >
             <div class="flex-none border-b border-outline-variant px-6 py-5">
                 <div class="flex items-center justify-between">
@@ -322,7 +331,7 @@ const labelClass =
                         class="text-[11px] font-bold uppercase tracking-[0.2em]"
                         :style="{ color: accent }"
                     >
-                        {{ mode === 'create' ? `Nuevo ${levelLabel}` : `Editar ${levelLabel}` }}
+                        {{ formTitle }}
                     </span>
                     <button
                         type="button"
@@ -347,7 +356,7 @@ const labelClass =
                         class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                         for="tf-name"
                     >
-                        Nombre del {{ levelLabel }} *
+                        {{ nameLabel }} *
                     </label>
                     <input
                         id="tf-name"
@@ -421,17 +430,38 @@ const labelClass =
                             :placeholder="
                                 supervisorsLoading
                                     ? 'Cargando supervisores…'
-                                    : 'Selecciona un supervisor'
+                                    : supervisorsError
+                                      ? 'Catálogo no disponible'
+                                      : 'Selecciona un supervisor'
                             "
                             search-placeholder="Buscar por nombre o código…"
                             empty-message="No hay supervisores activos disponibles"
-                            :disabled="supervisorsLoading"
+                            :disabled="supervisorsLoading || !!supervisorsError"
                             :invalid="supervisorError"
                             @update:model-value="supervisorError = false"
                         />
                         <p v-if="supervisorError" class="mt-1 text-xs text-destructive">
                             Debes asignar un supervisor del catálogo.
                         </p>
+                        <div
+                            v-else-if="supervisorsError"
+                            class="mt-2 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
+                            role="alert"
+                        >
+                            <AlertTriangle class="mt-0.5 size-4 shrink-0 text-destructive" />
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs leading-relaxed text-destructive">
+                                    {{ supervisorsError }}
+                                </p>
+                                <button
+                                    type="button"
+                                    class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                                    @click="emit('retry-supervisors')"
+                                >
+                                    <RefreshCw class="size-3" /> Reintentar
+                                </button>
+                            </div>
+                        </div>
                         <p class="mt-1.5 text-xs leading-relaxed text-on-surface-variant">
                             Supervisará todas las reuniones del sector y su registro de asistencia y
                             ofrendas.

@@ -1,0 +1,136 @@
+export const MEMBER_STATUS_OPTIONS = [
+    { value: 'ACTIVE', label: 'Activo' },
+    { value: 'INACTIVE', label: 'Inactivo' },
+    { value: 'VISITOR', label: 'Visitante' },
+    { value: 'TRANSFERRED', label: 'Trasladado' },
+    { value: 'DECEASED', label: 'Fallecido' },
+] as const
+
+export const MEMBER_GENDER_OPTIONS = [
+    { value: 'FEMALE', label: 'Femenino' },
+    { value: 'MALE', label: 'Masculino' },
+] as const
+
+export const MEMBER_MARITAL_STATUS_OPTIONS = [
+    { value: 'SINGLE', label: 'Soltero/a' },
+    { value: 'MARRIED', label: 'Casado/a' },
+    { value: 'DIVORCED', label: 'Divorciado/a' },
+    { value: 'WIDOWED', label: 'Viudo/a' },
+    { value: 'UNION', label: 'Unión estable' },
+    { value: 'UNSPECIFIED', label: 'Sin especificar' },
+] as const
+
+export const MEMBER_ROLE_CODES = [
+    'MEMBER',
+    'PASTOR',
+    'LEADER',
+    'HOST',
+    'SUPERVISOR',
+    'DEACON',
+    'VOLUNTEER',
+    'TEACHER',
+    'WORSHIP',
+    'YOUTH_LEADER',
+    'CHILDREN_LEADER',
+] as const
+
+export const MEMBER_COUNTRIES = [{ code: 'SV', name: 'El Salvador' }] as const
+
+export const MEMBER_DEPARTMENTS = [
+    { code: 'SV-AH', name: 'Ahuachapán', countryCode: 'SV' },
+    { code: 'SV-CA', name: 'Cabañas', countryCode: 'SV' },
+    { code: 'SV-CH', name: 'Chalatenango', countryCode: 'SV' },
+    { code: 'SV-CU', name: 'Cuscatlán', countryCode: 'SV' },
+    { code: 'SV-LI', name: 'La Libertad', countryCode: 'SV' },
+    { code: 'SV-PA', name: 'La Paz', countryCode: 'SV' },
+    { code: 'SV-UN', name: 'La Unión', countryCode: 'SV' },
+    { code: 'SV-MO', name: 'Morazán', countryCode: 'SV' },
+    { code: 'SV-SM', name: 'San Miguel', countryCode: 'SV' },
+    { code: 'SV-SS', name: 'San Salvador', countryCode: 'SV' },
+    { code: 'SV-SV', name: 'San Vicente', countryCode: 'SV' },
+    { code: 'SV-SA', name: 'Santa Ana', countryCode: 'SV' },
+    { code: 'SV-SO', name: 'Sonsonate', countryCode: 'SV' },
+    { code: 'SV-US', name: 'Usulután', countryCode: 'SV' },
+] as const
+
+export const MEMBER_MUNICIPALITIES = [
+    { code: 'SV-AH-NORTE', name: 'Ahuachapán Norte', departmentCode: 'SV-AH' },
+    { code: 'SV-AH-CENTRO', name: 'Ahuachapán Centro', departmentCode: 'SV-AH' },
+    { code: 'SV-AH-SUR', name: 'Ahuachapán Sur', departmentCode: 'SV-AH' },
+    { code: 'SV-CA-ESTE', name: 'Cabañas Este', departmentCode: 'SV-CA' },
+    { code: 'SV-CA-OESTE', name: 'Cabañas Oeste', departmentCode: 'SV-CA' },
+    { code: 'SV-CH-NORTE', name: 'Chalatenango Norte', departmentCode: 'SV-CH' },
+    { code: 'SV-CH-CENTRO', name: 'Chalatenango Centro', departmentCode: 'SV-CH' },
+    { code: 'SV-CH-SUR', name: 'Chalatenango Sur', departmentCode: 'SV-CH' },
+    { code: 'SV-CU-NORTE', name: 'Cuscatlán Norte', departmentCode: 'SV-CU' },
+    {
+        code: 'SV-CU-SUR',
+        name: 'Cuscatlán Sur',
+        departmentCode: 'SV-CU',
+        aliases: ['Cojutepeque'],
+    },
+    { code: 'SV-LI-NORTE', name: 'La Libertad Norte', departmentCode: 'SV-LI' },
+    { code: 'SV-LI-CENTRO', name: 'La Libertad Centro', departmentCode: 'SV-LI' },
+    { code: 'SV-LI-OESTE', name: 'La Libertad Oeste', departmentCode: 'SV-LI' },
+    {
+        code: 'SV-LI-ESTE',
+        name: 'La Libertad Este',
+        departmentCode: 'SV-LI',
+        aliases: ['Antiguo Cuscatlán'],
+    },
+    { code: 'SV-LI-COSTA', name: 'La Libertad Costa', departmentCode: 'SV-LI' },
+    {
+        code: 'SV-LI-SUR',
+        name: 'La Libertad Sur',
+        departmentCode: 'SV-LI',
+        aliases: ['Santa Tecla'],
+    },
+    { code: 'SV-PA-OESTE', name: 'La Paz Oeste', departmentCode: 'SV-PA' },
+    { code: 'SV-PA-CENTRO', name: 'La Paz Centro', departmentCode: 'SV-PA' },
+    { code: 'SV-PA-ESTE', name: 'La Paz Este', departmentCode: 'SV-PA' },
+    { code: 'SV-UN-NORTE', name: 'La Unión Norte', departmentCode: 'SV-UN' },
+    { code: 'SV-UN-SUR', name: 'La Unión Sur', departmentCode: 'SV-UN' },
+    { code: 'SV-MO-NORTE', name: 'Morazán Norte', departmentCode: 'SV-MO' },
+    { code: 'SV-MO-SUR', name: 'Morazán Sur', departmentCode: 'SV-MO' },
+    { code: 'SV-SM-NORTE', name: 'San Miguel Norte', departmentCode: 'SV-SM' },
+    { code: 'SV-SM-CENTRO', name: 'San Miguel Centro', departmentCode: 'SV-SM' },
+    { code: 'SV-SM-OESTE', name: 'San Miguel Oeste', departmentCode: 'SV-SM' },
+    { code: 'SV-SS-NORTE', name: 'San Salvador Norte', departmentCode: 'SV-SS' },
+    {
+        code: 'SV-SS-OESTE',
+        name: 'San Salvador Oeste',
+        departmentCode: 'SV-SS',
+        aliases: ['Apopa'],
+    },
+    {
+        code: 'SV-SS-ESTE',
+        name: 'San Salvador Este',
+        departmentCode: 'SV-SS',
+        aliases: ['Ilopango', 'San Martín', 'Soyapango', 'Tonacatepeque'],
+    },
+    {
+        code: 'SV-SS-CENTRO',
+        name: 'San Salvador Centro',
+        departmentCode: 'SV-SS',
+        aliases: ['Ayutuxtepeque', 'Ciudad Delgado', 'Cuscatancingo', 'Mejicanos', 'San Salvador'],
+    },
+    {
+        code: 'SV-SS-SUR',
+        name: 'San Salvador Sur',
+        departmentCode: 'SV-SS',
+        aliases: ['San Marcos'],
+    },
+    { code: 'SV-SV-NORTE', name: 'San Vicente Norte', departmentCode: 'SV-SV' },
+    { code: 'SV-SV-SUR', name: 'San Vicente Sur', departmentCode: 'SV-SV' },
+    { code: 'SV-SA-NORTE', name: 'Santa Ana Norte', departmentCode: 'SV-SA' },
+    { code: 'SV-SA-CENTRO', name: 'Santa Ana Centro', departmentCode: 'SV-SA' },
+    { code: 'SV-SA-ESTE', name: 'Santa Ana Este', departmentCode: 'SV-SA' },
+    { code: 'SV-SA-OESTE', name: 'Santa Ana Oeste', departmentCode: 'SV-SA' },
+    { code: 'SV-SO-NORTE', name: 'Sonsonate Norte', departmentCode: 'SV-SO' },
+    { code: 'SV-SO-CENTRO', name: 'Sonsonate Centro', departmentCode: 'SV-SO' },
+    { code: 'SV-SO-ESTE', name: 'Sonsonate Este', departmentCode: 'SV-SO' },
+    { code: 'SV-SO-OESTE', name: 'Sonsonate Oeste', departmentCode: 'SV-SO' },
+    { code: 'SV-US-NORTE', name: 'Usulután Norte', departmentCode: 'SV-US' },
+    { code: 'SV-US-ESTE', name: 'Usulután Este', departmentCode: 'SV-US' },
+    { code: 'SV-US-OESTE', name: 'Usulután Oeste', departmentCode: 'SV-US' },
+] as const

@@ -13,6 +13,7 @@ const meetingTypes = {
 const members = {
     all: ['members'] as const,
     list: ['members', 'list'] as const,
+    catalogs: ['members', 'catalogs'] as const,
     options: ['members', 'options'] as const,
     meetingLeaders: ['members', 'meeting-leaders'] as const,
 }

@@ -16,8 +16,6 @@ export const memberStatusOptions: { value: MemberStatus; label: string }[] = [
 export const memberGenderOptions: { value: MemberGender; label: string }[] = [
     { value: 'FEMALE', label: 'Femenino' },
     { value: 'MALE', label: 'Masculino' },
-    { value: 'OTHER', label: 'Otro' },
-    { value: 'UNSPECIFIED', label: 'Sin especificar' },
 ]
 
 export const memberMaritalStatusOptions: { value: MemberMaritalStatus; label: string }[] = [
@@ -42,20 +40,3 @@ export const memberRoleOptions: { value: MemberCommunityRole; label: string }[] 
     { value: 'YOUTH_LEADER', label: 'Líder de jóvenes' },
     { value: 'CHILDREN_LEADER', label: 'Líder infantil' },
 ]
-
-export const elSalvadorDepartments = [
-    'Ahuachapán',
-    'Cabañas',
-    'Chalatenango',
-    'Cuscatlán',
-    'La Libertad',
-    'La Paz',
-    'La Unión',
-    'Morazán',
-    'San Miguel',
-    'San Salvador',
-    'San Vicente',
-    'Santa Ana',
-    'Sonsonate',
-    'Usulután',
-].map((value) => ({ value, label: value }))

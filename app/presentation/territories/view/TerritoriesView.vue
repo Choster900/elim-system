@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import {
     AlertTriangle,
+    Download,
     ExternalLink,
+    FileDown,
+    FileSpreadsheet,
     HandCoins,
     LoaderCircle,
     MapPinned,
@@ -9,8 +12,18 @@ import {
     Plus,
     RefreshCw,
     Search,
+    Upload,
     X,
 } from '@lucide/vue'
+import {
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogOverlay,
+    DialogPortal,
+    DialogRoot,
+    DialogTitle,
+} from 'radix-vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useUpdateMeetingMutation } from '~/presentation/meetings/composables/useMeetingMutations'
 import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
@@ -24,6 +37,7 @@ import { useTerritorySupervisorsQuery } from '~/presentation/territories/composa
 import {
     useCreateTerritoryMutation,
     useDeleteTerritoryMutation,
+    useImportTerritoriesMutation,
     useUpdateTerritoryMutation,
 } from '~/presentation/territories/composables/useTerritoryMutations'
 import {
@@ -36,10 +50,22 @@ import type {
     District,
     LatLng,
     Polygon,
+    TerritoryHierarchy,
     TerritoryInput,
     TerritorySector,
     Zone,
 } from '~/presentation/territories/interfaces/territory.interface'
+import {
+    downloadTerritoryImportFailures,
+    downloadTerritoryTemplate,
+    exportTerritoriesWorkbook,
+    parseTerritoriesWorkbook,
+    territoryImportRows,
+    territoryImportSheetLabel,
+    type TerritoryImportFailure,
+    type TerritoryImportPreview,
+    type TerritoryImportResult,
+} from '~/presentation/territories/services/territory-excel.service'
 defineOptions({ name: 'TerritoriesView' })
 
 useHead({
@@ -74,6 +100,7 @@ const meetingsQuery = useMeetingsQuery()
 const createTerritoryMutation = useCreateTerritoryMutation()
 const updateTerritoryMutation = useUpdateTerritoryMutation()
 const deleteTerritoryMutation = useDeleteTerritoryMutation()
+const importTerritoriesMutation = useImportTerritoriesMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
 
 const districts = computed(() => hierarchyQuery.data.value?.districts ?? [])
@@ -103,14 +130,16 @@ const catalogError = computed(() => {
             'No fue posible cargar las reuniones del catálogo.',
         )
     }
-    if (supervisorsQuery.error.value) {
-        return requestErrorMessage(
-            supervisorsQuery.error.value,
-            'No fue posible cargar el catálogo de supervisores.',
-        )
-    }
     return ''
 })
+const supervisorCatalogError = computed(() =>
+    supervisorsQuery.error.value
+        ? requestErrorMessage(
+              supervisorsQuery.error.value,
+              'No fue posible cargar el catálogo de supervisores.',
+          )
+        : '',
+)
 
 const selD = ref<string | null>(null)
 const selZ = ref<string | null>(null)
@@ -151,34 +180,34 @@ function requestErrorMessage(error: unknown, fallback: string) {
     return fallback
 }
 
+function synchronizeSelection(hierarchy: TerritoryHierarchy) {
+    if (selD.value && !hierarchy.districts.some((district) => district.id === selD.value)) {
+        clearSelection()
+    }
+    if (!selD.value) selD.value = hierarchy.districts[0]?.id ?? null
+    if (
+        selZ.value &&
+        !hierarchy.zones.some((zone) => zone.id === selZ.value && zone.districtId === selD.value)
+    ) {
+        selZ.value = null
+        selS.value = null
+        selM.value = null
+    }
+    if (
+        selS.value &&
+        !hierarchy.sectors.some(
+            (sector) => sector.id === selS.value && sector.zoneId === selZ.value,
+        )
+    ) {
+        selS.value = null
+        selM.value = null
+    }
+}
+
 watch(
     () => hierarchyQuery.data.value,
     (hierarchy) => {
-        if (!hierarchy) return
-
-        if (selD.value && !hierarchy.districts.some((district) => district.id === selD.value)) {
-            clearSelection()
-        }
-        if (!selD.value) selD.value = hierarchy.districts[0]?.id ?? null
-        if (
-            selZ.value &&
-            !hierarchy.zones.some(
-                (zone) => zone.id === selZ.value && zone.districtId === selD.value,
-            )
-        ) {
-            selZ.value = null
-            selS.value = null
-            selM.value = null
-        }
-        if (
-            selS.value &&
-            !hierarchy.sectors.some(
-                (sector) => sector.id === selS.value && sector.zoneId === selZ.value,
-            )
-        ) {
-            selS.value = null
-            selM.value = null
-        }
+        if (hierarchy) synchronizeSelection(hierarchy)
     },
     { immediate: true },
 )
@@ -190,6 +219,8 @@ if (import.meta.server) {
             meetingsQuery.suspense(),
             supervisorsQuery.suspense(),
         ])
+        const hierarchy = hierarchyQuery.data.value
+        if (hierarchy) synchronizeSelection(hierarchy)
     })
 }
 
@@ -201,12 +232,188 @@ if (import.meta.client) {
         },
         { immediate: true },
     )
+    watch(
+        supervisorCatalogError,
+        (errorMessage) => {
+            if (errorMessage) toast.error(errorMessage)
+        },
+        { immediate: true },
+    )
 }
 
 function retryCatalog() {
     hierarchyQuery.refetch()
     meetingsQuery.refetch()
     supervisorsQuery.refetch()
+}
+
+const exporting = ref(false)
+const downloadingTemplate = ref(false)
+const parsingImportFile = ref(false)
+const importInput = ref<HTMLInputElement | null>(null)
+const importOpen = ref(false)
+const importFileName = ref('')
+const importPreview = ref<TerritoryImportPreview>({
+    districts: [],
+    zones: [],
+    sectors: [],
+    fileErrors: [],
+})
+const importResult = ref<TerritoryImportResult | null>(null)
+const retryImportFailures = ref<TerritoryImportFailure[]>([])
+const downloadingFailures = ref(false)
+const importRows = computed(() => territoryImportRows(importPreview.value))
+const validImportRows = computed(() => importRows.value.filter((row) => !row.issues.length))
+const invalidImportRows = computed(() => importRows.value.filter((row) => row.issues.length))
+const importErrors = computed(() => {
+    if (importResult.value) {
+        return retryImportFailures.value.flatMap((failure) =>
+            failure.reasons.map(
+                (reason) =>
+                    `${territoryImportSheetLabel(failure.level)}, fila ${failure.rowNumber}: ${reason}`,
+            ),
+        )
+    }
+    return [
+        ...importPreview.value.fileErrors,
+        ...invalidImportRows.value.flatMap((row) =>
+            row.issues.map(
+                (issue) =>
+                    `${territoryImportSheetLabel(row.level)}, fila ${row.rowNumber}: ${issue}`,
+            ),
+        ),
+    ]
+})
+const importedTotal = computed(() =>
+    importResult.value
+        ? importResult.value.createdDistricts +
+          importResult.value.createdZones +
+          importResult.value.createdSectors
+        : 0,
+)
+
+async function exportExcel() {
+    const hierarchy = hierarchyQuery.data.value
+    if (!hierarchy) {
+        toast.error('La jerarquía territorial todavía no está disponible.')
+        return
+    }
+    exporting.value = true
+    try {
+        await exportTerritoriesWorkbook(hierarchy, supervisors.value)
+        toast.success('Jerarquía territorial exportada a Excel')
+    } catch {
+        toast.error('No fue posible generar el archivo territorial.')
+    } finally {
+        exporting.value = false
+    }
+}
+
+async function downloadTemplate() {
+    downloadingTemplate.value = true
+    try {
+        await downloadTerritoryTemplate(supervisors.value)
+        toast.success('Plantilla territorial descargada')
+    } catch {
+        toast.error('No fue posible generar la plantilla territorial.')
+    } finally {
+        downloadingTemplate.value = false
+    }
+}
+
+function pickImportFile() {
+    importInput.value?.click()
+}
+
+async function onImportFile(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file) return
+    const hierarchy = hierarchyQuery.data.value
+    if (!hierarchy) {
+        toast.error('No fue posible cargar la jerarquía para validar el archivo.')
+        return
+    }
+
+    parsingImportFile.value = true
+    importFileName.value = file.name
+    importResult.value = null
+    retryImportFailures.value = []
+    try {
+        importPreview.value = await parseTerritoriesWorkbook(file, hierarchy, supervisors.value)
+        importOpen.value = true
+    } catch {
+        toast.error('No pudimos leer el archivo. Verifica que sea un Excel .xlsx válido.')
+    } finally {
+        parsingImportFile.value = false
+    }
+}
+
+function previewFailures(): TerritoryImportFailure[] {
+    return invalidImportRows.value.map((row) => ({
+        level: row.level,
+        rowNumber: row.rowNumber,
+        reasons: row.issues,
+    }))
+}
+
+async function downloadPendingTerritories() {
+    const failures = retryImportFailures.value.length
+        ? retryImportFailures.value
+        : previewFailures()
+    if (!failures.length) return
+
+    downloadingFailures.value = true
+    try {
+        await downloadTerritoryImportFailures(
+            importPreview.value,
+            failures,
+            supervisors.value,
+            importResult.value,
+        )
+        toast.success('Archivo de territorios pendientes descargado')
+    } catch {
+        toast.error('No fue posible generar el archivo de pendientes.')
+    } finally {
+        downloadingFailures.value = false
+    }
+}
+
+async function confirmTerritoryImport() {
+    const hierarchy = hierarchyQuery.data.value
+    if (!hierarchy || !validImportRows.value.length) return
+
+    try {
+        const result = await importTerritoriesMutation.mutateAsync({
+            preview: importPreview.value,
+            hierarchy,
+        })
+        const failures = [...previewFailures(), ...result.failures].sort(
+            (left, right) => left.rowNumber - right.rowNumber,
+        )
+        retryImportFailures.value = failures
+        importResult.value = result
+
+        if (failures.length) {
+            await downloadTerritoryImportFailures(
+                importPreview.value,
+                failures,
+                supervisors.value,
+                result,
+            )
+            toast.warning(
+                `${result.createdDistricts + result.createdZones + result.createdSectors} registros creados y ${failures.length} pendientes. Se descargó el archivo de corrección.`,
+            )
+        } else {
+            toast.success(
+                `Importación completa: ${result.createdDistricts} distritos, ${result.createdZones} zonas y ${result.createdSectors} sectores creados.`,
+            )
+            importOpen.value = false
+        }
+    } catch {
+        toast.error('No fue posible iniciar la importación territorial.')
+    }
 }
 
 // ===== lookups =====
@@ -409,6 +616,7 @@ const columns = computed<Column[]>(() => {
             id: String(m.id),
             level: 'reunion',
             name: m.title,
+            code: m.code,
             color: m.color,
             sub: `${meetingDay(m)} · ${fmtTime(m.startTime)}`,
             badge: String(m.expectedAttendees),
@@ -1150,6 +1358,51 @@ onBeforeUnmount(() => {
                         reuniones</span
                     >
                 </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <input
+                        v-if="canManage"
+                        ref="importInput"
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        class="hidden"
+                        @change="onImportFile"
+                    />
+                    <UiButton
+                        v-if="canManage"
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        :loading="downloadingTemplate"
+                        :disabled="supervisorsQuery.isPending.value"
+                        @click="downloadTemplate"
+                    >
+                        <FileDown class="size-4" />
+                        Plantilla
+                    </UiButton>
+                    <UiButton
+                        v-if="canManage"
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        :loading="parsingImportFile"
+                        :disabled="catalogLoading"
+                        @click="pickImportFile"
+                    >
+                        <Upload class="size-4" />
+                        Importar
+                    </UiButton>
+                    <UiButton
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        :loading="exporting"
+                        :disabled="catalogLoading || !hierarchyQuery.data.value"
+                        @click="exportExcel"
+                    >
+                        <Download class="size-4" />
+                        Exportar
+                    </UiButton>
+                </div>
                 <div
                     class="flex items-center gap-2 rounded-full border border-outline-variant bg-surface px-4 py-2 sm:w-72"
                 >
@@ -1540,6 +1793,217 @@ onBeforeUnmount(() => {
             </aside>
         </template>
 
+        <DialogRoot v-model:open="importOpen">
+            <DialogPortal>
+                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
+                <DialogContent
+                    class="fixed left-1/2 top-1/2 z-[71] max-h-[88vh] w-[96vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none sm:p-7"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+                        >
+                            <FileSpreadsheet class="size-6" />
+                        </div>
+                        <div class="min-w-0">
+                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">
+                                Importar distritos, zonas y sectores
+                            </DialogTitle>
+                            <DialogDescription
+                                class="mt-1 truncate text-sm text-on-surface-variant"
+                            >
+                                {{ importFileName }}
+                            </DialogDescription>
+                        </div>
+                    </div>
+
+                    <div v-if="importResult" class="mt-6 grid gap-3 sm:grid-cols-4">
+                        <div class="rounded-xl border border-primary/25 bg-primary/5 p-4">
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Distritos
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-primary">
+                                {{ importResult.createdDistricts }}
+                            </p>
+                        </div>
+                        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Zonas
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-amber-600">
+                                {{ importResult.createdZones }}
+                            </p>
+                        </div>
+                        <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Sectores
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-emerald-600">
+                                {{ importResult.createdSectors }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xl border p-4"
+                            :class="
+                                retryImportFailures.length
+                                    ? 'border-destructive/35 bg-destructive/5'
+                                    : 'border-outline-variant bg-surface-container'
+                            "
+                        >
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Pendientes
+                            </p>
+                            <p
+                                class="mt-1 font-display text-2xl font-semibold"
+                                :class="
+                                    retryImportFailures.length
+                                        ? 'text-destructive'
+                                        : 'text-on-surface'
+                                "
+                            >
+                                {{ retryImportFailures.length }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-else class="mt-6 grid gap-3 sm:grid-cols-4">
+                        <div
+                            v-for="summary in [
+                                {
+                                    label: 'Distritos válidos',
+                                    value: importPreview.districts.filter(
+                                        (row) => !row.issues.length,
+                                    ).length,
+                                },
+                                {
+                                    label: 'Zonas válidas',
+                                    value: importPreview.zones.filter((row) => !row.issues.length)
+                                        .length,
+                                },
+                                {
+                                    label: 'Sectores válidos',
+                                    value: importPreview.sectors.filter((row) => !row.issues.length)
+                                        .length,
+                                },
+                            ]"
+                            :key="summary.label"
+                            class="rounded-xl border border-outline-variant bg-surface-container p-4"
+                        >
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                {{ summary.label }}
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-on-surface">
+                                {{ summary.value }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xl border p-4"
+                            :class="
+                                importErrors.length
+                                    ? 'border-destructive/35 bg-destructive/5'
+                                    : 'border-outline-variant bg-surface-container'
+                            "
+                        >
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Filas con errores
+                            </p>
+                            <p
+                                class="mt-1 font-display text-2xl font-semibold"
+                                :class="
+                                    importErrors.length ? 'text-destructive' : 'text-on-surface'
+                                "
+                            >
+                                {{ invalidImportRows.length }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="importErrors.length"
+                        class="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
+                    >
+                        <p class="text-xs font-semibold text-destructive">
+                            {{
+                                importResult
+                                    ? 'Registros que continúan pendientes:'
+                                    : 'Corrige estas filas o importa únicamente las válidas:'
+                            }}
+                        </p>
+                        <ul
+                            class="mt-2 max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-on-surface-variant"
+                        >
+                            <li v-for="error in importErrors" :key="error">
+                                {{ error }}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <p
+                        v-else-if="!importResult"
+                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        Se crearán primero los distritos, después las zonas y finalmente los
+                        sectores. Las reuniones no se modifican. Las referencias de la plantilla
+                        solo sirven para enlazar las filas y el sistema generará los códigos
+                        definitivos.
+                    </p>
+
+                    <p
+                        v-if="importResult && retryImportFailures.length"
+                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        Los {{ importedTotal }} registros creados ya no aparecen en el Excel de
+                        pendientes. Corrige ese archivo y vuelve a importarlo.
+                    </p>
+
+                    <div class="mt-6 flex flex-wrap justify-end gap-2">
+                        <DialogClose as-child>
+                            <UiButton variant="outline" type="button">
+                                {{ importResult ? 'Cerrar' : 'Cancelar' }}
+                            </UiButton>
+                        </DialogClose>
+                        <UiButton
+                            v-if="
+                                (importResult && retryImportFailures.length) ||
+                                (!importResult &&
+                                    !validImportRows.length &&
+                                    invalidImportRows.length)
+                            "
+                            variant="outline"
+                            type="button"
+                            :loading="downloadingFailures"
+                            @click="downloadPendingTerritories"
+                        >
+                            <Download class="size-4" />
+                            Descargar pendientes
+                        </UiButton>
+                        <UiButton
+                            v-if="!importResult"
+                            type="button"
+                            :loading="importTerritoriesMutation.isPending.value"
+                            :disabled="!validImportRows.length || !!importPreview.fileErrors.length"
+                            @click="confirmTerritoryImport"
+                        >
+                            <Upload class="size-4" />
+                            Importar {{ validImportRows.length }} registro(s)
+                        </UiButton>
+                    </div>
+                </DialogContent>
+            </DialogPortal>
+        </DialogRoot>
+
         <!-- Create / edit drawer (district · zone · sector) -->
         <TerritoryFormDrawer
             :open="formOpen"
@@ -1554,9 +2018,11 @@ onBeforeUnmount(() => {
             :leader-label="formLevel === 'distrito' ? 'Pastor' : 'Líder'"
             :supervisor-options="supervisors"
             :supervisors-loading="supervisorsQuery.isPending.value"
+            :supervisors-error="supervisorCatalogError"
             :saving="hierarchySaving"
             @close="formOpen = false"
             @save="onFormSave"
+            @retry-supervisors="supervisorsQuery.refetch()"
         />
 
         <!-- Assign existing catalog meetings to the selected sector -->

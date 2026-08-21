@@ -37,6 +37,7 @@ const props = withDefaults(
         contentClass?: string
         maxItems?: number
         invalid?: boolean
+        ariaLabel?: string
     }>(),
     {
         optionValue: 'value' as never,
@@ -180,6 +181,7 @@ const hiddenCount = computed(() => Math.max(0, selectedOptions.value.length - pr
     >
         <ComboboxAnchor as-child>
             <ComboboxTrigger
+                :aria-label="ariaLabel || placeholder"
                 :class="[
                     'group flex w-full items-center justify-between gap-2 rounded border bg-surface-container text-left text-on-surface transition-colors',
                     triggerHeight,

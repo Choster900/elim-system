@@ -43,7 +43,7 @@ const filtered = computed(() => {
     <template v-if="open">
         <div class="fixed inset-0 z-[60] bg-black/50" @click="emit('close')" />
         <aside
-            class="assign-drawer fixed inset-y-0 right-0 z-[61] flex w-[440px] max-w-[94vw] flex-col bg-surface-container-low shadow-2xl"
+            class="assign-drawer fixed inset-y-0 right-0 z-[61] flex w-[640px] max-w-[96vw] flex-col bg-surface-container-low shadow-2xl"
         >
             <div class="flex-none border-b border-outline-variant px-6 py-5">
                 <div class="flex items-center justify-between">

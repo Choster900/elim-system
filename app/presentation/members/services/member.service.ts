@@ -1,6 +1,12 @@
 import type { AxiosInstance } from 'axios'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
-import type { Member, MemberImportResult, MemberInput } from '../interfaces/member.interface'
+import type {
+    Member,
+    MemberCatalogs,
+    MemberImportRequestRow,
+    MemberImportResult,
+    MemberInput,
+} from '../interfaces/member.interface'
 
 export async function getMembers(apiClient: AxiosInstance, signal?: AbortSignal) {
     const members: Member[] = []
@@ -38,9 +44,18 @@ export async function deleteMember(apiClient: AxiosInstance, id: number) {
     await apiClient.delete(`/members/${id}`)
 }
 
-export async function importMembers(apiClient: AxiosInstance, members: MemberInput[]) {
-    const response = await apiClient.post<ApiResponse<MemberImportResult>>('/members/import', {
-        members,
+export async function getMemberCatalogs(apiClient: AxiosInstance, signal?: AbortSignal) {
+    const response = await apiClient.get<ApiResponse<MemberCatalogs>>('/members/catalogs', {
+        signal,
     })
+    if (!response.data.data) throw new Error('No fue posible cargar los catálogos de miembros')
+    return response.data.data
+}
+
+export async function importMembers(apiClient: AxiosInstance, rows: MemberImportRequestRow[]) {
+    const response = await apiClient.post<ApiResponse<MemberImportResult>>('/members/import', {
+        rows,
+    })
+    if (!response.data.data) throw new Error('No fue posible importar los miembros')
     return response.data.data
 }
