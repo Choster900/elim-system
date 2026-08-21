@@ -5,13 +5,17 @@ import {
     CheckCircle2,
     Clock,
     Compass,
+    Download,
     Eye,
     EyeOff,
+    FileDown,
+    FileSpreadsheet,
     MapPin,
     MoreVertical,
     Pencil,
     Plus,
     Trash2,
+    Upload,
     Users,
 } from '@lucide/vue'
 import {
@@ -31,14 +35,18 @@ import {
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
+    useMeetingLeadersQuery,
+    useMeetingMembersQuery,
     useMeetingSectorsQuery,
     useMeetingTypesQuery,
 } from '~/presentation/meetings/composables/useMeetingCatalogQueries'
 import {
     useCreateMeetingMutation,
     useDeleteMeetingMutation,
+    useImportMeetingsMutation,
     useUpdateMeetingMutation,
 } from '~/presentation/meetings/composables/useMeetingMutations'
 import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
@@ -54,6 +62,15 @@ import type {
     MeetingInput,
     MeetingRecord,
 } from '~/presentation/meetings/interfaces/meeting.interface'
+import {
+    downloadMeetingImportFailures,
+    downloadMeetingsTemplate,
+    parseMeetingsWorkbook,
+    type MeetingImportCatalogs,
+    type MeetingImportFailure,
+    type MeetingImportPreview,
+    type MeetingImportResult,
+} from '~/presentation/meetings/services/meeting-excel.service'
 import { formatInitials } from '~/utils/string/text-format.util'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
@@ -64,16 +81,36 @@ useHead({
 })
 
 const toast = useAppToast()
+const authStore = useAuthStore()
+const canManage = computed(() => authStore.hasPermission('meetings.manage'))
 const meetingsQuery = useMeetingsQuery()
 const meetingTypesQuery = useMeetingTypesQuery()
 const sectorsQuery = useMeetingSectorsQuery()
+const membersQuery = useMeetingMembersQuery(canManage)
+const leadersQuery = useMeetingLeadersQuery(canManage)
 const createMeetingMutation = useCreateMeetingMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
 const deleteMeetingMutation = useDeleteMeetingMutation()
+const importMeetingsMutation = useImportMeetingsMutation()
 
 const meetings = computed(() => meetingsQuery.data.value ?? [])
 const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
+const members = computed(() => membersQuery.data.value ?? [])
+const leaders = computed(() => leadersQuery.data.value ?? [])
+const importCatalogs = computed<MeetingImportCatalogs>(() => ({
+    meetingTypes: meetingTypes.value,
+    sectors: sectors.value,
+    members: members.value,
+    leaders: leaders.value,
+}))
+const importCatalogsLoading = computed(
+    () =>
+        meetingTypesQuery.isPending.value ||
+        sectorsQuery.isPending.value ||
+        membersQuery.isPending.value ||
+        leadersQuery.isPending.value,
+)
 const isLoading = computed(
     () =>
         meetingsQuery.isPending.value ||
@@ -99,7 +136,13 @@ if (import.meta.server) {
 
 if (import.meta.client) {
     watch(
-        () => [meetingsQuery.error.value, meetingTypesQuery.error.value, sectorsQuery.error.value],
+        () => [
+            meetingsQuery.error.value,
+            meetingTypesQuery.error.value,
+            sectorsQuery.error.value,
+            membersQuery.error.value,
+            leadersQuery.error.value,
+        ],
         (errors) => {
             const error = errors.find(Boolean)
             if (error) {
@@ -234,6 +277,136 @@ async function confirmDelete() {
     }
 }
 
+const downloadingTemplate = ref(false)
+const parsingImportFile = ref(false)
+const downloadingFailures = ref(false)
+const importInput = ref<HTMLInputElement | null>(null)
+const importOpen = ref(false)
+const importFileName = ref('')
+const importPreview = ref<MeetingImportPreview>({ rows: [], fileErrors: [] })
+const importResult = ref<MeetingImportResult | null>(null)
+const retryImportFailures = ref<MeetingImportFailure[]>([])
+const validImportRows = computed(() => importPreview.value.rows.filter((row) => !row.issues.length))
+const invalidImportRows = computed(() =>
+    importPreview.value.rows.filter((row) => row.issues.length),
+)
+const importErrors = computed(() => {
+    if (importResult.value) {
+        return retryImportFailures.value.flatMap((failure) =>
+            failure.reasons.map((reason) => `Fila ${failure.rowNumber}: ${reason}`),
+        )
+    }
+    return [
+        ...importPreview.value.fileErrors,
+        ...invalidImportRows.value.flatMap((row) =>
+            row.issues.map((issue) => `Fila ${row.rowNumber}: ${issue}`),
+        ),
+    ]
+})
+
+async function downloadTemplate() {
+    downloadingTemplate.value = true
+    try {
+        await downloadMeetingsTemplate(importCatalogs.value)
+        toast.success('Plantilla de reuniones descargada')
+    } catch {
+        toast.error('No fue posible generar la plantilla de reuniones')
+    } finally {
+        downloadingTemplate.value = false
+    }
+}
+
+function pickImportFile() {
+    importInput.value?.click()
+}
+
+async function onImportFile(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file) return
+
+    parsingImportFile.value = true
+    importFileName.value = file.name
+    importResult.value = null
+    retryImportFailures.value = []
+    try {
+        importPreview.value = await parseMeetingsWorkbook(
+            file,
+            importCatalogs.value,
+            meetings.value,
+        )
+        importOpen.value = true
+    } catch {
+        toast.error('No pudimos leer el archivo. Verifica que sea un Excel .xlsx válido.')
+    } finally {
+        parsingImportFile.value = false
+    }
+}
+
+function previewFailures(): MeetingImportFailure[] {
+    return invalidImportRows.value.map((row) => ({
+        rowNumber: row.rowNumber,
+        reasons: row.issues,
+    }))
+}
+
+async function downloadPendingMeetings() {
+    const failures = retryImportFailures.value.length
+        ? retryImportFailures.value
+        : previewFailures()
+    if (!failures.length) return
+
+    downloadingFailures.value = true
+    try {
+        await downloadMeetingImportFailures(
+            importPreview.value.rows,
+            failures,
+            importCatalogs.value,
+        )
+        toast.success('Archivo de reuniones pendientes descargado')
+    } catch {
+        toast.error('No fue posible generar el archivo de pendientes')
+    } finally {
+        downloadingFailures.value = false
+    }
+}
+
+async function confirmMeetingImport() {
+    if (!validImportRows.value.length) return
+
+    try {
+        const result = await importMeetingsMutation.mutateAsync(validImportRows.value)
+        const failures = [...previewFailures(), ...result.failures].sort(
+            (left, right) => left.rowNumber - right.rowNumber,
+        )
+        retryImportFailures.value = failures
+        importResult.value = { ...result, failures }
+
+        if (failures.length) {
+            try {
+                await downloadMeetingImportFailures(
+                    importPreview.value.rows,
+                    failures,
+                    importCatalogs.value,
+                )
+                toast.warning(
+                    `${result.created} reuniones creadas y ${failures.length} pendientes. Se descargó el archivo de corrección.`,
+                )
+            } catch {
+                toast.warning(
+                    `${result.created} reuniones creadas y ${failures.length} pendientes. Descarga el archivo de corrección desde este resumen.`,
+                )
+            }
+        } else {
+            toast.success(`Importación completa: ${result.created} reuniones creadas`)
+            importOpen.value = false
+        }
+    } catch {
+        toast.error('No fue posible iniciar la importación de reuniones')
+    }
+}
+
 function toInput(m: MeetingRecord): MeetingInput {
     return {
         typeId: m.typeId,
@@ -303,13 +476,45 @@ async function toggleActive(m: MeetingRecord) {
                 </p>
             </div>
 
-            <NuxtLink
-                to="/catalogos/reuniones/nueva"
-                class="inline-flex h-11 items-center rounded bg-primary px-5 text-xs font-semibold uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-                <Plus class="mr-2 size-4" />
-                Nueva reunión
-            </NuxtLink>
+            <div class="flex flex-wrap items-center gap-2">
+                <input
+                    v-if="canManage"
+                    ref="importInput"
+                    type="file"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    class="hidden"
+                    @change="onImportFile"
+                />
+                <UiButton
+                    v-if="canManage"
+                    variant="outline"
+                    type="button"
+                    :loading="downloadingTemplate"
+                    :disabled="importCatalogsLoading"
+                    @click="downloadTemplate"
+                >
+                    <FileDown class="size-4" />
+                    Plantilla
+                </UiButton>
+                <UiButton
+                    v-if="canManage"
+                    variant="outline"
+                    type="button"
+                    :loading="parsingImportFile"
+                    :disabled="importCatalogsLoading"
+                    @click="pickImportFile"
+                >
+                    <Upload class="size-4" />
+                    Importar
+                </UiButton>
+                <NuxtLink
+                    to="/catalogos/reuniones/nueva"
+                    class="inline-flex h-11 items-center rounded bg-primary px-5 text-xs font-semibold uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                    <Plus class="mr-2 size-4" />
+                    Nueva reunión
+                </NuxtLink>
+            </div>
         </section>
 
         <section class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -604,6 +809,181 @@ async function toggleActive(m: MeetingRecord) {
                         >
                             <Trash2 class="mr-2 size-4" />
                             Eliminar
+                        </UiButton>
+                    </div>
+                </DialogContent>
+            </DialogPortal>
+        </DialogRoot>
+
+        <DialogRoot v-model:open="importOpen">
+            <DialogPortal>
+                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
+                <DialogContent
+                    class="fixed left-1/2 top-1/2 z-[71] max-h-[88vh] w-[96vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none sm:p-7"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+                        >
+                            <FileSpreadsheet class="size-6" />
+                        </div>
+                        <div class="min-w-0">
+                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">
+                                Importar reuniones desde Excel
+                            </DialogTitle>
+                            <DialogDescription
+                                class="mt-1 truncate text-sm text-on-surface-variant"
+                            >
+                                {{ importFileName }}
+                            </DialogDescription>
+                        </div>
+                    </div>
+
+                    <div v-if="importResult" class="mt-6 grid gap-3 sm:grid-cols-2">
+                        <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Creadas
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-emerald-600">
+                                {{ importResult.created }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xl border p-4"
+                            :class="
+                                retryImportFailures.length
+                                    ? 'border-destructive/35 bg-destructive/5'
+                                    : 'border-outline-variant bg-surface-container'
+                            "
+                        >
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Pendientes
+                            </p>
+                            <p
+                                class="mt-1 font-display text-2xl font-semibold"
+                                :class="
+                                    retryImportFailures.length
+                                        ? 'text-destructive'
+                                        : 'text-on-surface'
+                                "
+                            >
+                                {{ retryImportFailures.length }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-else class="mt-6 grid gap-3 sm:grid-cols-2">
+                        <div class="rounded-xl border border-primary/25 bg-primary/5 p-4">
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Reuniones válidas
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-primary">
+                                {{ validImportRows.length }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xl border p-4"
+                            :class="
+                                importErrors.length
+                                    ? 'border-destructive/35 bg-destructive/5'
+                                    : 'border-outline-variant bg-surface-container'
+                            "
+                        >
+                            <p
+                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                Filas con errores
+                            </p>
+                            <p
+                                class="mt-1 font-display text-2xl font-semibold"
+                                :class="
+                                    importErrors.length ? 'text-destructive' : 'text-on-surface'
+                                "
+                            >
+                                {{ invalidImportRows.length }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="importErrors.length"
+                        class="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
+                    >
+                        <p class="text-xs font-semibold text-destructive">
+                            {{
+                                importResult
+                                    ? 'Reuniones que continúan pendientes:'
+                                    : 'Corrige estas filas o importa únicamente las válidas:'
+                            }}
+                        </p>
+                        <ul
+                            class="mt-2 max-h-52 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-on-surface-variant"
+                        >
+                            <li v-for="error in importErrors" :key="error">
+                                {{ error }}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <p
+                        v-else-if="!importResult"
+                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        El supervisor se tomará del sector y cada reunión conservará las mismas
+                        reglas de tipo, líder, horario y recurrencia que la creación manual.
+                    </p>
+                    <p
+                        v-if="!importResult && invalidImportRows.length && validImportRows.length"
+                        class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        Se crearán las {{ validImportRows.length }} reuniones válidas. Las
+                        {{ invalidImportRows.length }} filas con problemas quedarán en un nuevo
+                        Excel con el motivo para corregirlas y volver a importarlas.
+                    </p>
+                    <p
+                        v-if="importResult && retryImportFailures.length"
+                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        Las {{ importResult.created }} reuniones creadas ya no aparecen en el Excel
+                        de pendientes.
+                    </p>
+
+                    <div class="mt-6 flex flex-wrap justify-end gap-2">
+                        <DialogClose as-child>
+                            <UiButton variant="outline" type="button">
+                                {{ importResult ? 'Cerrar' : 'Cancelar' }}
+                            </UiButton>
+                        </DialogClose>
+                        <UiButton
+                            v-if="
+                                (importResult && retryImportFailures.length) ||
+                                (!importResult &&
+                                    !validImportRows.length &&
+                                    invalidImportRows.length)
+                            "
+                            variant="outline"
+                            type="button"
+                            :loading="downloadingFailures"
+                            @click="downloadPendingMeetings"
+                        >
+                            <Download class="size-4" />
+                            Descargar pendientes
+                        </UiButton>
+                        <UiButton
+                            v-if="!importResult"
+                            type="button"
+                            :loading="importMeetingsMutation.isPending.value"
+                            :disabled="!validImportRows.length || !!importPreview.fileErrors.length"
+                            @click="confirmMeetingImport"
+                        >
+                            <Upload class="size-4" />
+                            Importar {{ validImportRows.length }} reunión(es)
                         </UiButton>
                     </div>
                 </DialogContent>

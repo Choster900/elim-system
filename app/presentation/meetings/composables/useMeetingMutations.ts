@@ -2,6 +2,8 @@ import { useMutation, useQueryClient, type QueryClient } from '@tanstack/vue-que
 import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import type { MeetingInput, MeetingRecord } from '../interfaces/meeting.interface'
+import type { MeetingWorkbookImportRow } from '../services/meeting-excel.service'
+import { importMeetings } from '../services/meeting-excel.service'
 import { createMeeting, deleteMeeting, updateMeeting } from '../services/meeting.service'
 
 interface UpdateMeetingVariables {
@@ -64,6 +66,22 @@ export function useDeleteMeetingMutation() {
                 current?.filter((meeting) => meeting.id !== id),
             )
             await invalidateMeetingCollections(queryClient)
+        },
+    })
+}
+
+export function useImportMeetingsMutation() {
+    const apiClient = useApiClient()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationKey: [...queryKeys.meetings.all, 'import'],
+        mutationFn: (rows: MeetingWorkbookImportRow[]) => importMeetings(apiClient, rows),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.meetings.all }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.occurrences.all }),
+            ])
         },
     })
 }

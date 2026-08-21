@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/vue-query'
+import type { MaybeRefOrGetter } from 'vue'
 import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import {
@@ -20,22 +21,24 @@ export function useMeetingTypesQuery() {
     })
 }
 
-export function useMeetingMembersQuery() {
+export function useMeetingMembersQuery(enabled: MaybeRefOrGetter<boolean> = true) {
     const apiClient = useApiClient()
 
     return useQuery({
         queryKey: queryKeys.members.options,
         queryFn: ({ signal }) => getMembers(apiClient, signal),
+        enabled,
         staleTime: CATALOG_STALE_TIME_MS,
     })
 }
 
-export function useMeetingLeadersQuery() {
+export function useMeetingLeadersQuery(enabled: MaybeRefOrGetter<boolean> = true) {
     const apiClient = useApiClient()
 
     return useQuery({
         queryKey: queryKeys.members.meetingLeaders,
         queryFn: ({ signal }) => getMeetingLeaders(apiClient, signal),
+        enabled,
         staleTime: CATALOG_STALE_TIME_MS,
     })
 }
