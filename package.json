@@ -3,7 +3,7 @@
     "type": "module",
     "private": true,
     "scripts": {
-        "build": "nuxt build",
+        "build": "prisma generate && nuxt build",
         "dev": "prisma generate && node scripts/setup-db.mjs && nuxt dev",
         "generate": "nuxt generate",
         "lint": "eslint .",
