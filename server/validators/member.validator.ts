@@ -6,6 +6,7 @@ import {
     MEMBER_STATUS_OPTIONS,
 } from '../constants/member.constants'
 import type { CreateMemberDto, ImportMembersDto, UpdateMemberDto } from '../dto/member/member.dto'
+import { isValidDui, normalizeDui } from '#shared/utils/dui.util'
 
 const optionalText = (maximum: number) => Joi.string().trim().max(maximum).allow('', null)
 const date = Joi.string().isoDate().allow(null)
@@ -22,7 +23,15 @@ const fields = {
     lastName: Joi.string().trim().min(2).max(100),
     secondLastName: optionalText(100),
     preferredName: optionalText(100),
-    documentNumber: optionalText(100),
+    documentNumber: Joi.string()
+        .trim()
+        .custom((value: string, helpers) => {
+            const dui = normalizeDui(value)
+            return isValidDui(dui) ? dui : helpers.error('string.dui')
+        })
+        .messages({
+            'string.dui': 'El documento debe ser un DUI válido con formato 00000000-0.',
+        }),
     birthDate: date,
     gender: Joi.string().valid(...MEMBER_GENDER_OPTIONS.map((option) => option.value)),
     maritalStatus: Joi.string().valid(
@@ -60,7 +69,7 @@ const requiredFields = {
     lastName: fields.lastName.required(),
     secondLastName: fields.secondLastName.default(null),
     preferredName: fields.preferredName.default(null),
-    documentNumber: fields.documentNumber.default(null),
+    documentNumber: fields.documentNumber.required(),
     birthDate: fields.birthDate.default(null),
     gender: fields.gender.required(),
     maritalStatus: fields.maritalStatus.default('UNSPECIFIED'),

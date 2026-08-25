@@ -166,10 +166,22 @@ export function findMemberById(id: number) {
     return prisma.member.findUnique({ where: { id }, include: memberInclude })
 }
 
+export function findMemberByDocument(documentNumber: string, excludedMemberId?: number) {
+    return prisma.member.findFirst({
+        where: {
+            documentNumber: { equals: documentNumber, mode: 'insensitive' },
+            ...(excludedMemberId === undefined ? {} : { id: { not: excludedMemberId } }),
+        },
+        select: { id: true },
+    })
+}
+
 export function findMemberMatches(code?: string, documentNumber?: string | null) {
     const filters: Prisma.MemberWhereInput[] = []
     if (code) filters.push({ code })
-    if (documentNumber) filters.push({ documentNumber })
+    if (documentNumber) {
+        filters.push({ documentNumber: { equals: documentNumber, mode: 'insensitive' } })
+    }
     if (!filters.length) return Promise.resolve([])
 
     return prisma.member.findMany({

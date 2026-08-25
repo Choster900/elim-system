@@ -1,4 +1,5 @@
 import { createError } from 'h3'
+import { normalizeDui } from '#shared/utils/dui.util'
 import {
     MEMBER_COUNTRIES,
     MEMBER_DEPARTMENTS,
@@ -61,6 +62,21 @@ function notFound(): never {
         statusCode: 404,
         message: 'El miembro solicitado no existe',
         data: { code: ApiErrorCode.RESOURCE_NOT_FOUND },
+    })
+}
+
+async function ensureUniqueDocument(documentNumber: string, excludedMemberId?: number) {
+    const existingMember = await repo.findMemberByDocument(documentNumber, excludedMemberId)
+    if (!existingMember) return
+
+    const message = 'El documento ya está registrado por otro miembro.'
+    throw createError({
+        statusCode: 409,
+        message,
+        data: {
+            code: ApiErrorCode.RESOURCE_ALREADY_EXISTS,
+            fields: { documentNumber: [message] },
+        },
     })
 }
 
@@ -178,13 +194,16 @@ function normalizeMemberDto<T extends CreateMemberDto | UpdateMemberDto>(
             : { email: dto.email ? dto.email.trim().toLowerCase() : null }),
         ...(dto.documentNumber === undefined
             ? {}
-            : { documentNumber: dto.documentNumber?.trim() || null }),
+            : { documentNumber: normalizeDui(dto.documentNumber) }),
         ...(residence ? residence : {}),
         ...(territory ? { sector: territory.sector } : {}),
     } as T
 }
 
-async function prepareMember(dto: CreateMemberDto | UpdateMemberDto, catalogs: MemberCatalogs) {
+async function prepareMember<T extends CreateMemberDto | UpdateMemberDto>(
+    dto: T,
+    catalogs: MemberCatalogs,
+) {
     const territory = resolveTerritory(dto, catalogs)
     const residence = resolveResidence(dto)
     return {
@@ -293,6 +312,7 @@ export async function getMemberById(id: number) {
 export async function createMember(dto: CreateMemberDto) {
     const catalogs = await repo.findMemberCatalogs()
     const prepared = await prepareMember(dto, catalogs)
+    await ensureUniqueDocument(prepared.dto.documentNumber)
     return repo.createMember(prepared.dto as CreateMemberDto, {
         roleIds: prepared.relations.roleIds ?? [],
         ministryIds: prepared.relations.ministryIds ?? [],
@@ -304,6 +324,9 @@ export async function updateMember(id: number, dto: UpdateMemberDto) {
     await getMemberById(id)
     const catalogs = await repo.findMemberCatalogs()
     const prepared = await prepareMember(dto, catalogs)
+    if (prepared.dto.documentNumber !== undefined) {
+        await ensureUniqueDocument(prepared.dto.documentNumber, id)
+    }
     return repo.updateMember(id, prepared.dto, prepared.relations)
 }
 
@@ -366,7 +389,7 @@ export async function importMembers(dto: ImportMembersDto): Promise<MemberImport
 
         const member = validation.value
         const code = member.code?.trim().toUpperCase()
-        const documentNumber = member.documentNumber?.trim()
+        const documentNumber = member.documentNumber?.trim().toUpperCase()
         const duplicateReasons: string[] = []
         if (code && seenCodes.has(code))
             duplicateReasons.push(`Código duplicado en el archivo: ${code}.`)

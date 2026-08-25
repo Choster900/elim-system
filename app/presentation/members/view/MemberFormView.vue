@@ -4,6 +4,7 @@ import MemberFormDrawer from '../components/MemberFormDrawer.vue'
 import { useCreateMemberMutation } from '../composables/useMemberMutations'
 import type { MemberInput } from '../interfaces/member.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
 defineOptions({ name: 'MemberFormView' })
 
@@ -22,8 +23,8 @@ async function saveMember(payload: MemberInput) {
         await createMemberMutation.mutateAsync(payload)
         toast.success('Miembro creado correctamente')
         await returnToMembers()
-    } catch {
-        toast.error('No fue posible guardar el miembro. Revisa el código, documento y correo.')
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar el miembro.'))
     }
 }
 </script>
@@ -56,8 +57,8 @@ async function saveMember(payload: MemberInput) {
                         Nuevo miembro
                     </h1>
                     <p class="mt-3 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-                        Registra la información personal, comunitaria y pastoral. Este registro no
-                        crea credenciales ni concede acceso al sistema.
+                        Registra la información personal, comunitaria y territorial. Este registro
+                        no crea credenciales ni concede acceso al sistema.
                     </p>
                 </div>
             </div>

@@ -2,6 +2,8 @@
 
 Plantilla profesional para Nuxt con TypeScript, Tailwind, Pinia, TanStack Query, Prisma y PostgreSQL, lista para escalar en frontend y backend.
 
+Para publicar el proyecto, consulta la [guía de despliegue seguro en Vercel](./README-VERCEL.md).
+
 ## 1) Descripción del proyecto
 
 Base modular para aplicaciones full-stack con Nuxt/Nitro. Incluye arquitectura por `presentation`, validación estricta de entorno, Response Envelope estándar para APIs y contenedorización para desarrollo/producción.

@@ -8,6 +8,7 @@ import type {
     MemberMaritalStatus,
     MemberStatus,
 } from '../interfaces/member.interface'
+import { isValidDui, normalizeDui } from '#shared/utils/dui.util'
 import {
     getMemberGenderLabel,
     getMemberMaritalStatusLabel,
@@ -174,7 +175,7 @@ function instructionsData(catalogs: MemberCatalogs) {
         ['Nombres', 'Sí', 'Texto, máximo 100 caracteres', 'María Elena'],
         ['Apellidos', 'Sí', 'Texto, máximo 100 caracteres', 'González'],
         ['Código', 'No', 'Vacío para generar MIE-####; existente para actualizar', 'MIE-0025'],
-        ['Documento', 'No', 'Único; también permite identificar una actualización', '01234567-8'],
+        ['Documento', 'Sí', 'DUI salvadoreño válido y único, con formato ########-#', '01234567-8'],
         ['Fechas', 'No', 'dd/mm/aaaa o fecha válida de Excel', '14/08/2026'],
         ['Estado', 'No', catalogs.statuses.map((option) => option.label).join(', '), 'Activo'],
         ['Género', 'Sí', 'FEMALE o MALE. Consulta la hoja Géneros.', 'FEMALE'],
@@ -652,7 +653,7 @@ export async function parseMembersWorkbook(
         excelRows[0]!.map((cell, index) => [normalize(text(cell)), index]),
     )
     const column = (name: (typeof HEADERS)[number]) => headerIndexes.get(normalize(name))
-    const missing = ['Nombres *', 'Apellidos *'].filter(
+    const missing = ['Nombres *', 'Apellidos *', 'Documento'].filter(
         (name) => column(name as (typeof HEADERS)[number]) == null,
     )
     if (missing.length) {
@@ -679,15 +680,20 @@ export async function parseMembersWorkbook(
         const firstName = text(value(row, 'Nombres *'))
         const lastName = text(value(row, 'Apellidos *'))
         const code = text(value(row, 'Código')).toUpperCase()
-        const documentNumber = text(value(row, 'Documento'))
+        const documentNumber = normalizeDui(text(value(row, 'Documento')))
         if (!firstName) issues.push('Nombres: es obligatorio.')
         if (!lastName) issues.push('Apellidos: es obligatorio.')
+        if (!documentNumber) issues.push('Documento: es obligatorio.')
+        else if (!isValidDui(documentNumber)) {
+            issues.push('Documento: el DUI no es válido o no cumple el formato ########-#.')
+        }
         if (code && seenCodes.has(code)) issues.push(`Código duplicado en el archivo: ${code}.`)
-        if (documentNumber && seenDocuments.has(documentNumber)) {
+        const normalizedDocument = documentNumber.toUpperCase()
+        if (documentNumber && seenDocuments.has(normalizedDocument)) {
             issues.push(`Documento duplicado en el archivo: ${documentNumber}.`)
         }
         if (code) seenCodes.add(code)
-        if (documentNumber) seenDocuments.add(documentNumber)
+        if (documentNumber) seenDocuments.add(normalizedDocument)
 
         const email = text(value(row, 'Correo'))
         if (email && !/^\S+@\S+\.\S+$/.test(email)) {
@@ -704,7 +710,7 @@ export async function parseMembersWorkbook(
             lastName,
             secondLastName: text(value(row, 'Segundo apellido')) || null,
             preferredName: text(value(row, 'Nombre preferido')) || null,
-            documentNumber: documentNumber || null,
+            documentNumber,
             birthDate: isoDate(value(row, 'Fecha nacimiento'), 'Fecha de nacimiento', issues),
             gender: resolveOption(
                 value(row, 'Género'),

@@ -16,6 +16,16 @@ import type {
     MemberStatus,
 } from '../interfaces/member.interface'
 import { toInputDate } from '../utils/member-format.util'
+import { formatDuiInput, isValidDui, normalizeDui } from '#shared/utils/dui.util'
+
+type DocumentNumberError = '' | 'required' | 'invalid'
+type InvalidMemberField =
+    | 'firstName'
+    | 'lastName'
+    | 'documentNumber'
+    | 'gender'
+    | 'sector'
+    | 'email'
 
 interface FormState {
     code: string
@@ -28,27 +38,19 @@ interface FormState {
     birthDate: string | null
     gender: MemberGender | ''
     maritalStatus: MemberMaritalStatus
-    phone: string
-    alternatePhone: string
     email: string
-    address: string
     country: string
     municipality: string
     department: string
     occupation: string
     status: MemberStatus
     roles: MemberCommunityRole[]
-    ministriesText: string
     joinedAt: string | null
     conversionDate: string | null
     baptismDate: string | null
     district: string
     zone: string
     sector: string
-    smallGroup: string
-    emergencyContactName: string
-    emergencyContactPhone: string
-    notes: string
 }
 
 const props = defineProps<{
@@ -96,43 +98,48 @@ function emptyForm(): FormState {
         birthDate: null,
         gender: '',
         maritalStatus: 'UNSPECIFIED',
-        phone: '',
-        alternatePhone: '',
         email: '',
-        address: '',
         country: 'SV',
         municipality: '',
         department: '',
         occupation: '',
         status: 'ACTIVE',
         roles: ['MEMBER'],
-        ministriesText: '',
         joinedAt: new Date().toISOString().slice(0, 10),
         conversionDate: null,
         baptismDate: null,
         district: '',
         zone: '',
         sector: '',
-        smallGroup: '',
-        emergencyContactName: '',
-        emergencyContactPhone: '',
-        notes: '',
     }
 }
 
 const form = reactive<FormState>(emptyForm())
+const formElement = ref<HTMLFormElement | null>(null)
+const highlightedField = ref<InvalidMemberField | null>(null)
 const errors = reactive({
     firstName: false,
     lastName: false,
+    documentNumber: '' as DocumentNumberError,
     gender: false,
     sector: false,
     email: false,
 })
 
+const invalidFieldOrder: InvalidMemberField[] = [
+    'firstName',
+    'lastName',
+    'documentNumber',
+    'gender',
+    'sector',
+    'email',
+]
+
 function resetForm() {
     Object.assign(form, emptyForm())
     errors.firstName = false
     errors.lastName = false
+    errors.documentNumber = ''
     errors.gender = false
     errors.sector = false
     errors.email = false
@@ -145,31 +152,23 @@ function resetForm() {
         lastName: props.member.lastName,
         secondLastName: props.member.secondLastName ?? '',
         preferredName: props.member.preferredName ?? '',
-        documentNumber: props.member.documentNumber ?? '',
+        documentNumber: normalizeDui(props.member.documentNumber ?? ''),
         birthDate: toInputDate(props.member.birthDate),
         gender: props.member.gender,
         maritalStatus: props.member.maritalStatus,
-        phone: props.member.phone ?? '',
-        alternatePhone: props.member.alternatePhone ?? '',
         email: props.member.email ?? '',
-        address: props.member.address ?? '',
         country: props.member.countryCode ?? 'SV',
         municipality: props.member.municipalityCode ?? '',
         department: props.member.departmentCode ?? '',
         occupation: props.member.occupation ?? '',
         status: props.member.status,
         roles: normalizeMemberRoles(props.member.roles ?? []),
-        ministriesText: (props.member.ministries ?? []).join('; '),
         joinedAt: toInputDate(props.member.joinedAt),
         conversionDate: toInputDate(props.member.conversionDate),
         baptismDate: toInputDate(props.member.baptismDate),
         district: props.member.districtCode ?? '',
         zone: props.member.zoneCode ?? '',
         sector: props.member.sectorCode ?? '',
-        smallGroup: props.member.smallGroup ?? '',
-        emergencyContactName: props.member.emergencyContactName ?? '',
-        emergencyContactPhone: props.member.emergencyContactPhone ?? '',
-        notes: props.member.notes ?? '',
     })
 }
 
@@ -221,6 +220,23 @@ function optional(value: string) {
     return value.trim() || null
 }
 
+function validateDocumentNumber() {
+    if (!form.documentNumber.trim()) {
+        errors.documentNumber = 'required'
+    } else if (!isValidDui(form.documentNumber)) {
+        errors.documentNumber = 'invalid'
+    } else {
+        errors.documentNumber = ''
+    }
+
+    return !errors.documentNumber
+}
+
+function updateDocumentNumber(event: Event) {
+    form.documentNumber = formatDuiInput((event.target as HTMLInputElement).value)
+    errors.documentNumber = ''
+}
+
 function normalizeMemberRoles(roles: Array<MemberCommunityRole | string | null | undefined>) {
     const normalized = roles
         .filter((role): role is string => typeof role === 'string' && role.trim().length > 0)
@@ -237,54 +253,97 @@ function normalizeMemberRoles(roles: Array<MemberCommunityRole | string | null |
     return [...new Set(normalized)] as MemberCommunityRole[]
 }
 
+function hasFieldError(field: InvalidMemberField) {
+    if (field === 'documentNumber') return !!errors.documentNumber
+    return errors[field]
+}
+
+function firstInvalidField() {
+    return invalidFieldOrder.find((field) => hasFieldError(field)) ?? null
+}
+
+function fieldShellClass(field: InvalidMemberField) {
+    return highlightedField.value === field ? 'member-invalid-jump' : ''
+}
+
+function focusFirstInvalidField() {
+    const field = firstInvalidField()
+    if (!field) return
+
+    nextTick(() => {
+        const fieldElement = formElement.value?.querySelector<HTMLElement>(
+            `[data-member-field="${field}"]`,
+        )
+        if (!fieldElement) return
+
+        fieldElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+        highlightedField.value = null
+
+        window.setTimeout(() => {
+            highlightedField.value = field
+        }, 80)
+
+        window.setTimeout(() => {
+            const focusTarget = fieldElement.matches('input, button, select, textarea, [tabindex]')
+                ? fieldElement
+                : fieldElement.querySelector<HTMLElement>(
+                      'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+                  )
+
+            focusTarget?.focus({ preventScroll: true })
+        }, 260)
+
+        window.setTimeout(() => {
+            if (highlightedField.value === field) highlightedField.value = null
+        }, 900)
+    })
+}
+
 function submit() {
     errors.firstName = !form.firstName.trim()
     errors.lastName = !form.lastName.trim()
+    validateDocumentNumber()
     errors.gender = !form.gender
     errors.sector = !form.sector
     errors.email = !!form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())
-    if (errors.firstName || errors.lastName || errors.gender || errors.sector || errors.email) {
+    if (
+        errors.firstName ||
+        errors.lastName ||
+        errors.documentNumber ||
+        errors.gender ||
+        errors.sector ||
+        errors.email
+    ) {
+        focusFirstInvalidField()
         return
     }
 
     emit('save', {
-        code: form.code.trim() || undefined,
         firstName: form.firstName.trim(),
         middleName: optional(form.middleName),
         lastName: form.lastName.trim(),
         secondLastName: optional(form.secondLastName),
         preferredName: optional(form.preferredName),
-        documentNumber: optional(form.documentNumber),
+        documentNumber: normalizeDui(form.documentNumber),
         birthDate: form.birthDate,
         gender: form.gender as MemberGender,
         maritalStatus: form.maritalStatus,
-        phone: optional(form.phone),
-        alternatePhone: optional(form.alternatePhone),
         email: optional(form.email),
-        address: optional(form.address),
         country: optional(form.country),
         municipality: optional(form.municipality),
         department: optional(form.department),
         occupation: optional(form.occupation),
         status: form.status,
         roles: normalizeMemberRoles(form.roles.length ? form.roles : ['MEMBER']),
-        ministries: form.ministriesText
-            .split(/[;,]/)
-            .map((value) => value.trim())
-            .filter(Boolean),
         joinedAt: form.joinedAt,
         conversionDate: form.conversionDate,
         baptismDate: form.baptismDate,
         sector: optional(form.sector),
-        smallGroup: optional(form.smallGroup),
-        emergencyContactName: optional(form.emergencyContactName),
-        emergencyContactPhone: optional(form.emergencyContactPhone),
-        notes: optional(form.notes),
     })
 }
 
 const inputClass =
-    'h-11 w-full rounded border border-outline-variant bg-surface px-3 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:border-primary focus:ring-1 focus:ring-primary'
+    'h-11 w-full rounded border border-outline-variant bg-surface px-3 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-on-surface-variant disabled:opacity-100'
 const labelClass =
     'mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
 const currentYear = new Date().getFullYear()
@@ -335,6 +394,7 @@ const currentYear = new Date().getFullYear()
             </header>
 
             <form
+                ref="formElement"
                 :class="
                     isPage
                         ? 'px-5 py-6 sm:px-8 lg:px-10 lg:py-9'
@@ -357,11 +417,19 @@ const currentYear = new Date().getFullYear()
                                 id="member-code"
                                 v-model="form.code"
                                 :class="inputClass"
-                                placeholder="Automático"
+                                :placeholder="member ? '' : 'Se asignará al guardar'"
                                 maxlength="30"
+                                disabled
                             />
+                            <p class="mt-1 text-[11px] text-on-surface-variant">
+                                {{
+                                    member
+                                        ? 'Asignado automáticamente; no se puede editar.'
+                                        : 'El sistema generará un código MIE-####.'
+                                }}
+                            </p>
                         </div>
-                        <div>
+                        <div :class="fieldShellClass('firstName')" data-member-field="firstName">
                             <label :class="labelClass" for="member-first-name">Nombres *</label>
                             <input
                                 id="member-first-name"
@@ -385,7 +453,7 @@ const currentYear = new Date().getFullYear()
                                 maxlength="100"
                             />
                         </div>
-                        <div>
+                        <div :class="fieldShellClass('lastName')" data-member-field="lastName">
                             <label :class="labelClass" for="member-last-name">Apellidos *</label>
                             <input
                                 id="member-last-name"
@@ -411,7 +479,7 @@ const currentYear = new Date().getFullYear()
                         </div>
                         <div>
                             <label :class="labelClass" for="member-preferred-name"
-                                >Nombre preferido</label
+                                >Nombre preferido (opcional)</label
                             >
                             <input
                                 id="member-preferred-name"
@@ -421,15 +489,42 @@ const currentYear = new Date().getFullYear()
                                 maxlength="100"
                             />
                         </div>
-                        <div>
-                            <label :class="labelClass" for="member-document">Documento</label>
+                        <div
+                            :class="fieldShellClass('documentNumber')"
+                            data-member-field="documentNumber"
+                        >
+                            <label :class="labelClass" for="member-document">Documento *</label>
                             <input
                                 id="member-document"
-                                v-model="form.documentNumber"
-                                :class="inputClass"
-                                placeholder="DUI, pasaporte…"
-                                maxlength="50"
+                                :value="form.documentNumber"
+                                :class="[
+                                    inputClass,
+                                    errors.documentNumber ? 'border-destructive' : '',
+                                ]"
+                                placeholder="########-#"
+                                inputmode="numeric"
+                                maxlength="10"
+                                autocomplete="off"
+                                required
+                                @input="updateDocumentNumber"
+                                @blur="validateDocumentNumber"
                             />
+                            <p
+                                v-if="errors.documentNumber === 'required'"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                El documento es obligatorio.
+                            </p>
+                            <p
+                                v-else-if="errors.documentNumber === 'invalid'"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                El DUI no es válido. Revisa sus 8 dígitos y el dígito verificador.
+                            </p>
+                            <p v-else class="mt-1 text-[11px] text-on-surface-variant">
+                                Formato DUI: 8 dígitos, guion y dígito verificador. También debe ser
+                                único.
+                            </p>
                         </div>
                         <div>
                             <span :class="labelClass">Fecha de nacimiento</span>
@@ -441,7 +536,7 @@ const currentYear = new Date().getFullYear()
                                 :max-year="currentYear"
                             />
                         </div>
-                        <div>
+                        <div :class="fieldShellClass('gender')" data-member-field="gender">
                             <span :class="labelClass">Género *</span>
                             <UiSearchSelect
                                 v-model="form.gender"
@@ -462,7 +557,9 @@ const currentYear = new Date().getFullYear()
                             />
                         </div>
                         <div class="sm:col-span-2">
-                            <label :class="labelClass" for="member-occupation">Ocupación</label>
+                            <label :class="labelClass" for="member-occupation"
+                                >Ocupación (opcional)</label
+                            >
                             <input
                                 id="member-occupation"
                                 v-model="form.occupation"
@@ -499,31 +596,19 @@ const currentYear = new Date().getFullYear()
                                 placeholder="Selecciona uno o más roles"
                             />
                         </div>
-                        <div class="sm:col-span-2 lg:col-span-3">
-                            <label :class="labelClass" for="member-ministries">Ministerios</label>
-                            <input
-                                id="member-ministries"
-                                v-model="form.ministriesText"
-                                :class="inputClass"
-                                placeholder="Jóvenes; Alabanza; Hospitalidad"
-                            />
-                            <p class="mt-1 text-[11px] text-on-surface-variant">
-                                Separa múltiples ministerios con punto y coma.
-                            </p>
-                        </div>
                         <div>
                             <span :class="labelClass">Fecha de ingreso</span>
                             <UiDatePicker v-model="form.joinedAt" placeholder="Selecciona fecha" />
                         </div>
                         <div>
-                            <span :class="labelClass">Fecha de conversión</span>
+                            <span :class="labelClass">Fecha de conversión (opcional)</span>
                             <UiDatePicker
                                 v-model="form.conversionDate"
                                 placeholder="Selecciona fecha"
                             />
                         </div>
                         <div>
-                            <span :class="labelClass">Fecha de bautismo</span>
+                            <span :class="labelClass">Fecha de bautismo (opcional)</span>
                             <UiDatePicker
                                 v-model="form.baptismDate"
                                 placeholder="Selecciona fecha"
@@ -562,7 +647,7 @@ const currentYear = new Date().getFullYear()
                                 empty-message="Este distrito no tiene zonas activas"
                             />
                         </div>
-                        <div>
+                        <div :class="fieldShellClass('sector')" data-member-field="sector">
                             <span :class="labelClass">Sector *</span>
                             <UiSearchSelect
                                 v-model="form.sector"
@@ -578,17 +663,6 @@ const currentYear = new Date().getFullYear()
                                 Selecciona el sector al que pertenece el miembro.
                             </p>
                         </div>
-                        <div class="sm:col-span-2 lg:col-span-3">
-                            <label :class="labelClass" for="member-small-group"
-                                >Grupo pequeño / célula</label
-                            >
-                            <input
-                                id="member-small-group"
-                                v-model="form.smallGroup"
-                                :class="inputClass"
-                                placeholder="Nombre del grupo al que pertenece"
-                            />
-                        </div>
                     </div>
                 </section>
 
@@ -596,31 +670,10 @@ const currentYear = new Date().getFullYear()
 
                 <section>
                     <h3 class="font-display text-lg font-semibold text-on-surface">
-                        Contacto y residencia
+                        Correo y residencia
                     </h3>
                     <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div>
-                            <label :class="labelClass" for="member-phone">Teléfono</label>
-                            <input
-                                id="member-phone"
-                                v-model="form.phone"
-                                type="tel"
-                                :class="inputClass"
-                                placeholder="+503 7000-0000"
-                            />
-                        </div>
-                        <div>
-                            <label :class="labelClass" for="member-alt-phone"
-                                >Teléfono alterno</label
-                            >
-                            <input
-                                id="member-alt-phone"
-                                v-model="form.alternatePhone"
-                                type="tel"
-                                :class="inputClass"
-                            />
-                        </div>
-                        <div>
+                        <div :class="fieldShellClass('email')" data-member-field="email">
                             <label :class="labelClass" for="member-email">Correo</label>
                             <input
                                 id="member-email"
@@ -666,59 +719,6 @@ const currentYear = new Date().getFullYear()
                                 empty-message="Este departamento no tiene municipios configurados"
                             />
                         </div>
-                        <div class="sm:col-span-2 lg:col-span-3">
-                            <label :class="labelClass" for="member-address">Dirección</label>
-                            <textarea
-                                id="member-address"
-                                v-model="form.address"
-                                rows="2"
-                                :class="[inputClass, 'h-auto py-2.5 resize-none']"
-                                placeholder="Dirección residencial"
-                            />
-                        </div>
-                    </div>
-                </section>
-
-                <UiSeparator class="my-7" />
-
-                <section>
-                    <h3 class="font-display text-lg font-semibold text-on-surface">
-                        Emergencia y observaciones
-                    </h3>
-                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label :class="labelClass" for="member-emergency-name"
-                                >Contacto de emergencia</label
-                            >
-                            <input
-                                id="member-emergency-name"
-                                v-model="form.emergencyContactName"
-                                :class="inputClass"
-                            />
-                        </div>
-                        <div>
-                            <label :class="labelClass" for="member-emergency-phone"
-                                >Teléfono de emergencia</label
-                            >
-                            <input
-                                id="member-emergency-phone"
-                                v-model="form.emergencyContactPhone"
-                                type="tel"
-                                :class="inputClass"
-                            />
-                        </div>
-                        <div class="sm:col-span-2">
-                            <label :class="labelClass" for="member-notes"
-                                >Notas pastorales / administrativas</label
-                            >
-                            <textarea
-                                id="member-notes"
-                                v-model="form.notes"
-                                rows="4"
-                                :class="[inputClass, 'h-auto py-2.5 resize-none']"
-                                placeholder="Información relevante para el seguimiento del miembro"
-                            />
-                        </div>
                     </div>
                 </section>
             </form>
@@ -757,6 +757,23 @@ const currentYear = new Date().getFullYear()
     to {
         transform: translateX(0);
         opacity: 1;
+    }
+}
+
+.member-invalid-jump {
+    animation: member-invalid-jump 0.5s ease;
+}
+
+@keyframes member-invalid-jump {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    35% {
+        transform: translateY(-7px);
+    }
+    65% {
+        transform: translateY(2px);
     }
 }
 </style>

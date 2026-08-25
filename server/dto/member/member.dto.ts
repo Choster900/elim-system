@@ -7,7 +7,7 @@ export interface MemberBaseDto {
     lastName: string
     secondLastName: string | null
     preferredName: string | null
-    documentNumber: string | null
+    documentNumber: string
     birthDate: string | null
     gender: MemberGender
     maritalStatus: MemberMaritalStatus

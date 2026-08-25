@@ -37,6 +37,8 @@ import DataTable, {
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { formatShortIsoDate } from '~/utils/date/date-format.util'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatInitials } from '~/utils/string/text-format.util'
 import MemberDetailsDrawer from '../components/MemberDetailsDrawer.vue'
 import MemberFormDrawer from '../components/MemberFormDrawer.vue'
@@ -82,7 +84,21 @@ const deleteMemberMutation = useDeleteMemberMutation()
 const importMembersMutation = useImportMembersMutation()
 
 const members = computed(() => membersQuery.data.value ?? [])
+const sortedMembers = computed(() =>
+    members.value
+        .slice()
+        .sort(
+            (left, right) =>
+                new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+        ),
+)
 const memberCatalogs = computed(() => catalogsQuery.data.value ?? null)
+const sectorFilterOptions = computed(() =>
+    (memberCatalogs.value?.sectors ?? []).map((sector) => ({
+        value: sector.value,
+        label: sector.label,
+    })),
+)
 const loading = computed(() => membersQuery.isPending.value)
 const saving = computed(() => updateMemberMutation.isPending.value)
 const canCreate = computed(() => authStore.hasPermission('members.create'))
@@ -127,7 +143,7 @@ const stats = computed(() => {
     }
 })
 
-const columns: DataTableColumn<Member>[] = [
+const columns = computed<DataTableColumn<Member>[]>(() => [
     {
         key: 'member',
         label: 'Miembro',
@@ -136,6 +152,15 @@ const columns: DataTableColumn<Member>[] = [
         filterType: 'text',
         accessor: (row) => `${row.code} ${getMemberFullName(row)} ${row.documentNumber ?? ''}`,
         width: '360px',
+    },
+    {
+        key: 'documentNumber',
+        label: 'DUI',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        accessor: (row) => row.documentNumber ?? '',
+        width: '150px',
     },
     {
         key: 'contact',
@@ -162,7 +187,17 @@ const columns: DataTableColumn<Member>[] = [
         filterType: 'text',
         accessor: (row) =>
             [row.district, row.zone, row.sector, row.smallGroup].filter(Boolean).join(' '),
-        width: '240px',
+        width: '340px',
+    },
+    {
+        key: 'sector',
+        label: 'Sector',
+        sortable: true,
+        filterable: true,
+        filterType: 'select',
+        filterOptions: sectorFilterOptions.value,
+        accessor: (row) => row.sectorCode ?? '',
+        width: '180px',
     },
     {
         key: 'status',
@@ -174,8 +209,17 @@ const columns: DataTableColumn<Member>[] = [
         accessor: (row) => row.status,
         width: '140px',
     },
+    {
+        key: 'createdAt',
+        label: 'Creado',
+        sortable: true,
+        filterable: true,
+        filterType: 'daterange',
+        accessor: (row) => row.createdAt.slice(0, 10),
+        width: '170px',
+    },
     { key: 'actions', label: '', width: '72px', align: 'right' },
-]
+])
 
 function statusTone(status: MemberStatus) {
     switch (status) {
@@ -207,8 +251,8 @@ async function saveMember(payload: MemberInput) {
         await updateMemberMutation.mutateAsync({ id: editingMember.value.id, input: payload })
         toast.success('Miembro actualizado correctamente')
         formOpen.value = false
-    } catch {
-        toast.error('No fue posible guardar el miembro. Revisa el código, documento y correo.')
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar el miembro.'))
     }
 }
 
@@ -542,7 +586,7 @@ async function downloadPendingMembers() {
 
         <section class="mt-8">
             <DataTable
-                :rows="members"
+                :rows="sortedMembers"
                 :columns="columns"
                 row-key="id"
                 :page-size="25"
@@ -600,6 +644,12 @@ async function downloadPendingMembers() {
                     </div>
                 </template>
 
+                <template #cell-documentNumber="{ row }">
+                    <span class="text-xs font-medium text-on-surface">
+                        {{ (row as Member).documentNumber || 'Sin DUI' }}
+                    </span>
+                </template>
+
                 <template #cell-roles="{ row }">
                     <div class="flex flex-wrap gap-1.5">
                         <span
@@ -635,12 +685,24 @@ async function downloadPendingMembers() {
                     </div>
                 </template>
 
+                <template #cell-sector="{ row }">
+                    <span class="text-xs text-on-surface">
+                        {{ (row as Member).sector || 'Sin sector' }}
+                    </span>
+                </template>
+
                 <template #cell-status="{ row }">
                     <span
                         class="inline-flex rounded border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider"
                         :class="statusTone((row as Member).status)"
                         >{{ getMemberStatusLabel((row as Member).status) }}</span
                     >
+                </template>
+
+                <template #cell-createdAt="{ row }">
+                    <span class="text-xs text-on-surface-variant">
+                        {{ formatShortIsoDate((row as Member).createdAt.slice(0, 10)) }}
+                    </span>
                 </template>
 
                 <template #cell-actions="{ row }">
