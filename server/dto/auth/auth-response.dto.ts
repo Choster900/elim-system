@@ -22,6 +22,7 @@ export interface AuthUserDto {
     mustChangePassword: boolean
     roles: AuthRoleDto[]
     permissions: AuthPermissionDto[]
+    tokenExpiresAt?: number | null
 }
 
 export interface AuthTokensDto {

@@ -16,6 +16,7 @@ interface AuthState {
     user: AuthUser | null
     sessionChecked: boolean
     rememberedEmail: string | null
+    sessionExpiresAt: number | null
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -23,6 +24,7 @@ export const useAuthStore = defineStore('auth', {
         user: readJsonStorage<AuthUser | null>(STORAGE_KEY, null),
         sessionChecked: false,
         rememberedEmail: readJsonStorage<string | null>(REMEMBERED_EMAIL_KEY, null),
+        sessionExpiresAt: readJsonStorage<number | null>('auth-session-expires-at', null),
     }),
     getters: {
         displayName(state): string {
@@ -47,15 +49,27 @@ export const useAuthStore = defineStore('auth', {
         },
     },
     actions: {
-        setUser(user: AuthUser) {
-            this.user = user
+        setUser(user: AuthUser, accessTokenExpiresIn?: number) {
+            const { tokenExpiresAt, ...userWithoutSession } = user
+            const expiresAt =
+                typeof tokenExpiresAt === 'number'
+                    ? tokenExpiresAt * 1000
+                    : typeof accessTokenExpiresIn === 'number'
+                      ? Date.now() + accessTokenExpiresIn * 1000
+                      : this.sessionExpiresAt
+
+            this.user = userWithoutSession
+            this.sessionExpiresAt = expiresAt ?? null
             this.sessionChecked = true
-            writeJsonStorage(STORAGE_KEY, user)
+            writeJsonStorage(STORAGE_KEY, userWithoutSession)
+            writeJsonStorage('auth-session-expires-at', this.sessionExpiresAt)
         },
         clearUser() {
             this.user = null
+            this.sessionExpiresAt = null
             this.sessionChecked = true
             removeStorageItem(STORAGE_KEY)
+            removeStorageItem('auth-session-expires-at')
         },
         // El correo recordado sobrevive al cierre de sesión: ese es su propósito.
         setRememberedEmail(email: string) {

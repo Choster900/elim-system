@@ -22,6 +22,7 @@ export interface AuthUser {
     mustChangePassword: boolean
     roles: AuthRole[]
     permissions: AuthPermission[]
+    tokenExpiresAt?: number | null
 }
 
 export interface AuthTokens {

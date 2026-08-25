@@ -98,7 +98,7 @@ async function submit() {
             currentPassword: form.currentPassword,
             newPassword: form.newPassword,
         })
-        authStore.setUser(result.user)
+        authStore.setUser(result.user, result.tokens.accessTokenExpiresIn)
         toast.success('Contraseña actualizada correctamente')
         await navigateTo(safeRedirect())
     } catch (error) {

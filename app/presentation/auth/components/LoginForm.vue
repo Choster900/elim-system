@@ -119,7 +119,7 @@ async function onSubmit() {
             password: form.password,
             ...(invitationToken.value ? { invitationToken: invitationToken.value } : {}),
         })
-        authStore.setUser(result.user)
+        authStore.setUser(result.user, result.tokens.accessTokenExpiresIn)
 
         if (rememberEmail.value) {
             authStore.setRememberedEmail(form.email)

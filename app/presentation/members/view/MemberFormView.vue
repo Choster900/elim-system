@@ -3,6 +3,8 @@ import { ArrowLeft, UserPlus } from '@lucide/vue'
 import MemberFormDrawer from '../components/MemberFormDrawer.vue'
 import { useCreateMemberMutation } from '../composables/useMemberMutations'
 import type { MemberInput } from '../interfaces/member.interface'
+import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
+import type { HttpClientError } from '~/presentation/shared/interfaces/http/http-client-error.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
@@ -13,17 +15,23 @@ useHead({ title: 'Nuevo miembro · Sistema' })
 const toast = useAppToast()
 const createMemberMutation = useCreateMemberMutation()
 const saving = computed(() => createMemberMutation.isPending.value)
+const serverErrors = ref<Record<string, string[]> | null>(null)
 
 function returnToMembers() {
     return navigateTo('/comunidad/miembros')
 }
 
 async function saveMember(payload: MemberInput) {
+    serverErrors.value = null
     try {
         await createMemberMutation.mutateAsync(payload)
         toast.success('Miembro creado correctamente')
         await returnToMembers()
     } catch (error) {
+        const apiResponse = (error as HttpClientError | undefined)?.details as
+            | ApiResponse<null>
+            | undefined
+        serverErrors.value = apiResponse?.error?.fields ?? null
         toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar el miembro.'))
     }
 }
@@ -69,6 +77,7 @@ async function saveMember(payload: MemberInput) {
             variant="page"
             :member="null"
             :saving="saving"
+            :server-errors="serverErrors"
             @close="returnToMembers"
             @save="saveMember"
         />

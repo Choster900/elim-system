@@ -8,7 +8,13 @@ export default defineEventHandler(async (event) => {
         const auth = requireAuth(event)
         const user = await getCurrentUser(auth.userId)
 
-        return ApiResponseFactory.success(user, 'Sesión obtenida correctamente')
+        return ApiResponseFactory.success(
+            {
+                ...user,
+                tokenExpiresAt: auth.tokenExpiresAt,
+            },
+            'Sesión obtenida correctamente',
+        )
     } catch (error) {
         return handleApiError(event, error)
     }

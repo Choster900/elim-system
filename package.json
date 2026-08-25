@@ -15,7 +15,8 @@
         "prisma:migrate": "prisma migrate dev",
         "prisma:seed": "prisma db seed",
         "prisma:studio": "prisma studio",
-        "preview": "nuxt preview"
+        "preview": "nuxt preview",
+        "test:smtp": "node scripts/test-smtp.mjs"
     },
     "lint-staged": {
         "*.{js,ts,vue,mjs,cjs,css,md,json,yml,yaml}": "prettier --write"

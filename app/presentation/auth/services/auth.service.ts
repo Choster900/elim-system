@@ -25,6 +25,16 @@ export async function logoutRequest(client: AxiosInstance): Promise<void> {
     await client.post<ApiResponse<null>>('/auth/logout')
 }
 
+export async function refreshSessionRequest(client: AxiosInstance): Promise<LoginResponse> {
+    const response = await client.post<ApiResponse<LoginResponse>>('/auth/refresh')
+
+    if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.message || 'No fue posible renovar la sesión')
+    }
+
+    return response.data.data
+}
+
 export async function currentUserRequest(client: AxiosInstance): Promise<AuthUser> {
     const response = await client.get<ApiResponse<AuthUser>>('/auth/me')
 

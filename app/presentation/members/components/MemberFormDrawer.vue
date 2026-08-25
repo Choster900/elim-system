@@ -58,6 +58,7 @@ const props = defineProps<{
     member: Member | null
     saving: boolean
     variant?: 'drawer' | 'page'
+    serverErrors?: Record<string, string[] | undefined> | null
 }>()
 
 const isPage = computed(() => props.variant === 'page')
@@ -117,6 +118,7 @@ function emptyForm(): FormState {
 const form = reactive<FormState>(emptyForm())
 const formElement = ref<HTMLFormElement | null>(null)
 const highlightedField = ref<InvalidMemberField | null>(null)
+const dismissedServerFields = ref<string[]>([])
 const errors = reactive({
     firstName: false,
     lastName: false,
@@ -135,8 +137,18 @@ const invalidFieldOrder: InvalidMemberField[] = [
     'email',
 ]
 
+const activeServerErrors = computed<Record<string, string[] | undefined>>(() => {
+    const dismissed = new Set(dismissedServerFields.value)
+    return Object.fromEntries(
+        Object.entries(props.serverErrors ?? {}).filter(
+            ([field, messages]) => !dismissed.has(field) && !!messages?.length,
+        ),
+    )
+})
+
 function resetForm() {
     Object.assign(form, emptyForm())
+    dismissedServerFields.value = []
     errors.firstName = false
     errors.lastName = false
     errors.documentNumber = ''
@@ -179,6 +191,17 @@ watch(
 )
 
 watch(
+    () => props.serverErrors,
+    (serverErrors) => {
+        dismissedServerFields.value = []
+        if (serverErrors && Object.values(serverErrors).some((messages) => messages?.length)) {
+            focusFirstInvalidField()
+        }
+    },
+    { deep: true },
+)
+
+watch(
     () => form.country,
     (countryCode) => {
         const department = catalogs.value?.departments.find(
@@ -186,6 +209,31 @@ watch(
         )
         if (department && department.countryCode !== countryCode) form.department = ''
     },
+)
+
+watch(
+    () => form.firstName,
+    () => dismissServerFieldError('firstName'),
+)
+
+watch(
+    () => form.lastName,
+    () => dismissServerFieldError('lastName'),
+)
+
+watch(
+    () => form.gender,
+    () => dismissServerFieldError('gender'),
+)
+
+watch(
+    () => form.sector,
+    () => dismissServerFieldError('sector'),
+)
+
+watch(
+    () => form.email,
+    () => dismissServerFieldError('email'),
 )
 
 watch(
@@ -235,6 +283,7 @@ function validateDocumentNumber() {
 function updateDocumentNumber(event: Event) {
     form.documentNumber = formatDuiInput((event.target as HTMLInputElement).value)
     errors.documentNumber = ''
+    dismissServerFieldError('documentNumber')
 }
 
 function normalizeMemberRoles(roles: Array<MemberCommunityRole | string | null | undefined>) {
@@ -254,8 +303,19 @@ function normalizeMemberRoles(roles: Array<MemberCommunityRole | string | null |
 }
 
 function hasFieldError(field: InvalidMemberField) {
+    if (serverFieldMessage(field)) return true
     if (field === 'documentNumber') return !!errors.documentNumber
     return errors[field]
+}
+
+function dismissServerFieldError(field: InvalidMemberField) {
+    if (!dismissedServerFields.value.includes(field)) {
+        dismissedServerFields.value = [...dismissedServerFields.value, field]
+    }
+}
+
+function serverFieldMessage(field: InvalidMemberField) {
+    return activeServerErrors.value[field]?.[0] ?? ''
 }
 
 function firstInvalidField() {
@@ -300,6 +360,7 @@ function focusFirstInvalidField() {
 }
 
 function submit() {
+    dismissedServerFields.value = []
     errors.firstName = !form.firstName.trim()
     errors.lastName = !form.lastName.trim()
     validateDocumentNumber()
@@ -434,12 +495,23 @@ const currentYear = new Date().getFullYear()
                             <input
                                 id="member-first-name"
                                 v-model="form.firstName"
-                                :class="[inputClass, errors.firstName ? 'border-destructive' : '']"
+                                :class="[
+                                    inputClass,
+                                    errors.firstName || serverFieldMessage('firstName')
+                                        ? 'border-destructive'
+                                        : '',
+                                ]"
                                 placeholder="María Elena"
                                 maxlength="100"
                             />
                             <p v-if="errors.firstName" class="mt-1 text-xs text-destructive">
                                 Los nombres son obligatorios.
+                            </p>
+                            <p
+                                v-else-if="serverFieldMessage('firstName')"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ serverFieldMessage('firstName') }}
                             </p>
                         </div>
                         <div>
@@ -458,12 +530,23 @@ const currentYear = new Date().getFullYear()
                             <input
                                 id="member-last-name"
                                 v-model="form.lastName"
-                                :class="[inputClass, errors.lastName ? 'border-destructive' : '']"
+                                :class="[
+                                    inputClass,
+                                    errors.lastName || serverFieldMessage('lastName')
+                                        ? 'border-destructive'
+                                        : '',
+                                ]"
                                 placeholder="González"
                                 maxlength="100"
                             />
                             <p v-if="errors.lastName" class="mt-1 text-xs text-destructive">
                                 Los apellidos son obligatorios.
+                            </p>
+                            <p
+                                v-else-if="serverFieldMessage('lastName')"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ serverFieldMessage('lastName') }}
                             </p>
                         </div>
                         <div>
@@ -499,7 +582,9 @@ const currentYear = new Date().getFullYear()
                                 :value="form.documentNumber"
                                 :class="[
                                     inputClass,
-                                    errors.documentNumber ? 'border-destructive' : '',
+                                    errors.documentNumber || serverFieldMessage('documentNumber')
+                                        ? 'border-destructive'
+                                        : '',
                                 ]"
                                 placeholder="########-#"
                                 inputmode="numeric"
@@ -520,6 +605,12 @@ const currentYear = new Date().getFullYear()
                                 class="mt-1 text-xs text-destructive"
                             >
                                 El DUI no es válido. Revisa sus 8 dígitos y el dígito verificador.
+                            </p>
+                            <p
+                                v-else-if="serverFieldMessage('documentNumber')"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ serverFieldMessage('documentNumber') }}
                             </p>
                             <p v-else class="mt-1 text-[11px] text-on-surface-variant">
                                 Formato DUI: 8 dígitos, guion y dígito verificador. También debe ser
@@ -542,10 +633,17 @@ const currentYear = new Date().getFullYear()
                                 v-model="form.gender"
                                 :options="memberGenderOptions"
                                 :searchable="false"
+                                :invalid="errors.gender || !!serverFieldMessage('gender')"
                                 placeholder="Selecciona género"
                             />
                             <p v-if="errors.gender" class="mt-1 text-xs text-destructive">
                                 Selecciona femenino o masculino.
+                            </p>
+                            <p
+                                v-else-if="serverFieldMessage('gender')"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ serverFieldMessage('gender') }}
                             </p>
                         </div>
                         <div>
@@ -653,7 +751,7 @@ const currentYear = new Date().getFullYear()
                                 v-model="form.sector"
                                 :options="sectorOptions"
                                 :disabled="!form.zone"
-                                :invalid="errors.sector"
+                                :invalid="errors.sector || !!serverFieldMessage('sector')"
                                 clearable
                                 placeholder="Selecciona sector"
                                 search-placeholder="Buscar sector..."
@@ -661,6 +759,12 @@ const currentYear = new Date().getFullYear()
                             />
                             <p v-if="errors.sector" class="mt-1 text-xs text-destructive">
                                 Selecciona el sector al que pertenece el miembro.
+                            </p>
+                            <p
+                                v-else-if="serverFieldMessage('sector')"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ serverFieldMessage('sector') }}
                             </p>
                         </div>
                     </div>
@@ -679,11 +783,22 @@ const currentYear = new Date().getFullYear()
                                 id="member-email"
                                 v-model="form.email"
                                 type="email"
-                                :class="[inputClass, errors.email ? 'border-destructive' : '']"
+                                :class="[
+                                    inputClass,
+                                    errors.email || serverFieldMessage('email')
+                                        ? 'border-destructive'
+                                        : '',
+                                ]"
                                 placeholder="persona@correo.com"
                             />
                             <p v-if="errors.email" class="mt-1 text-xs text-destructive">
                                 Ingresa un correo válido.
+                            </p>
+                            <p
+                                v-else-if="serverFieldMessage('email')"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ serverFieldMessage('email') }}
                             </p>
                         </div>
                         <div>
