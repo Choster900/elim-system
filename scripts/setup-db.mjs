@@ -12,6 +12,16 @@ if (!DATABASE_URL) {
     process.exit(1)
 }
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'host.docker.internal', 'postgres'])
+
+function isLocalDatabase(url) {
+    try {
+        return LOCAL_HOSTS.has(new URL(url).hostname)
+    } catch {
+        return false
+    }
+}
+
 function makeClient(url) {
     const adapter = new PrismaPg({ connectionString: url })
     return new PrismaClient({ adapter })
@@ -49,6 +59,16 @@ async function main() {
         }
     } finally {
         await client.$disconnect().catch(() => {})
+    }
+
+    // Contra una base remota (Supabase, Neon…) no se crea nada ni se aplica `db push`:
+    // ese comando sincroniza el esquema por diferencia y puede eliminar columnas con datos.
+    if (!isLocalDatabase(DATABASE_URL)) {
+        console.error(
+            '[setup-db] La base de datos remota no respondió y este script solo prepara bases locales.\n' +
+                '[setup-db] Verifica la conexión y aplica el esquema con: npx prisma migrate deploy',
+        )
+        process.exit(1)
     }
 
     // DB no existe → crearla y aplicar schema

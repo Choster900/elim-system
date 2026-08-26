@@ -4,6 +4,7 @@ import Joi from 'joi'
 
 export interface AppEnv {
     DATABASE_URL: string
+    DIRECT_DATABASE_URL?: string
     JWT_SECRET: string
     PORT: number
     NUXT_PUBLIC_APP_NAME: string
@@ -22,6 +23,12 @@ const envSchema = Joi.object<AppEnv>({
     DATABASE_URL: Joi.string()
         .uri({ scheme: ['postgres', 'postgresql'] })
         .required(),
+    // Solo la usa el CLI de Prisma (migrate, diff, studio) a través de prisma.config.ts.
+    // En Supabase debe apuntar a la conexión directa o al session pooler, nunca al
+    // pooler en modo transacción, que no admite DDL.
+    DIRECT_DATABASE_URL: Joi.string()
+        .uri({ scheme: ['postgres', 'postgresql'] })
+        .optional(),
     JWT_SECRET: Joi.string().min(32).required(),
     PORT: Joi.number().integer().min(1).max(65535).default(3000),
     NUXT_PUBLIC_APP_NAME: Joi.string().min(1).required(),

@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { assertTargetAllowed, describeTarget, resolveSeedConnectionString } from './seed-target.mjs'
 import { seedAdminUser, seedAdminRoleAssignment } from './seeders/admin-user.seeder.mjs'
 import { seedPermissions } from './seeders/permission.seeder.mjs'
 import { seedRolePermissionAssignments, seedRoles } from './seeders/role.seeder.mjs'
@@ -10,8 +11,25 @@ import { seedMeetingTypes, seedMeetings } from './seeders/meeting.seeder.mjs'
 import { seedOfferingCategories, seedOfferings } from './seeders/offering.seeder.mjs'
 import { seedAttendanceTypes } from './seeders/attendance.seeder.mjs'
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
-const prisma = new PrismaClient({ adapter })
+// Este seed inserta datos de prueba (miembros, reuniones, ofrendas). Contra una
+// base remota casi nunca es lo que se quiere: ahí va `npm run prisma:seed:minimal`.
+try {
+    assertTargetAllowed(describeTarget(), {
+        scriptName: 'seed:full',
+        allowFlag: 'SEED_ALLOW_REMOTE',
+    })
+} catch (error) {
+    console.error(`\n[seed:full] Cancelado: ${error.message}\n`)
+    process.exit(1)
+}
+
+const adapter = new PrismaPg({ connectionString: resolveSeedConnectionString() })
+const prisma = new PrismaClient({
+    adapter,
+    // Sobre una base remota cada sentencia cuesta latencia de red y los lotes
+    // superan el timeout de transacción de 5 s que Prisma aplica por defecto.
+    transactionOptions: { maxWait: 15_000, timeout: 60_000 },
+})
 
 async function seed() {
     const permissions = await seedPermissions(prisma)

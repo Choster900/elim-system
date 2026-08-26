@@ -117,9 +117,7 @@ export function seedRolePermissionAssignments(prisma, roles, permissions) {
     const roleByCode = new Map(roles.map((role) => [role.code, role]))
     const permissionByCode = new Map(permissions.map((permission) => [permission.code, permission]))
 
-    // Quitar un permiso del seed tiene que revocarlo de verdad: sin esto, un rol
-    // conserva para siempre los permisos que tuvo en una siembra anterior.
-    const revocations = ROLE_SEEDS.map((roleSeed) => {
+    const desired = ROLE_SEEDS.map((roleSeed) => {
         const role = roleByCode.get(roleSeed.code)
         if (!role) throw new Error(`Seed role not found: ${roleSeed.code}`)
 
@@ -129,34 +127,32 @@ export function seedRolePermissionAssignments(prisma, roles, permissions) {
             return permission.id
         })
 
-        return prisma.rolePermission.deleteMany({
-            where: { roleId: role.id, permissionId: { notIn: permissionIds } },
-        })
+        return { roleId: role.id, permissionIds }
     })
 
-    const assignments = ROLE_SEEDS.flatMap((roleSeed) => {
-        const role = roleByCode.get(roleSeed.code)
-        if (!role) throw new Error(`Seed role not found: ${roleSeed.code}`)
-
-        return roleSeed.permissionCodes.map((permissionCode) => {
-            const permission = permissionByCode.get(permissionCode)
-            if (!permission) throw new Error(`Seed permission not found: ${permissionCode}`)
-
-            return prisma.rolePermission.upsert({
-                where: {
-                    roleId_permissionId: {
-                        roleId: role.id,
-                        permissionId: permission.id,
-                    },
-                },
-                create: {
-                    roleId: role.id,
-                    permissionId: permission.id,
-                },
-                update: {},
-            })
-        })
+    // Dos sentencias, no una por rol más una por permiso: sobre una base remota
+    // cada ida y vuelta cuesta decenas de milisegundos y el lote completo excedía
+    // el timeout de transacción.
+    //
+    // Quitar un permiso del seed tiene que revocarlo de verdad: sin esta limpieza
+    // un rol conserva para siempre los permisos que tuvo en una siembra anterior.
+    const revocation = prisma.rolePermission.deleteMany({
+        where: {
+            OR: desired.map(({ roleId, permissionIds }) => ({
+                roleId,
+                permissionId: { notIn: permissionIds },
+            })),
+        },
     })
 
-    return prisma.$transaction([...revocations, ...assignments])
+    // `skipDuplicates` sustituye al upsert: la tabla puente no tiene más campos
+    // que actualizar, así que crear lo que falta equivale a la siembra anterior.
+    const assignment = prisma.rolePermission.createMany({
+        data: desired.flatMap(({ roleId, permissionIds }) =>
+            permissionIds.map((permissionId) => ({ roleId, permissionId })),
+        ),
+        skipDuplicates: true,
+    })
+
+    return prisma.$transaction([revocation, assignment])
 }

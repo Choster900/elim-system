@@ -44,6 +44,11 @@ async function handleLogout() {
     }
 }
 
+// Marca de "todavía no hay pantalla". Estas opciones se conservan aquí a propósito
+// —son el mapa de lo que falta por construir— pero no se muestran en el menú.
+// Para publicar una, cambia su `href` por la ruta real y reaparece sola.
+const PLACEHOLDER_HREF = '#'
+
 const navItems: DashboardMenuItem[] = [
     {
         label: 'Panel',
@@ -144,6 +149,10 @@ function resolveAccessManagementHref() {
 }
 
 function filterMenuItem(item: DashboardMenuItem): DashboardMenuItem | null {
+    // Una opción sin destino real no llega a la pantalla. Los grupos cuyos hijos
+    // son todos marcadores desaparecen con la regla de más abajo.
+    if (item.href === PLACEHOLDER_HREF && !item.children) return null
+
     if (item.requiredPermission && !authStore.hasPermission(item.requiredPermission)) return null
     if (
         item.requiredAnyPermissions &&

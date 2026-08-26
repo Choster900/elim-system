@@ -34,9 +34,14 @@ npm run lint:fix
 npm run format               # prettier over all files
 
 npm run prisma:generate
-npm run prisma:migrate       # prisma migrate dev
-npm run prisma:seed          # runs prisma/seed/index.mjs
+npm run prisma:migrate       # prisma migrate dev — local only, creates migrations
+npm run prisma:seed          # full seed with demo data — refuses non-local databases
+npm run prisma:seed:minimal  # catalogs + one admin user, idempotent — safe for a real database
 npm run prisma:studio
+
+npm run db:status            # applied vs pending migrations (read-only)
+npm run db:verify            # diff the live database against schema.prisma (read-only)
+npm run db:deploy            # prisma migrate deploy — the only migration command for a real database
 
 docker compose up --build                             # app + postgres + mailpit (UI on :8025)
 docker compose -f docker-compose.prod.yml up --build
@@ -59,6 +64,8 @@ Nuxt 4 full-stack: Vue 3 frontend in `app/`, Nitro API in `server/`, Prisma 7 + 
 ### Prisma 7
 
 `prisma/schema.prisma` has **no `url` in the datasource block** — Prisma 7 gets the connection through the `@prisma/adapter-pg` adapter. The URL is wired in two places: `prisma.config.ts` (CLI: schema path, migrations path, seed command) and `server/database/prisma.ts` (the runtime singleton). Always import the singleton; never construct a `PrismaClient`.
+
+The CLI and the runtime can point at **different connections**: `prisma.config.ts` prefers `DIRECT_DATABASE_URL` over `DATABASE_URL`, because a transaction-mode pooler (Supabase port 6543) cannot run DDL. Runtime keeps using `DATABASE_URL`. See `docs/migracion-supabase.md` for the full deployment and schema-change procedure — against a real database the only migration command is `prisma migrate deploy`; `migrate reset` and `db push` are destructive and must never be pointed at one.
 
 ### Database naming standard (non-negotiable)
 
