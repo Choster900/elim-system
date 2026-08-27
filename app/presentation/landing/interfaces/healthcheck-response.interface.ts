@@ -4,4 +4,8 @@ export interface HealthcheckResponse {
     appName: string
     timestamp: string
     uptime: number
+    database: {
+        status: 'ok'
+        responseTimeMs: number
+    }
 }

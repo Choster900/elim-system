@@ -42,6 +42,10 @@ const STATUS_CODE_MAP: Record<number, { code: ApiErrorCode; message: string }> =
         code: ApiErrorCode.SERVICE_UNAVAILABLE,
         message: 'El servicio de correo no está disponible',
     },
+    503: {
+        code: ApiErrorCode.SERVICE_UNAVAILABLE,
+        message: 'Servicio no disponible',
+    },
 }
 
 export function handleApiError(event: H3Event, error: unknown) {
