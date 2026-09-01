@@ -7,6 +7,9 @@ export default defineNitroPlugin(async () => {
     } catch (error) {
         console.error('[db] Failed to connect to the database')
         console.error(error)
-        process.exit(1)
+
+        if (process.env.VERCEL !== '1') {
+            process.exit(1)
+        }
     }
 })
