@@ -4,7 +4,7 @@
     "private": true,
     "scripts": {
         "build": "prisma generate && nuxt build",
-        "dev": "prisma generate && node scripts/setup-db.mjs && nuxt dev",
+        "dev": "prisma generate && node scripts/setup-db.mjs && node scripts/dev.mjs",
         "generate": "nuxt generate",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",

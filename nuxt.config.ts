@@ -6,6 +6,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const env = validateEnv()
+const devServer = env.PORT ? { host: '0.0.0.0', port: env.PORT } : { host: '0.0.0.0' }
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -58,10 +59,7 @@ export default defineNuxtConfig({
         '@services': '/app/services',
         '@lib': resolve(__dirname, 'app/lib'),
     },
-    devServer: {
-        host: '0.0.0.0',
-        port: env.PORT,
-    },
+    devServer,
     compatibilityDate: '2025-07-15',
     tailwindcss: {
         configPath: 'tailwind.config.ts',

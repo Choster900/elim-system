@@ -6,7 +6,7 @@ export interface AppEnv {
     DATABASE_URL: string
     DIRECT_DATABASE_URL?: string
     JWT_SECRET: string
-    PORT: number
+    PORT?: number
     NUXT_PUBLIC_APP_NAME: string
     NODE_ENV: 'development' | 'production' | 'test'
     APP_BASE_URL: string
@@ -30,7 +30,7 @@ const envSchema = Joi.object<AppEnv>({
         .uri({ scheme: ['postgres', 'postgresql'] })
         .optional(),
     JWT_SECRET: Joi.string().min(32).required(),
-    PORT: Joi.number().integer().min(1).max(65535).default(3000),
+    PORT: Joi.number().integer().min(1).max(65535).optional(),
     NUXT_PUBLIC_APP_NAME: Joi.string().min(1).required(),
     NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
     APP_BASE_URL: Joi.string().uri().default('http://127.0.0.1:3000'),

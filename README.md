@@ -104,7 +104,8 @@ Crear `.env` desde `.env.example`:
 
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5432/mydb
-PORT=3000
+# Opcional: fuerza un puerto especifico. Si se omite, npm run dev usa uno disponible.
+# PORT=3000
 NODE_ENV=development
 NUXT_PUBLIC_APP_NAME=MyApp
 ```
@@ -440,7 +441,7 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-`npm run dev` valida la conexión a la base de datos, la crea si no existe, y arranca Nuxt en el puerto definido en `PORT`.
+`npm run dev` valida la conexión a la base de datos, la crea si no existe, y arranca Nuxt en el primer puerto disponible entre `3000` y `3099`. Define `PORT` solo cuando necesites obligar un puerto específico.
 
 ## 19) Ejecutar con Docker (desarrollo)
 

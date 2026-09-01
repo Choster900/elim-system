@@ -53,7 +53,7 @@ There is **no test runner** in this repo — no `npm test`, no framework configu
 
 Copy `.env.example` to `.env`. `config/env.ts` validates `process.env` with Joi at Nuxt startup/build and throws with the full list of problems if anything is invalid.
 
-Required: `DATABASE_URL` (any standard PostgreSQL URI — local, Supabase, Neon…), `JWT_SECRET` (min 32 chars), `NUXT_PUBLIC_APP_NAME`. Everything else has defaults: `PORT` (3000), `NODE_ENV`, `APP_BASE_URL` (used to build invitation links), `SMTP_*` / `MAIL_FROM` (Mailpit defaults on 127.0.0.1:1025), `USER_INVITATION_TTL_HOURS` (24, max 168). `SEED_ADMIN_*` is read by the seeder only.
+Required: `DATABASE_URL` (any standard PostgreSQL URI — local, Supabase, Neon…), `JWT_SECRET` (min 32 chars), `NUXT_PUBLIC_APP_NAME`. Everything else has defaults: `NODE_ENV`, `APP_BASE_URL` (used to build invitation links), `SMTP_*` / `MAIL_FROM` (Mailpit defaults on 127.0.0.1:1025), `USER_INVITATION_TTL_HOURS` (24, max 168). `PORT` is optional; `npm run dev` picks the first available port from 3000 to 3099 unless `PORT` is set to force one. `SEED_ADMIN_*` is read by the seeder only.
 
 `npm run dev` calls `scripts/setup-db.mjs`, which connects to `DATABASE_URL`, and if the database does not exist creates it and runs `prisma db push`.
 
