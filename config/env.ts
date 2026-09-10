@@ -17,6 +17,7 @@ export interface AppEnv {
     SMTP_PASSWORD: string
     MAIL_FROM: string
     USER_INVITATION_TTL_HOURS: number
+    PASSWORD_RESET_TTL_HOURS: number
 }
 
 const envSchema = Joi.object<AppEnv>({
@@ -41,6 +42,7 @@ const envSchema = Joi.object<AppEnv>({
     SMTP_PASSWORD: Joi.string().allow('').default(''),
     MAIL_FROM: Joi.string().min(1).default('Elim <no-reply@elim.local>'),
     USER_INVITATION_TTL_HOURS: Joi.number().integer().min(1).max(168).default(24),
+    PASSWORD_RESET_TTL_HOURS: Joi.number().integer().min(1).max(24).default(2),
 }).unknown(true)
 
 let validatedEnv: AppEnv | null = null
