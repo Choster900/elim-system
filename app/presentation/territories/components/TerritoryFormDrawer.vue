@@ -243,7 +243,7 @@ async function initMap() {
         scrollWheelZoom: false,
     })
     map.zoomControl.setPosition('topright')
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         subdomains: 'abcd',
         maxZoom: 20,
     }).addTo(map)
@@ -289,10 +289,6 @@ function save() {
         nameError.value = true
         return
     }
-    if (props.level === 'sector' && !form.supervisorId) {
-        supervisorError.value = true
-        return
-    }
     if (tempPolygon.value.length < 3) {
         polygonError.value = true
         return
@@ -334,6 +330,10 @@ const nameLabel = computed(
 const labelClass =
     'mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
 
+const leaderSelectLabel = computed(() =>
+    props.level === 'zona' ? `${props.leaderLabel} (opcional)` : props.leaderLabel,
+)
+
 const leaderSelectOptions = computed(() => {
     if (!form.leaderId || props.leaderOptions.some((leader) => leader.id === form.leaderId)) {
         return props.leaderOptions
@@ -362,9 +362,9 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
     <template v-if="open">
         <div class="fixed inset-0 z-[60] bg-black/50" @click="emit('close')" />
         <aside
-            class="territory-form-drawer fixed inset-y-0 right-0 z-[61] flex w-[680px] max-w-[96vw] flex-col bg-surface-container-low shadow-2xl"
+            class="territory-form-drawer fixed inset-y-0 right-0 z-[61] flex w-[980px] max-w-[98vw] flex-col bg-surface-container-low shadow-2xl"
         >
-            <div class="flex-none border-b border-outline-variant px-6 py-5">
+            <div class="flex-none border-b border-outline-variant px-6 py-5 lg:px-7">
                 <div class="flex items-center justify-between">
                     <span
                         class="text-[11px] font-bold uppercase tracking-[0.2em]"
@@ -389,257 +389,239 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                 </p>
             </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-                <div class="mb-4">
-                    <label
-                        class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                        for="tf-name"
-                    >
-                        {{ nameLabel }} *
-                    </label>
-                    <input
-                        id="tf-name"
-                        v-model="form.name"
-                        type="text"
-                        :placeholder="`Ej. ${levelLabel === 'distrito' ? 'Distrito Central' : levelLabel === 'zona' ? 'Zona Norte' : 'Sector Centro'}`"
-                        :class="[
-                            inputClass,
-                            nameError ? 'border-destructive focus:border-destructive' : '',
-                        ]"
-                        @input="nameError = false"
-                    />
-                    <p v-if="nameError" class="mt-1 text-xs text-destructive">
-                        El nombre es obligatorio.
-                    </p>
-                </div>
-
-                <div v-if="level !== 'sector'" class="mb-4 grid grid-cols-2 gap-3">
-                    <div>
-                        <span
-                            class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >Código</span
-                        >
-                        <div
-                            class="rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface"
-                        >
-                            {{
-                                mode === 'edit' && form.code
-                                    ? form.code
-                                    : `Se generará automáticamente (${codePrefix})`
-                            }}
+            <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5 lg:px-7">
+                <div class="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+                    <section class="space-y-4">
+                        <div>
+                            <label :class="labelClass" for="tf-name">{{ nameLabel }} *</label>
+                            <input
+                                id="tf-name"
+                                v-model="form.name"
+                                type="text"
+                                :placeholder="`Ej. ${levelLabel === 'distrito' ? 'Distrito Central' : levelLabel === 'zona' ? 'Zona Norte' : 'Sector Centro'}`"
+                                :class="[
+                                    inputClass,
+                                    nameError ? 'border-destructive focus:border-destructive' : '',
+                                ]"
+                                @input="nameError = false"
+                            />
+                            <p v-if="nameError" class="mt-1 text-xs text-destructive">
+                                El nombre es obligatorio.
+                            </p>
                         </div>
-                    </div>
-                    <div>
-                        <label :class="labelClass">{{ leaderLabel }}</label>
-                        <UiSearchSelect
-                            v-model="form.leaderId"
-                            :options="leaderSelectOptions"
-                            option-value="id"
-                            option-label="fullName"
-                            option-description="code"
-                            :placeholder="
-                                leadersLoading
-                                    ? 'Cargando líderes…'
-                                    : leadersError
-                                      ? 'Catálogo no disponible'
-                                      : `Selecciona ${leaderLabel === 'Pastor' ? 'un pastor' : 'un líder'}`
-                            "
-                            search-placeholder="Buscar por nombre o código…"
-                            empty-message="No hay líderes activos disponibles"
-                            :disabled="leadersLoading || !!leadersError"
-                            clearable
-                            :aria-label="leaderLabel"
-                            @update:model-value="onLeaderUpdate"
-                        />
-                        <div
-                            v-if="leadersError"
-                            class="mt-2 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
-                            role="alert"
-                        >
-                            <AlertTriangle class="mt-0.5 size-4 shrink-0 text-destructive" />
-                            <div class="min-w-0 flex-1">
-                                <p class="text-xs leading-relaxed text-destructive">
-                                    {{ leadersError }}
+
+                        <div>
+                            <span :class="labelClass">Código</span>
+                            <div
+                                class="rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface"
+                            >
+                                {{
+                                    mode === 'edit' && form.code
+                                        ? form.code
+                                        : `Se generará automáticamente (${codePrefix})`
+                                }}
+                            </div>
+                        </div>
+
+                        <div v-if="level !== 'sector'">
+                            <label :class="labelClass">{{ leaderSelectLabel }}</label>
+                            <UiSearchSelect
+                                v-model="form.leaderId"
+                                :options="leaderSelectOptions"
+                                option-value="id"
+                                option-label="fullName"
+                                option-description="code"
+                                :placeholder="
+                                    leadersLoading
+                                        ? 'Cargando líderes…'
+                                        : leadersError
+                                          ? 'Catálogo no disponible'
+                                          : `Selecciona ${leaderLabel === 'Pastor' ? 'un pastor' : 'un líder'}`
+                                "
+                                search-placeholder="Buscar por nombre o código…"
+                                empty-message="No hay líderes activos disponibles"
+                                :disabled="leadersLoading || !!leadersError"
+                                clearable
+                                :aria-label="leaderLabel"
+                                @update:model-value="onLeaderUpdate"
+                            />
+                            <div
+                                v-if="leadersError"
+                                class="mt-2 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
+                                role="alert"
+                            >
+                                <AlertTriangle class="mt-0.5 size-4 shrink-0 text-destructive" />
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xs leading-relaxed text-destructive">
+                                        {{ leadersError }}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                                        @click="emit('retry-leaders')"
+                                    >
+                                        <RefreshCw class="size-3" /> Reintentar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else>
+                            <label :class="labelClass">Supervisor (opcional)</label>
+                            <UiSearchSelect
+                                v-model="form.supervisorId"
+                                :options="supervisorOptions"
+                                option-value="id"
+                                option-label="fullName"
+                                option-description="code"
+                                :placeholder="
+                                    supervisorsLoading
+                                        ? 'Cargando supervisores…'
+                                        : supervisorsError
+                                          ? 'Catálogo no disponible'
+                                          : 'Selecciona un supervisor'
+                                "
+                                search-placeholder="Buscar por nombre o código…"
+                                empty-message="No hay supervisores activos disponibles"
+                                :disabled="supervisorsLoading || !!supervisorsError"
+                                clearable
+                                :invalid="supervisorError"
+                                @update:model-value="supervisorError = false"
+                            />
+                            <div
+                                v-if="supervisorsError"
+                                class="mt-2 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
+                                role="alert"
+                            >
+                                <AlertTriangle class="mt-0.5 size-4 shrink-0 text-destructive" />
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xs leading-relaxed text-destructive">
+                                        {{ supervisorsError }}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                                        @click="emit('retry-supervisors')"
+                                    >
+                                        <RefreshCw class="size-3" /> Reintentar
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="mt-1.5 text-xs leading-relaxed text-on-surface-variant">
+                                Puedes asignarlo después cuando el catálogo de supervisores esté
+                                definido.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label :class="labelClass" for="tf-desc">Descripción</label>
+                            <textarea
+                                id="tf-desc"
+                                v-model="form.description"
+                                rows="4"
+                                placeholder="Cobertura, observaciones…"
+                                :class="[inputClass, 'resize-none leading-relaxed']"
+                            />
+                        </div>
+
+                        <div>
+                            <label
+                                class="flex cursor-pointer items-center justify-between rounded-lg border border-outline-variant bg-surface px-3 py-2.5"
+                            >
+                                <span>
+                                    <span class="block text-sm font-semibold text-on-surface">
+                                        Activo
+                                    </span>
+                                    <span class="block text-xs text-on-surface-variant">
+                                        Disponible para asignaciones y consultas.
+                                    </span>
+                                </span>
+                                <input
+                                    v-model="form.isActive"
+                                    type="checkbox"
+                                    class="size-4 accent-primary"
+                                />
+                            </label>
+                        </div>
+
+                        <div>
+                            <span :class="labelClass">Color</span>
+                            <div class="flex flex-wrap items-center gap-2.5">
+                                <button
+                                    v-for="c in palette"
+                                    :key="c"
+                                    type="button"
+                                    class="size-8 rounded-full transition-transform hover:scale-110"
+                                    :style="{
+                                        backgroundColor: c,
+                                        boxShadow:
+                                            form.color === c
+                                                ? '0 0 0 2px var(--surface-container-low), 0 0 0 4px var(--primary)'
+                                                : 'inset 0 0 0 1px rgba(0,0,0,.2)',
+                                    }"
+                                    :aria-label="`Color ${c}`"
+                                    @click="form.color = c"
+                                />
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="min-w-0">
+                        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <span :class="labelClass">Área que cubre</span>
+                                <p class="text-xs text-on-surface-variant">
+                                    {{ tempPolygon.length }} punto(s) seleccionados · mínimo 3
                                 </p>
+                            </div>
+                            <div class="flex items-center gap-1.5">
                                 <button
                                     type="button"
-                                    class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-                                    @click="emit('retry-leaders')"
+                                    class="inline-flex items-center gap-1 rounded-md border border-outline-variant bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+                                    :disabled="tempPolygon.length === 0"
+                                    @click="undoVertex"
                                 >
-                                    <RefreshCw class="size-3" /> Reintentar
+                                    <Undo2 class="size-3" /> Deshacer
+                                </button>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 rounded-md border border-outline-variant bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
+                                    :disabled="tempPolygon.length === 0"
+                                    @click="clearPolygon"
+                                >
+                                    <Eraser class="size-3" /> Limpiar
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <div v-else class="mb-4 space-y-4">
-                    <div>
-                        <span :class="labelClass">Código</span>
-                        <div
-                            class="rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface"
-                        >
-                            {{
-                                mode === 'edit' && form.code
-                                    ? form.code
-                                    : `Se generará automáticamente (${codePrefix})`
-                            }}
-                        </div>
-                    </div>
-                    <div>
-                        <label :class="labelClass">Supervisor *</label>
-                        <UiSearchSelect
-                            v-model="form.supervisorId"
-                            :options="supervisorOptions"
-                            option-value="id"
-                            option-label="fullName"
-                            option-description="code"
-                            :placeholder="
-                                supervisorsLoading
-                                    ? 'Cargando supervisores…'
-                                    : supervisorsError
-                                      ? 'Catálogo no disponible'
-                                      : 'Selecciona un supervisor'
-                            "
-                            search-placeholder="Buscar por nombre o código…"
-                            empty-message="No hay supervisores activos disponibles"
-                            :disabled="supervisorsLoading || !!supervisorsError"
-                            :invalid="supervisorError"
-                            @update:model-value="supervisorError = false"
-                        />
-                        <p v-if="supervisorError" class="mt-1 text-xs text-destructive">
-                            Debes asignar un supervisor del catálogo.
-                        </p>
-                        <div
-                            v-else-if="supervisorsError"
-                            class="mt-2 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
-                            role="alert"
-                        >
-                            <AlertTriangle class="mt-0.5 size-4 shrink-0 text-destructive" />
-                            <div class="min-w-0 flex-1">
-                                <p class="text-xs leading-relaxed text-destructive">
-                                    {{ supervisorsError }}
-                                </p>
-                                <button
-                                    type="button"
-                                    class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-                                    @click="emit('retry-supervisors')"
-                                >
-                                    <RefreshCw class="size-3" /> Reintentar
-                                </button>
-                            </div>
-                        </div>
-                        <p class="mt-1.5 text-xs leading-relaxed text-on-surface-variant">
-                            Supervisará todas las reuniones del sector y su registro de asistencia y
-                            ofrendas.
-                        </p>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <label :class="labelClass" for="tf-desc">Descripción</label>
-                    <textarea
-                        id="tf-desc"
-                        v-model="form.description"
-                        rows="2"
-                        placeholder="Cobertura, observaciones…"
-                        :class="[inputClass, 'resize-none leading-relaxed']"
-                    />
-                </div>
-
-                <div class="mb-5">
-                    <label
-                        class="flex cursor-pointer items-center justify-between rounded-lg border border-outline-variant bg-surface px-3 py-2.5"
-                    >
-                        <span>
-                            <span class="block text-sm font-semibold text-on-surface">Activo</span>
-                            <span class="block text-xs text-on-surface-variant">
-                                Disponible para asignaciones y consultas.
-                            </span>
-                        </span>
-                        <input
-                            v-model="form.isActive"
-                            type="checkbox"
-                            class="size-4 accent-primary"
-                        />
-                    </label>
-                </div>
-
-                <div class="mb-5">
-                    <span :class="labelClass">Color</span>
-                    <div class="flex flex-wrap items-center gap-2.5">
                         <button
-                            v-for="c in palette"
-                            :key="c"
                             type="button"
-                            class="size-7 rounded-full transition-transform hover:scale-110"
-                            :style="{
-                                backgroundColor: c,
-                                boxShadow:
-                                    form.color === c
-                                        ? '0 0 0 2px var(--surface-container-low), 0 0 0 4px var(--primary)'
-                                        : 'inset 0 0 0 1px rgba(0,0,0,.2)',
-                            }"
-                            :aria-label="`Color ${c}`"
-                            @click="form.color = c"
-                        />
-                    </div>
-                </div>
-
-                <div>
-                    <div class="mb-1.5 flex items-center justify-between">
-                        <span
-                            class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >Área que cubre</span
+                            class="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5 text-xs font-semibold text-primary transition-colors hover:border-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-60"
+                            :disabled="isLocating"
+                            @click="locateCurrentPosition"
                         >
-                        <div class="flex items-center gap-1.5">
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1 rounded-md border border-outline-variant px-2 py-1 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
-                                :disabled="tempPolygon.length === 0"
-                                @click="undoVertex"
-                            >
-                                <Undo2 class="size-3" /> Deshacer
-                            </button>
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1 rounded-md border border-outline-variant px-2 py-1 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
-                                :disabled="tempPolygon.length === 0"
-                                @click="clearPolygon"
-                            >
-                                <Eraser class="size-3" /> Limpiar
-                            </button>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        class="mb-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-60"
-                        :disabled="isLocating"
-                        @click="locateCurrentPosition"
-                    >
-                        <LoaderCircle v-if="isLocating" class="size-4 animate-spin" />
-                        <LocateFixed v-else class="size-4" />
-                        {{ isLocating ? 'Buscando tu ubicación…' : 'Usar mi ubicación actual' }}
-                    </button>
-                    <p v-if="locationError" class="mb-2 text-xs text-destructive" role="alert">
-                        {{ locationError }}
-                    </p>
-                    <div
-                        ref="mapEl"
-                        class="territory-form-map h-64 w-full overflow-hidden rounded-lg border border-outline-variant bg-surface-container"
-                    />
-                    <p class="mt-2 text-xs text-on-surface-variant">
-                        Haz clic en el mapa para trazar el área.
-                        <span class="text-on-surface">{{ tempPolygon.length }}</span> punto(s) ·
-                        mínimo 3 para un área válida.
-                    </p>
-                    <p v-if="polygonError" class="mt-1 text-xs text-destructive" role="alert">
-                        Debes definir al menos tres puntos para el área de cobertura.
-                    </p>
+                            <LoaderCircle v-if="isLocating" class="size-4 animate-spin" />
+                            <LocateFixed v-else class="size-4" />
+                            {{ isLocating ? 'Buscando tu ubicación…' : 'Usar mi ubicación actual' }}
+                        </button>
+                        <p v-if="locationError" class="mb-2 text-xs text-destructive" role="alert">
+                            {{ locationError }}
+                        </p>
+                        <div
+                            ref="mapEl"
+                            class="territory-form-map h-[420px] min-h-[420px] w-full overflow-hidden rounded-lg border border-outline-variant bg-white xl:h-[min(58vh,560px)]"
+                        />
+                        <p class="mt-2 text-xs text-on-surface-variant">
+                            Haz clic en el mapa para trazar el área. Usa Deshacer si necesitas
+                            corregir el último punto.
+                        </p>
+                        <p v-if="polygonError" class="mt-1 text-xs text-destructive" role="alert">
+                            Debes definir al menos tres puntos para el área de cobertura.
+                        </p>
+                    </section>
                 </div>
             </div>
 
-            <div class="flex-none border-t border-outline-variant px-6 py-4">
+            <div class="flex-none border-t border-outline-variant px-6 py-4 lg:px-7">
                 <div class="flex gap-2.5">
                     <button
                         type="button"

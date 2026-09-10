@@ -258,7 +258,7 @@ const hiddenCount = computed(() => Math.max(0, selectedOptions.value.length - pr
                 position="popper"
                 :side-offset="6"
                 :class="[
-                    'z-50 max-h-[300px] w-[var(--radix-combobox-trigger-width)] min-w-[14rem] overflow-hidden rounded border border-outline-variant bg-surface-container shadow-xl focus:outline-none',
+                    'z-[80] max-h-[300px] w-[var(--radix-combobox-trigger-width)] min-w-[14rem] overflow-hidden rounded border border-outline-variant bg-surface-container shadow-xl focus:outline-none',
                     contentClass,
                 ]"
             >

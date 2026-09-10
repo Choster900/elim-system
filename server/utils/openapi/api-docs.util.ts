@@ -1809,7 +1809,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
                 CreateSectorDto: {
                     type: 'object',
-                    required: ['name', 'color', 'polygon', 'zoneId', 'supervisorId'],
+                    required: ['name', 'color', 'polygon', 'zoneId'],
                     properties: {
                         name: { type: 'string', minLength: 2, maxLength: 100 },
                         description: { type: 'string', maxLength: 300, nullable: true },
@@ -1820,8 +1820,9 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         supervisorId: {
                             type: 'integer',
                             minimum: 1,
+                            nullable: true,
                             description:
-                                'Member responsible for the sector; defines what that user can see.',
+                                'Optional system user with SUPERVISOR role responsible for the sector.',
                         },
                     },
                 },

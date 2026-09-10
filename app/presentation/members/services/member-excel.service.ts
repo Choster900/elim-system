@@ -205,8 +205,8 @@ function instructionsData(catalogs: MemberCatalogs) {
         ],
         [
             'Sector',
-            'Sí',
-            'Escribe un único código de la hoja Sectores. Distrito y zona se obtienen del sector.',
+            'No',
+            'Opcional. Escribe un único código de la hoja Sectores. Distrito y zona se obtienen del sector.',
             'SEC-001',
         ],
         [
@@ -581,8 +581,7 @@ function resolveTerritory(
     issues: string[],
 ) {
     return (
-        resolveOption(value(row, 'Sector'), catalogs.sectors, undefined, 'Sector', issues, true) ??
-        null
+        resolveOption(value(row, 'Sector'), catalogs.sectors, undefined, 'Sector', issues) ?? null
     )
 }
 

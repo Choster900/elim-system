@@ -20,7 +20,7 @@ const invitationToken = computed(() =>
 const invitationQuery = useInvitationQuery(invitationToken)
 
 const form = reactive<Record<FieldKey, string>>({
-    email: 'admin@local.test',
+    email: 'admin@elim.com',
     password: 'Admin12345!',
 })
 

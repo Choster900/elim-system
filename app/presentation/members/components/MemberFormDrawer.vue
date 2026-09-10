@@ -153,7 +153,6 @@ function resetForm() {
     errors.lastName = false
     errors.documentNumber = ''
     errors.gender = false
-    errors.sector = false
     errors.email = false
     if (!props.member) return
 
@@ -365,7 +364,7 @@ function submit() {
     errors.lastName = !form.lastName.trim()
     validateDocumentNumber()
     errors.gender = !form.gender
-    errors.sector = !form.sector
+    errors.sector = false
     errors.email = !!form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())
     if (
         errors.firstName ||
@@ -718,13 +717,13 @@ const currentYear = new Date().getFullYear()
                                     Asignación territorial
                                 </p>
                                 <p class="mt-1 text-xs leading-relaxed text-on-surface-variant">
-                                    Distrito y zona solo ayudan a filtrar. El miembro queda asociado
-                                    únicamente al sector seleccionado.
+                                    Distrito y zona solo ayudan a filtrar. Si no seleccionas un
+                                    sector, el miembro queda sin asignación territorial.
                                 </p>
                             </div>
                         </div>
                         <div>
-                            <span :class="labelClass">Distrito</span>
+                            <span :class="labelClass">Distrito (opcional)</span>
                             <UiSearchSelect
                                 v-model="form.district"
                                 :options="districtOptions"
@@ -734,7 +733,7 @@ const currentYear = new Date().getFullYear()
                             />
                         </div>
                         <div>
-                            <span :class="labelClass">Zona</span>
+                            <span :class="labelClass">Zona (opcional)</span>
                             <UiSearchSelect
                                 v-model="form.zone"
                                 :options="zoneOptions"
@@ -746,7 +745,7 @@ const currentYear = new Date().getFullYear()
                             />
                         </div>
                         <div :class="fieldShellClass('sector')" data-member-field="sector">
-                            <span :class="labelClass">Sector *</span>
+                            <span :class="labelClass">Sector (opcional)</span>
                             <UiSearchSelect
                                 v-model="form.sector"
                                 :options="sectorOptions"
@@ -757,11 +756,8 @@ const currentYear = new Date().getFullYear()
                                 search-placeholder="Buscar sector..."
                                 empty-message="Esta zona no tiene sectores activos"
                             />
-                            <p v-if="errors.sector" class="mt-1 text-xs text-destructive">
-                                Selecciona el sector al que pertenece el miembro.
-                            </p>
                             <p
-                                v-else-if="serverFieldMessage('sector')"
+                                v-if="serverFieldMessage('sector')"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ serverFieldMessage('sector') }}

@@ -213,7 +213,7 @@ function instructionsSheet() {
         [
             'Supervisor',
             'Solo en sectores',
-            'Escribe un código de la pestaña Supervisores. El miembro debe estar activo y tener el rol SUPERVISOR.',
+            'Escribe un código de la pestaña Supervisores. Debe ser un usuario activo con rol SUPERVISOR.',
             'MIE-0012',
         ],
         [

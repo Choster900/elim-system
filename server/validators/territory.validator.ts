@@ -57,7 +57,7 @@ export const createSectorSchema = Joi.object<CreateSectorDto>({
     polygon: requiredBaseFields.polygon,
     isActive: requiredBaseFields.isActive,
     zoneId: Joi.number().integer().positive().required(),
-    supervisorId: Joi.number().integer().positive().required(),
+    supervisorId: Joi.number().integer().positive().allow(null).default(null),
 })
 
 export const updateSectorSchema = Joi.object<UpdateSectorDto>({
@@ -67,5 +67,5 @@ export const updateSectorSchema = Joi.object<UpdateSectorDto>({
     polygon: baseFields.polygon,
     isActive: baseFields.isActive,
     zoneId: Joi.number().integer().positive(),
-    supervisorId: Joi.number().integer().positive(),
+    supervisorId: Joi.number().integer().positive().allow(null),
 }).min(1)

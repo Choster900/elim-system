@@ -24,10 +24,10 @@ type SectorBaseDto = Omit<TerritoryBaseDto, 'leaderName'>
 
 export interface CreateSectorDto extends SectorBaseDto {
     zoneId: number
-    supervisorId: number
+    supervisorId: number | null
 }
 
 export interface UpdateSectorDto extends Partial<SectorBaseDto> {
     zoneId?: number
-    supervisorId?: number
+    supervisorId?: number | null
 }

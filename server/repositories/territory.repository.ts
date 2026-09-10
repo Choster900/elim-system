@@ -178,7 +178,7 @@ export function findSectorById(id: number) {
     return prisma.territorySector.findUnique({ where: { id } })
 }
 
-export async function createSector(dto: CreateSectorDto, supervisorName: string) {
+export async function createSector(dto: CreateSectorDto, supervisorName: string | null) {
     const { polygon, supervisorId, zoneId, ...fields } = dto
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -198,7 +198,9 @@ export async function createSector(dto: CreateSectorDto, supervisorName: string)
                             ),
                             polygon: polygon as Prisma.InputJsonValue,
                             zone: { connect: { id: zoneId } },
-                            supervisor: { connect: { id: supervisorId } },
+                            ...(supervisorId
+                                ? { supervisor: { connect: { id: supervisorId } } }
+                                : {}),
                             supervisorName,
                         },
                     })
@@ -221,7 +223,7 @@ export async function updateSector(id: number, dto: UpdateSectorDto, supervisorN
         ...(polygon === undefined ? {} : { polygon: polygon as Prisma.InputJsonValue }),
     }
     if (supervisorId !== undefined) {
-        data.supervisor = { connect: { id: supervisorId } }
+        data.supervisor = supervisorId ? { connect: { id: supervisorId } } : { disconnect: true }
         data.supervisorName = supervisorName ?? null
     }
 
@@ -232,7 +234,7 @@ export async function updateSector(id: number, dto: UpdateSectorDto, supervisorN
                 data,
             })
 
-            if (supervisorId !== undefined) {
+            if (supervisorId) {
                 await transaction.meeting.updateMany({
                     where: { sectorId: id },
                     data: { supervisorId },
@@ -251,7 +253,7 @@ export function deleteSector(id: number) {
 }
 
 export async function findSectorSupervisors() {
-    return findActiveCommunityRoleMembers('SUPERVISOR')
+    return findActiveSystemRoleMembers('SUPERVISOR')
 }
 
 export async function findTerritoryLeaders() {
@@ -272,6 +274,32 @@ async function findActiveCommunityRoleMembers(roleCode: string) {
                         { OR: [{ startedAt: null }, { startedAt: { lte: today } }] },
                         { OR: [{ endedAt: null }, { endedAt: { gte: today } }] },
                     ],
+                },
+            },
+        },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    })
+
+    return members.map((member) => ({
+        id: member.id,
+        code: member.code,
+        fullName: memberFullName(member),
+        email: member.email,
+        phone: member.phone,
+    }))
+}
+
+async function findActiveSystemRoleMembers(roleCode: string) {
+    const members = await prisma.member.findMany({
+        where: {
+            status: 'ACTIVE',
+            user: {
+                isActive: true,
+                status: { in: ['ACTIVE', 'INVITED'] },
+                userRoles: {
+                    some: {
+                        role: { code: roleCode, status: 'ACTIVE' },
+                    },
                 },
             },
         },

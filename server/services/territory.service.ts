@@ -110,15 +110,17 @@ export async function getSectorById(id: number) {
 
 export async function createSector(dto: CreateSectorDto) {
     await getZoneById(dto.zoneId)
-    const supervisor = await requireSectorSupervisor(dto.supervisorId)
-    return repo.createSector(dto, supervisor.fullName)
+    const supervisor = dto.supervisorId ? await requireSectorSupervisor(dto.supervisorId) : null
+    return repo.createSector(dto, supervisor?.fullName ?? null)
 }
 
 export async function updateSector(id: number, dto: UpdateSectorDto) {
     await getSectorById(id)
     if (dto.zoneId !== undefined) await getZoneById(dto.zoneId)
     const supervisor =
-        dto.supervisorId === undefined ? undefined : await requireSectorSupervisor(dto.supervisorId)
+        dto.supervisorId === undefined || dto.supervisorId === null
+            ? null
+            : await requireSectorSupervisor(dto.supervisorId)
     return repo.updateSector(id, dto, supervisor?.fullName)
 }
 
