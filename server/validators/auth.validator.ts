@@ -3,6 +3,11 @@ import type { LoginRequestDto } from '../dto/auth/login-request.dto'
 import type { RefreshRequestDto } from '../dto/auth/refresh-request.dto'
 import type { ChangePasswordRequestDto } from '../dto/auth/change-password-request.dto'
 import type { ValidateInvitationRequestDto } from '../dto/auth/invitation-request.dto'
+import type {
+    RequestPasswordResetDto,
+    ResetPasswordDto,
+    ValidatePasswordResetDto,
+} from '../dto/auth/password-recovery-request.dto'
 
 export const loginSchema = Joi.object<LoginRequestDto>({
     email: Joi.string()
@@ -33,4 +38,21 @@ export const changePasswordSchema = Joi.object<ChangePasswordRequestDto>({
 
 export const validateInvitationSchema = Joi.object<ValidateInvitationRequestDto>({
     invitationToken: Joi.string().trim().min(32).max(200).required(),
+})
+
+export const requestPasswordResetSchema = Joi.object<RequestPasswordResetDto>({
+    email: Joi.string()
+        .email({ tlds: { allow: false } })
+        .trim()
+        .lowercase()
+        .required(),
+})
+
+export const validatePasswordResetSchema = Joi.object<ValidatePasswordResetDto>({
+    resetToken: Joi.string().trim().min(32).max(200).required(),
+})
+
+export const resetPasswordSchema = Joi.object<ResetPasswordDto>({
+    resetToken: Joi.string().trim().min(32).max(200).required(),
+    newPassword: strongPassword.required(),
 })

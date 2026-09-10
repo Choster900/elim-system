@@ -16,6 +16,7 @@ const polygonSchema = Joi.array().items(pointSchema).min(3).max(500)
 
 const baseFields = {
     name: Joi.string().trim().min(2).max(100),
+    leaderId: Joi.number().integer().positive().allow(null),
     leaderName: Joi.string().trim().max(100).allow('', null),
     description: Joi.string().trim().max(300).allow('', null),
     color: Joi.string()
@@ -27,6 +28,7 @@ const baseFields = {
 
 const requiredBaseFields = {
     name: baseFields.name.required(),
+    leaderId: baseFields.leaderId,
     leaderName: baseFields.leaderName.default(null),
     description: baseFields.description.default(null),
     color: baseFields.color.required(),
