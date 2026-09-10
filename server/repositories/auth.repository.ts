@@ -24,6 +24,13 @@ export function findUserByEmailWithAuthGraph(email: string) {
     })
 }
 
+export function findUserByEmailForPasswordReset(email: string) {
+    return prisma.user.findUnique({
+        where: { email },
+        include: { member: true },
+    })
+}
+
 export function findUserByIdWithAuthGraph(userId: number) {
     return prisma.user.findUnique({
         where: { id: userId },
@@ -95,4 +102,89 @@ export function deleteExpiredOrRevokedAuthSessions(userId: number) {
             OR: [{ revokedAt: { not: null } }, { expiresAt: { lt: new Date() } }],
         },
     })
+}
+
+interface CreatePasswordResetTokenInput {
+    userId: number
+    tokenHash: string
+    expiresAt: Date
+}
+
+export function createPasswordResetToken(input: CreatePasswordResetTokenInput) {
+    return prisma
+        .$transaction(async (transaction) => {
+            await transaction.passwordResetToken.updateMany({
+                where: {
+                    userId: input.userId,
+                    usedAt: null,
+                    revokedAt: null,
+                },
+                data: { revokedAt: new Date() },
+            })
+
+            return transaction.passwordResetToken.create({
+                data: {
+                    userId: input.userId,
+                    tokenHash: input.tokenHash,
+                    expiresAt: input.expiresAt,
+                },
+            })
+        })
+        .catch(mapPrismaError)
+}
+
+export function findPasswordResetTokenByHash(tokenHash: string) {
+    return prisma.passwordResetToken.findUnique({
+        where: { tokenHash },
+        include: {
+            user: {
+                include: { member: true },
+            },
+        },
+    })
+}
+
+export function revokePasswordResetTokenById(id: number) {
+    return prisma.passwordResetToken
+        .update({
+            where: { id },
+            data: { revokedAt: new Date() },
+        })
+        .catch(mapPrismaError)
+}
+
+export function consumePasswordResetToken(
+    resetTokenId: number,
+    userId: number,
+    passwordHash: string,
+) {
+    return prisma
+        .$transaction(async (transaction) => {
+            const consumed = await transaction.passwordResetToken.updateMany({
+                where: {
+                    id: resetTokenId,
+                    userId,
+                    usedAt: null,
+                    revokedAt: null,
+                    expiresAt: { gt: new Date() },
+                },
+                data: { usedAt: new Date() },
+            })
+            if (consumed.count !== 1) return false
+
+            await transaction.user.update({
+                where: { id: userId },
+                data: {
+                    passwordHash,
+                    mustChangePassword: false,
+                    status: 'ACTIVE',
+                },
+            })
+            await transaction.authSession.updateMany({
+                where: { userId, revokedAt: null },
+                data: { revokedAt: new Date() },
+            })
+            return true
+        })
+        .catch(mapPrismaError)
 }

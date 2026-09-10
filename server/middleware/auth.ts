@@ -9,6 +9,9 @@ const PUBLIC_API_PATHS = new Set([
     '/api/auth/refresh',
     '/api/auth/logout',
     '/api/auth/invitations/validate',
+    '/api/auth/password-recovery/request',
+    '/api/auth/password-recovery/reset',
+    '/api/auth/password-recovery/validate',
 ])
 
 const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/auth/me', '/api/auth/change-password'])

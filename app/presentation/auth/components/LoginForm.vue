@@ -276,6 +276,15 @@ async function onSubmit() {
             <span class="text-xs">Recordar mi correo en este dispositivo</span>
         </label>
 
+        <div v-if="!hasInvitation" class="text-right">
+            <NuxtLink
+                to="/recuperar-clave"
+                class="text-xs font-semibold text-primary hover:underline"
+            >
+                ¿Olvidaste tu contraseña?
+            </NuxtLink>
+        </div>
+
         <div
             v-if="formError"
             role="alert"

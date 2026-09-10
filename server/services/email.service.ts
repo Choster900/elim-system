@@ -10,6 +10,13 @@ interface AccessInvitationEmailInput {
     requirePasswordChange: boolean
 }
 
+interface PasswordResetEmailInput {
+    email: string
+    displayName: string
+    resetToken: string
+    expiresAt: Date
+}
+
 let transporter: ReturnType<typeof nodemailer.createTransport> | null = null
 
 function escapeHtml(value: string) {
@@ -51,14 +58,25 @@ function buildInvitationUrl(token: string) {
     return invitationUrl.toString()
 }
 
-export async function sendAccessInvitationEmail(input: AccessInvitationEmailInput) {
+function buildPasswordResetUrl(token: string) {
     const env = validateEnv()
-    const invitationUrl = buildInvitationUrl(input.invitationToken)
-    const expiration = new Intl.DateTimeFormat('es-SV', {
+    const resetUrl = new URL('/reiniciar-clave', env.APP_BASE_URL)
+    resetUrl.searchParams.set('token', token)
+    return resetUrl.toString()
+}
+
+function formatExpiration(expiresAt: Date) {
+    return new Intl.DateTimeFormat('es-SV', {
         dateStyle: 'long',
         timeStyle: 'short',
         timeZone: 'America/El_Salvador',
-    }).format(input.expiresAt)
+    }).format(expiresAt)
+}
+
+export async function sendAccessInvitationEmail(input: AccessInvitationEmailInput) {
+    const env = validateEnv()
+    const invitationUrl = buildInvitationUrl(input.invitationToken)
+    const expiration = formatExpiration(input.expiresAt)
     const safeName = escapeHtml(input.displayName)
     const safePassword = escapeHtml(input.temporaryPassword)
     const safeUrl = escapeHtml(invitationUrl)
@@ -97,6 +115,41 @@ export async function sendAccessInvitationEmail(input: AccessInvitationEmailInpu
                             ? 'Al ingresar se te pedirá crear una contraseña nueva.'
                             : 'El cambio de contraseña no fue marcado como obligatorio.'
                     }</p>
+                </div>
+            </div>
+        `,
+    })
+}
+
+export async function sendPasswordResetEmail(input: PasswordResetEmailInput) {
+    const env = validateEnv()
+    const resetUrl = buildPasswordResetUrl(input.resetToken)
+    const expiration = formatExpiration(input.expiresAt)
+    const safeName = escapeHtml(input.displayName)
+    const safeUrl = escapeHtml(resetUrl)
+
+    await getTransporter().sendMail({
+        from: env.MAIL_FROM,
+        to: input.email,
+        subject: 'Recupera tu contraseña de Elim',
+        text: [
+            `Hola ${input.displayName},`,
+            '',
+            'Recibimos una solicitud para reiniciar tu contraseña en Elim.',
+            `Enlace de recuperación: ${resetUrl}`,
+            `El enlace vence el ${expiration}.`,
+            '',
+            'Si no solicitaste este cambio, puedes ignorar este correo.',
+        ].join('\n'),
+        html: `
+            <div style="background:#171713;padding:32px;font-family:Arial,sans-serif;color:#f4efe4">
+                <div style="max-width:560px;margin:auto;background:#24231f;border:1px solid #49463d;padding:32px">
+                    <p style="margin:0;color:#d9b56d;font-size:12px;letter-spacing:2px;text-transform:uppercase">Elim · Seguridad de cuenta</p>
+                    <h1 style="margin:16px 0 8px;font-family:Georgia,serif;font-size:28px">Hola, ${safeName}</h1>
+                    <p style="color:#c9c2b4;line-height:1.6">Recibimos una solicitud para reiniciar tu contraseña. Usa este enlace seguro para crear una contraseña nueva.</p>
+                    <a href="${safeUrl}" style="display:inline-block;background:#d9b56d;color:#171713;padding:13px 20px;text-decoration:none;font-weight:bold">Reiniciar contraseña</a>
+                    <p style="margin:20px 0 0;color:#c9c2b4;font-size:13px">El enlace vence el <strong>${escapeHtml(expiration)}</strong> y solo puede utilizarse una vez.</p>
+                    <p style="margin:8px 0 0;color:#c9c2b4;font-size:13px">Si no solicitaste este cambio, ignora este correo.</p>
                 </div>
             </div>
         `,

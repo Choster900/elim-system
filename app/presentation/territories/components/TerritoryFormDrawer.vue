@@ -4,6 +4,7 @@ import type {
     LatLng,
     Polygon,
     TerritoryInput,
+    TerritoryLeaderOption,
     TerritorySupervisorOption,
 } from '~/presentation/territories/interfaces/territory.interface'
 
@@ -20,6 +21,9 @@ const props = defineProps<{
     accent: string
     levelLabel: string
     leaderLabel: string
+    leaderOptions: TerritoryLeaderOption[]
+    leadersLoading?: boolean
+    leadersError?: string
     supervisorOptions: TerritorySupervisorOption[]
     supervisorsLoading?: boolean
     supervisorsError?: string
@@ -27,7 +31,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-    (e: 'close' | 'retry-supervisors'): void
+    (e: 'close' | 'retry-leaders' | 'retry-supervisors'): void
     (e: 'save', payload: TerritoryInput): void
 }>()
 
@@ -36,6 +40,7 @@ const DEFAULT_CENTER: LatLng = [13.8, -89.4]
 const form = reactive({
     name: '',
     code: '',
+    leaderId: null as number | null,
     leaderName: '',
     description: '',
     color: '',
@@ -46,6 +51,7 @@ const tempPolygon = ref<LatLng[]>([])
 const nameError = ref(false)
 const supervisorError = ref(false)
 const polygonError = ref(false)
+const leaderTouched = ref(false)
 const isLocating = ref(false)
 const locationError = ref('')
 
@@ -73,11 +79,13 @@ function resetForm() {
     nameError.value = false
     supervisorError.value = false
     polygonError.value = false
+    leaderTouched.value = false
     isLocating.value = false
     locationError.value = ''
     if (props.mode === 'edit' && props.entity) {
         form.name = props.entity.name
         form.code = props.entity.code
+        form.leaderId = props.entity.leaderId ?? null
         form.leaderName = props.entity.leaderName
         form.description = props.entity.description
         form.color = props.entity.color
@@ -87,6 +95,7 @@ function resetForm() {
     } else {
         form.name = ''
         form.code = ''
+        form.leaderId = null
         form.leaderName = ''
         form.description = ''
         form.color = props.palette[0] ?? '#e9c176'
@@ -289,10 +298,17 @@ function save() {
         return
     }
     const polygon: Polygon = tempPolygon.value.map((p) => [...p] as LatLng)
+    const leaderId =
+        props.level === 'sector'
+            ? undefined
+            : leaderTouched.value || form.leaderId
+              ? form.leaderId
+              : undefined
     emit('save', {
         name: form.name.trim(),
         code: form.code,
         leaderName: form.leaderName.trim(),
+        leaderId,
         description: form.description.trim(),
         color: form.color,
         polygon,
@@ -317,6 +333,29 @@ const nameLabel = computed(
 )
 const labelClass =
     'mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
+
+const leaderSelectOptions = computed(() => {
+    if (!form.leaderId || props.leaderOptions.some((leader) => leader.id === form.leaderId)) {
+        return props.leaderOptions
+    }
+    return [
+        ...props.leaderOptions,
+        {
+            id: form.leaderId,
+            code: 'Actual',
+            fullName: form.leaderName,
+            email: null,
+            phone: null,
+        },
+    ]
+})
+
+function onLeaderUpdate(value: string | number | (string | number)[] | null) {
+    leaderTouched.value = true
+    const leaderId = typeof value === 'number' ? value : null
+    const leader = props.leaderOptions.find((option) => option.id === leaderId)
+    form.leaderName = leader?.fullName ?? ''
+}
 </script>
 
 <template>
@@ -391,18 +430,46 @@ const labelClass =
                         </div>
                     </div>
                     <div>
-                        <label
-                            class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            for="tf-leader"
-                            >{{ leaderLabel }}</label
-                        >
-                        <input
-                            id="tf-leader"
-                            v-model="form.leaderName"
-                            type="text"
-                            :placeholder="`Ej. ${leaderLabel === 'Pastor' ? 'Pr. Manuel Cardona' : 'Ana Beltrán'}`"
-                            :class="inputClass"
+                        <label :class="labelClass">{{ leaderLabel }}</label>
+                        <UiSearchSelect
+                            v-model="form.leaderId"
+                            :options="leaderSelectOptions"
+                            option-value="id"
+                            option-label="fullName"
+                            option-description="code"
+                            :placeholder="
+                                leadersLoading
+                                    ? 'Cargando líderes…'
+                                    : leadersError
+                                      ? 'Catálogo no disponible'
+                                      : `Selecciona ${leaderLabel === 'Pastor' ? 'un pastor' : 'un líder'}`
+                            "
+                            search-placeholder="Buscar por nombre o código…"
+                            empty-message="No hay líderes activos disponibles"
+                            :disabled="leadersLoading || !!leadersError"
+                            clearable
+                            :aria-label="leaderLabel"
+                            @update:model-value="onLeaderUpdate"
                         />
+                        <div
+                            v-if="leadersError"
+                            class="mt-2 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
+                            role="alert"
+                        >
+                            <AlertTriangle class="mt-0.5 size-4 shrink-0 text-destructive" />
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs leading-relaxed text-destructive">
+                                    {{ leadersError }}
+                                </p>
+                                <button
+                                    type="button"
+                                    class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                                    @click="emit('retry-leaders')"
+                                >
+                                    <RefreshCw class="size-3" /> Reintentar
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

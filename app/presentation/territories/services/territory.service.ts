@@ -6,6 +6,7 @@ import type {
     TerritoryEntity,
     TerritoryHierarchy,
     TerritoryInput,
+    TerritoryLeaderOption,
     TerritoryLevel,
     TerritorySector,
     TerritorySupervisorOption,
@@ -17,6 +18,7 @@ interface TerritoryApiEntity {
     name: string
     code: string
     description: string | null
+    leaderId: number | null
     leaderName: string | null
     color: string
     polygon: unknown
@@ -64,6 +66,7 @@ function mapEntity(entity: TerritoryApiEntity): TerritoryEntity {
         ...entity,
         id: String(entity.id),
         description: entity.description ?? '',
+        leaderId: entity.leaderId,
         leaderName: entity.leaderName ?? '',
         polygon: normalizePolygon(entity.polygon),
     }
@@ -127,6 +130,7 @@ function requestPayload(level: TerritoryLevel, input: TerritoryInput, parentId?:
                   // El código lo genera el servidor; enviarlo lo rechaza el validador.
                   code: undefined,
                   supervisorId: undefined,
+                  leaderId: input.leaderId,
                   leaderName: input.leaderName || null,
                   description: input.description || null,
               }
@@ -168,7 +172,13 @@ export async function updateTerritoryEntity(
                   polygon: fields.polygon,
                   isActive: fields.isActive,
               }
-            : { ...fields, code: undefined, supervisorId: undefined }
+            : {
+                  ...fields,
+                  code: undefined,
+                  supervisorId: undefined,
+                  leaderName:
+                      fields.leaderName === undefined ? undefined : fields.leaderName || null,
+              }
     if (level === 'zona' && parentId) payload.districtId = Number(parentId)
     if (level === 'sector' && parentId) payload.zoneId = Number(parentId)
 
@@ -188,6 +198,17 @@ export async function getTerritorySupervisors(
         { signal },
     )
     return responseData(response.data, 'No fue posible cargar el catálogo de supervisores')
+}
+
+export async function getTerritoryLeaders(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<TerritoryLeaderOption[]> {
+    const response = await apiClient.get<ApiResponse<TerritoryLeaderOption[]>>(
+        '/territories/leaders',
+        { signal },
+    )
+    return responseData(response.data, 'No fue posible cargar el catálogo de líderes')
 }
 
 export async function deleteTerritoryEntity(

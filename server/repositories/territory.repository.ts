@@ -11,6 +11,19 @@ import type {
 import { nextSequentialCode } from '../utils/code/entity-code.util'
 import { mapPrismaError } from '../utils/database/prisma-error.util'
 
+const memberNameSelect = {
+    firstName: true,
+    middleName: true,
+    lastName: true,
+    secondLastName: true,
+} satisfies Prisma.MemberSelect
+
+function memberFullName(member: Prisma.MemberGetPayload<{ select: typeof memberNameSelect }>) {
+    return [member.firstName, member.middleName, member.lastName, member.secondLastName]
+        .filter(Boolean)
+        .join(' ')
+}
+
 /// Colisión de único o conflicto de serialización: el correlativo se recalcula.
 function isRetryableCodeError(error: unknown) {
     if (!error || typeof error !== 'object' || !('code' in error)) return false
@@ -19,17 +32,18 @@ function isRetryableCodeError(error: unknown) {
 
 export async function findTerritoryHierarchy() {
     const [districts, zones, sectors] = await prisma.$transaction([
-        prisma.district.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] }),
-        prisma.zone.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] }),
+        prisma.district.findMany({
+            include: { leader: { select: memberNameSelect } },
+            orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+        }),
+        prisma.zone.findMany({
+            include: { leader: { select: memberNameSelect } },
+            orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+        }),
         prisma.territorySector.findMany({
             include: {
                 supervisor: {
-                    select: {
-                        firstName: true,
-                        middleName: true,
-                        lastName: true,
-                        secondLastName: true,
-                    },
+                    select: memberNameSelect,
                 },
             },
             orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
@@ -37,20 +51,17 @@ export async function findTerritoryHierarchy() {
     ])
 
     return {
-        districts,
-        zones,
+        districts: districts.map(({ leader, ...district }) => ({
+            ...district,
+            leaderName: leader ? memberFullName(leader) : district.leaderName,
+        })),
+        zones: zones.map(({ leader, ...zone }) => ({
+            ...zone,
+            leaderName: leader ? memberFullName(leader) : zone.leaderName,
+        })),
         sectors: sectors.map(({ supervisor, ...sector }) => ({
             ...sector,
-            supervisorName: supervisor
-                ? [
-                      supervisor.firstName,
-                      supervisor.middleName,
-                      supervisor.lastName,
-                      supervisor.secondLastName,
-                  ]
-                      .filter(Boolean)
-                      .join(' ')
-                : sector.supervisorName,
+            supervisorName: supervisor ? memberFullName(supervisor) : sector.supervisorName,
         })),
     }
 }
@@ -240,15 +251,23 @@ export function deleteSector(id: number) {
 }
 
 export async function findSectorSupervisors() {
+    return findActiveCommunityRoleMembers('SUPERVISOR')
+}
+
+export async function findTerritoryLeaders() {
+    return findActiveCommunityRoleMembers('LEADER')
+}
+
+async function findActiveCommunityRoleMembers(roleCode: string) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
 
-    const supervisors = await prisma.member.findMany({
+    const members = await prisma.member.findMany({
         where: {
             status: 'ACTIVE',
             communityRoles: {
                 some: {
-                    role: { code: 'SUPERVISOR', isActive: true },
+                    role: { code: roleCode, isActive: true },
                     AND: [
                         { OR: [{ startedAt: null }, { startedAt: { lte: today } }] },
                         { OR: [{ endedAt: null }, { endedAt: { gte: today } }] },
@@ -259,23 +278,21 @@ export async function findSectorSupervisors() {
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     })
 
-    return supervisors.map((supervisor) => ({
-        id: supervisor.id,
-        code: supervisor.code,
-        fullName: [
-            supervisor.firstName,
-            supervisor.middleName,
-            supervisor.lastName,
-            supervisor.secondLastName,
-        ]
-            .filter(Boolean)
-            .join(' '),
-        email: supervisor.email,
-        phone: supervisor.phone,
+    return members.map((member) => ({
+        id: member.id,
+        code: member.code,
+        fullName: memberFullName(member),
+        email: member.email,
+        phone: member.phone,
     }))
 }
 
 export async function findSectorSupervisorById(id: number) {
     const supervisors = await findSectorSupervisors()
     return supervisors.find((supervisor) => supervisor.id === id) ?? null
+}
+
+export async function findTerritoryLeaderById(id: number) {
+    const leaders = await findTerritoryLeaders()
+    return leaders.find((leader) => leader.id === id) ?? null
 }

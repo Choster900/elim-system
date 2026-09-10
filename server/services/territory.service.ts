@@ -32,6 +32,30 @@ async function requireSectorSupervisor(supervisorId: number) {
     })
 }
 
+async function requireTerritoryLeader(leaderId: number) {
+    const leader = await repo.findTerritoryLeaderById(leaderId)
+    if (leader) return leader
+
+    throw createError({
+        statusCode: 400,
+        message: 'El miembro seleccionado no pertenece al catálogo de líderes',
+        data: {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            fields: { leaderId: ['Selecciona un líder activo'] },
+        },
+    })
+}
+
+async function withTerritoryLeaderName<
+    TDto extends { leaderId?: number | null; leaderName?: string | null },
+>(dto: TDto): Promise<TDto> {
+    if (dto.leaderId === undefined) return dto
+    if (dto.leaderId === null) return { ...dto, leaderName: null }
+
+    const leader = await requireTerritoryLeader(dto.leaderId)
+    return { ...dto, leaderName: leader.fullName }
+}
+
 export function getTerritoryHierarchy() {
     return repo.findTerritoryHierarchy()
 }
@@ -42,13 +66,13 @@ export async function getDistrictById(id: number) {
     return district
 }
 
-export function createDistrict(dto: CreateDistrictDto) {
-    return repo.createDistrict(dto)
+export async function createDistrict(dto: CreateDistrictDto) {
+    return repo.createDistrict(await withTerritoryLeaderName(dto))
 }
 
 export async function updateDistrict(id: number, dto: UpdateDistrictDto) {
     await getDistrictById(id)
-    return repo.updateDistrict(id, dto)
+    return repo.updateDistrict(id, await withTerritoryLeaderName(dto))
 }
 
 export async function deleteDistrict(id: number) {
@@ -64,13 +88,13 @@ export async function getZoneById(id: number) {
 
 export async function createZone(dto: CreateZoneDto) {
     await getDistrictById(dto.districtId)
-    return repo.createZone(dto)
+    return repo.createZone(await withTerritoryLeaderName(dto))
 }
 
 export async function updateZone(id: number, dto: UpdateZoneDto) {
     await getZoneById(id)
     if (dto.districtId !== undefined) await getDistrictById(dto.districtId)
-    return repo.updateZone(id, dto)
+    return repo.updateZone(id, await withTerritoryLeaderName(dto))
 }
 
 export async function deleteZone(id: number) {
@@ -105,4 +129,8 @@ export async function deleteSector(id: number) {
 
 export function getSectorSupervisors() {
     return repo.findSectorSupervisors()
+}
+
+export function getTerritoryLeaders() {
+    return repo.findTerritoryLeaders()
 }

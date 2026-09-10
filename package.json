@@ -17,6 +17,7 @@
         "prisma:studio": "prisma studio",
         "preview": "nuxt preview",
         "test:smtp": "node scripts/test-smtp.mjs",
+        "reset:admin:local": "node scripts/reset-local-admin-password.mjs",
         "prisma:seed:minimal": "node prisma/seed/minimal.mjs",
         "db:status": "prisma migrate status",
         "db:deploy": "prisma migrate deploy",

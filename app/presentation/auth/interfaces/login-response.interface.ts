@@ -48,3 +48,18 @@ export interface ChangePasswordRequest {
     currentPassword: string
     newPassword: string
 }
+
+export interface PasswordResetDetails {
+    email: string
+    displayName: string
+    expiresAt: string
+}
+
+export interface RequestPasswordResetPayload {
+    email: string
+}
+
+export interface ResetPasswordPayload {
+    resetToken: string
+    newPassword: string
+}

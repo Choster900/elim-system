@@ -6,6 +6,9 @@ import type {
     ChangePasswordRequest,
     InvitationDetails,
     LoginResponse,
+    PasswordResetDetails,
+    RequestPasswordResetPayload,
+    ResetPasswordPayload,
 } from '../interfaces/login-response.interface'
 
 export async function loginRequest(
@@ -72,4 +75,46 @@ export async function changePasswordRequest(
         throw new Error(response.data.message || 'No fue posible actualizar la contraseña')
     }
     return response.data.data
+}
+
+export async function requestPasswordResetRequest(
+    client: AxiosInstance,
+    payload: RequestPasswordResetPayload,
+): Promise<void> {
+    const response = await client.post<ApiResponse<null>>(
+        '/auth/password-recovery/request',
+        payload,
+    )
+
+    if (!response.data.success) {
+        throw new Error(response.data.message || 'No fue posible enviar el enlace')
+    }
+}
+
+export async function validatePasswordResetRequest(
+    client: AxiosInstance,
+    resetToken: string,
+    signal?: AbortSignal,
+): Promise<PasswordResetDetails> {
+    const response = await client.post<ApiResponse<PasswordResetDetails>>(
+        '/auth/password-recovery/validate',
+        { resetToken },
+        { signal },
+    )
+
+    if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.message || 'El enlace de recuperación no es válido')
+    }
+    return response.data.data
+}
+
+export async function resetPasswordRequest(
+    client: AxiosInstance,
+    payload: ResetPasswordPayload,
+): Promise<void> {
+    const response = await client.post<ApiResponse<null>>('/auth/password-recovery/reset', payload)
+
+    if (!response.data.success) {
+        throw new Error(response.data.message || 'No fue posible reiniciar la contraseña')
+    }
 }

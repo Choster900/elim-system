@@ -22,6 +22,7 @@ const territories = {
     all: ['territories'] as const,
     hierarchy: ['territories', 'hierarchy'] as const,
     sectorOptions: ['territories', 'sector-options'] as const,
+    leaders: ['territories', 'leaders'] as const,
     supervisors: ['territories', 'supervisors'] as const,
 }
 
@@ -59,6 +60,7 @@ const users = {
 const auth = {
     all: ['auth'] as const,
     invitation: (token: string) => ['auth', 'invitation', token] as const,
+    passwordReset: (token: string) => ['auth', 'password-reset', token] as const,
 }
 
 export const queryKeys = {

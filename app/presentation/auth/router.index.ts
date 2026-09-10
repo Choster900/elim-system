@@ -17,6 +17,22 @@ export default [
         },
     },
     {
+        name: 'forgot-password',
+        path: '/recuperar-clave',
+        component: () => import('~/presentation/auth/view/ForgotPasswordView.vue'),
+        meta: {
+            layout: 'auth',
+        },
+    },
+    {
+        name: 'reset-password',
+        path: '/reiniciar-clave',
+        component: () => import('~/presentation/auth/view/ResetPasswordView.vue'),
+        meta: {
+            layout: 'auth',
+        },
+    },
+    {
         name: 'access-denied',
         path: '/acceso-denegado',
         component: () => import('~/presentation/auth/view/AccessDeniedView.vue'),

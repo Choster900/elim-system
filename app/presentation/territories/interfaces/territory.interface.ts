@@ -7,6 +7,7 @@ export interface TerritoryEntity {
     name: string
     code: string
     description: string
+    leaderId: number | null
     leaderName: string
     color: string
     polygon: Polygon
@@ -36,6 +37,7 @@ export interface TerritoryHierarchy {
 export interface TerritoryInput {
     name: string
     code: string
+    leaderId?: number | null
     leaderName: string
     description: string
     color: string
@@ -44,10 +46,13 @@ export interface TerritoryInput {
     supervisorId: number | null
 }
 
-export interface TerritorySupervisorOption {
+export interface TerritoryMemberOption {
     id: number
     code: string
     fullName: string
     email: string | null
     phone: string | null
 }
+
+export type TerritoryLeaderOption = TerritoryMemberOption
+export type TerritorySupervisorOption = TerritoryMemberOption

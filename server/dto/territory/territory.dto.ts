@@ -3,6 +3,7 @@ export type TerritoryPolygonDto = TerritoryPointDto[]
 
 export interface TerritoryBaseDto {
     name: string
+    leaderId?: number | null
     leaderName: string | null
     description: string | null
     color: string

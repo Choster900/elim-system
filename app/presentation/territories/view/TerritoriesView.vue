@@ -33,6 +33,7 @@ import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import AssignMeetingDrawer from '~/presentation/territories/components/AssignMeetingDrawer.vue'
 import TerritoryFormDrawer from '~/presentation/territories/components/TerritoryFormDrawer.vue'
 import { useTerritoryHierarchyQuery } from '~/presentation/territories/composables/useTerritoryHierarchyQuery'
+import { useTerritoryLeadersQuery } from '~/presentation/territories/composables/useTerritoryLeadersQuery'
 import { useTerritorySupervisorsQuery } from '~/presentation/territories/composables/useTerritorySupervisorsQuery'
 import {
     useCreateTerritoryMutation,
@@ -95,6 +96,7 @@ const canManage = computed(() => authStore.hasPermission('territories.manage'))
 const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
 const canManageOfferings = computed(() => authStore.hasPermission('finance.manage'))
 const hierarchyQuery = useTerritoryHierarchyQuery()
+const leadersQuery = useTerritoryLeadersQuery()
 const supervisorsQuery = useTerritorySupervisorsQuery()
 const meetingsQuery = useMeetingsQuery()
 const createTerritoryMutation = useCreateTerritoryMutation()
@@ -107,6 +109,7 @@ const districts = computed(() => hierarchyQuery.data.value?.districts ?? [])
 const zones = computed(() => hierarchyQuery.data.value?.zones ?? [])
 const sectors = computed(() => hierarchyQuery.data.value?.sectors ?? [])
 const meetings = computed(() => meetingsQuery.data.value ?? [])
+const leaders = computed(() => leadersQuery.data.value ?? [])
 const supervisors = computed(() => supervisorsQuery.data.value ?? [])
 const catalogLoading = computed(
     () => hierarchyQuery.isPending.value || meetingsQuery.isPending.value,
@@ -137,6 +140,14 @@ const supervisorCatalogError = computed(() =>
         ? requestErrorMessage(
               supervisorsQuery.error.value,
               'No fue posible cargar el catálogo de supervisores.',
+          )
+        : '',
+)
+const leaderCatalogError = computed(() =>
+    leadersQuery.error.value
+        ? requestErrorMessage(
+              leadersQuery.error.value,
+              'No fue posible cargar el catálogo de líderes.',
           )
         : '',
 )
@@ -217,6 +228,7 @@ if (import.meta.server) {
         await Promise.allSettled([
             hierarchyQuery.suspense(),
             meetingsQuery.suspense(),
+            leadersQuery.suspense(),
             supervisorsQuery.suspense(),
         ])
         const hierarchy = hierarchyQuery.data.value
@@ -227,6 +239,13 @@ if (import.meta.server) {
 if (import.meta.client) {
     watch(
         catalogError,
+        (errorMessage) => {
+            if (errorMessage) toast.error(errorMessage)
+        },
+        { immediate: true },
+    )
+    watch(
+        leaderCatalogError,
         (errorMessage) => {
             if (errorMessage) toast.error(errorMessage)
         },
@@ -244,6 +263,7 @@ if (import.meta.client) {
 function retryCatalog() {
     hierarchyQuery.refetch()
     meetingsQuery.refetch()
+    leadersQuery.refetch()
     supervisorsQuery.refetch()
 }
 
@@ -995,6 +1015,7 @@ function toEntityInput(e: District | Zone | TerritorySector): TerritoryInput {
     return {
         name: e.name,
         code: e.code,
+        leaderId: e.leaderId,
         leaderName: e.leaderName,
         description: e.description,
         color: e.color,
@@ -2016,12 +2037,16 @@ onBeforeUnmount(() => {
             :accent="LEVEL_ACCENT[formLevel]"
             :level-label="formLevel"
             :leader-label="formLevel === 'distrito' ? 'Pastor' : 'Líder'"
+            :leader-options="leaders"
+            :leaders-loading="leadersQuery.isPending.value"
+            :leaders-error="leaderCatalogError"
             :supervisor-options="supervisors"
             :supervisors-loading="supervisorsQuery.isPending.value"
             :supervisors-error="supervisorCatalogError"
             :saving="hierarchySaving"
             @close="formOpen = false"
             @save="onFormSave"
+            @retry-leaders="leadersQuery.refetch()"
             @retry-supervisors="supervisorsQuery.refetch()"
         />
 
