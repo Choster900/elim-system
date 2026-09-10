@@ -81,6 +81,20 @@ enum OccurrenceStatus {
   @@map("eoc_estado_ocurrencia")
 }
 
+/// Estado de recepción y revisión del sobre de ofrenda entregado en la iglesia.
+enum OfferingReceptionStatus {
+  /// El sobre fue recibido en iglesia y queda pendiente de revisión final.
+  RECEIVED    @map("recibida")
+  /// Tesorería revisó el sobre y coincide con lo registrado en el sistema.
+  VERIFIED    @map("verificada")
+  /// Tesorería revisó el sobre y encontró diferencia contra lo registrado.
+  DISCREPANCY @map("con_disparidad")
+  /// Registro anulado por error operativo.
+  CANCELLED   @map("anulada")
+
+  @@map("ero_estado_recepcion_ofrenda")
+}
+
 model Member {
   id                    Int                   @id(map: "pk_mie_miembro") @default(autoincrement()) @map("mie_id")
   code                  String                @unique(map: "uk_mie_codigo") @map("mie_codigo") @db.VarChar(100)
@@ -196,27 +210,30 @@ model MemberMinistry {
 }
 
 model User {
-  id                     Int                 @id(map: "pk_usu_usuario") @default(autoincrement()) @map("usu_id")
-  memberId               Int?                @unique(map: "uk_usu_id_mie") @map("usu_id_mie")
-  email                  String              @unique(map: "uk_usu_correo") @map("usu_correo") @db.VarChar(100)
-  username               String?             @unique(map: "uk_usu_nombre_usuario") @map("usu_nombre_usuario") @db.VarChar(100)
-  passwordHash           String              @map("usu_resumen_clave") @db.VarChar(100)
-  isActive               Boolean             @default(true) @map("usu_activo")
-  status                 SystemUserStatus    @default(ACTIVE) @map("usu_estado")
-  twoFactorEnabled       Boolean             @default(false) @map("usu_doble_factor")
-  mustChangePassword     Boolean             @default(true) @map("usu_cambiar_clave")
-  lastAccessAt           DateTime?           @map("usu_fecha_ultimo_acceso")
-  createdAt              DateTime            @default(now()) @map("usu_fecha_creacion")
-  updatedAt              DateTime            @updatedAt @map("usu_fecha_modificacion")
-  member                 Member?             @relation(fields: [memberId], references: [id], onDelete: SetNull, map: "fk_usu_id_mie")
+  id                     Int                  @id(map: "pk_usu_usuario") @default(autoincrement()) @map("usu_id")
+  memberId               Int?                 @unique(map: "uk_usu_id_mie") @map("usu_id_mie")
+  email                  String               @unique(map: "uk_usu_correo") @map("usu_correo") @db.VarChar(100)
+  username               String?              @unique(map: "uk_usu_nombre_usuario") @map("usu_nombre_usuario") @db.VarChar(100)
+  passwordHash           String               @map("usu_resumen_clave") @db.VarChar(100)
+  isActive               Boolean              @default(true) @map("usu_activo")
+  status                 SystemUserStatus     @default(ACTIVE) @map("usu_estado")
+  twoFactorEnabled       Boolean              @default(false) @map("usu_doble_factor")
+  mustChangePassword     Boolean              @default(true) @map("usu_cambiar_clave")
+  lastAccessAt           DateTime?            @map("usu_fecha_ultimo_acceso")
+  createdAt              DateTime             @default(now()) @map("usu_fecha_creacion")
+  updatedAt              DateTime             @updatedAt @map("usu_fecha_modificacion")
+  member                 Member?              @relation(fields: [memberId], references: [id], onDelete: SetNull, map: "fk_usu_id_mie")
   authSessions           AuthSession[]
-  userRoles              UserRole[]          @relation("UserRoleUser")
-  assignedUserRoles      UserRole[]          @relation("UserRoleAssigner")
-  grantedRolePermissions RolePermission[]    @relation("RolePermissionGranter")
-  recordedOccurrences    MeetingOccurrence[] @relation("OccurrenceRecorder")
-  editedOccurrences      MeetingOccurrence[] @relation("OccurrenceEditor")
-  receivedInvitations    UserInvitation[]    @relation("UserInvitationRecipient")
-  createdInvitations     UserInvitation[]    @relation("UserInvitationCreator")
+  userRoles              UserRole[]           @relation("UserRoleUser")
+  assignedUserRoles      UserRole[]           @relation("UserRoleAssigner")
+  grantedRolePermissions RolePermission[]     @relation("RolePermissionGranter")
+  recordedOccurrences    MeetingOccurrence[]  @relation("OccurrenceRecorder")
+  editedOccurrences      MeetingOccurrence[]  @relation("OccurrenceEditor")
+  receivedOfferings      OfferingReception[]  @relation("OfferingReceptionReceiver")
+  reviewedOfferings      OfferingReception[]  @relation("OfferingReceptionReviewer")
+  receivedInvitations    UserInvitation[]     @relation("UserInvitationRecipient")
+  createdInvitations     UserInvitation[]     @relation("UserInvitationCreator")
+  passwordResetTokens    PasswordResetToken[]
 
   @@index([isActive], map: "ix_usu_activo")
   @@index([status], map: "ix_usu_estado")
@@ -251,6 +268,31 @@ model UserInvitation {
   @@index([expiresAt], map: "ix_inv_fecha_expiracion")
   @@index([createdById], map: "ix_inv_usuario_creador")
   @@map("inv_invitacion_usuario")
+}
+
+/// Recuperación de contraseña de un solo uso solicitada por un usuario del sistema.
+model PasswordResetToken {
+  /// Identificador interno de la recuperación de contraseña.
+  id        Int       @id(map: "pk_rcu_recuperacion_clave_usuario") @default(autoincrement()) @map("rcu_id")
+  /// Usuario que solicitó recuperar su contraseña.
+  userId    Int       @map("rcu_id_usu")
+  /// Resumen SHA-256 del token; el token original solo se entrega por correo.
+  tokenHash String    @unique(map: "uk_rcu_resumen_token") @map("rcu_resumen_token") @db.VarChar(100)
+  /// Momento límite para utilizar el enlace de recuperación.
+  expiresAt DateTime  @map("rcu_fecha_expiracion")
+  /// Momento en que el token fue consumido correctamente.
+  usedAt    DateTime? @map("rcu_fecha_uso")
+  /// Momento en que una recuperación anterior fue invalidada.
+  revokedAt DateTime? @map("rcu_fecha_revocacion")
+  /// Momento en que se generó la recuperación.
+  createdAt DateTime  @default(now()) @map("rcu_fecha_creacion")
+  /// Momento de la última modificación de la recuperación.
+  updatedAt DateTime  @updatedAt @map("rcu_fecha_modificacion")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_rcu_id_usu")
+
+  @@index([userId], map: "ix_rcu_usuario")
+  @@index([expiresAt], map: "ix_rcu_fecha_expiracion")
+  @@map("rcu_recuperacion_clave_usuario")
 }
 
 model AuthSession {
@@ -494,15 +536,16 @@ model MeetingCoSupervisor {
 }
 
 model OfferingCategory {
-  id          Int              @id(map: "pk_cof_categoria_ofrenda") @default(autoincrement()) @map("cof_id")
-  code        String           @unique(map: "uk_cof_codigo") @map("cof_codigo") @db.VarChar(100)
-  name        String           @unique(map: "uk_cof_nombre") @map("cof_nombre") @db.VarChar(100)
-  description String?          @map("cof_descripcion") @db.VarChar(300)
-  isActive    Boolean          @default(true) @map("cof_activo")
-  sortOrder   Int              @default(0) @map("cof_orden")
-  createdAt   DateTime         @default(now()) @map("cof_fecha_creacion")
-  updatedAt   DateTime         @updatedAt @map("cof_fecha_modificacion")
-  details     OfferingDetail[]
+  id              Int                       @id(map: "pk_cof_categoria_ofrenda") @default(autoincrement()) @map("cof_id")
+  code            String                    @unique(map: "uk_cof_codigo") @map("cof_codigo") @db.VarChar(100)
+  name            String                    @unique(map: "uk_cof_nombre") @map("cof_nombre") @db.VarChar(100)
+  description     String?                   @map("cof_descripcion") @db.VarChar(300)
+  isActive        Boolean                   @default(true) @map("cof_activo")
+  sortOrder       Int                       @default(0) @map("cof_orden")
+  createdAt       DateTime                  @default(now()) @map("cof_fecha_creacion")
+  updatedAt       DateTime                  @updatedAt @map("cof_fecha_modificacion")
+  details         OfferingDetail[]
+  receivedDetails OfferingReceptionDetail[]
 
   @@index([isActive], map: "ix_cof_activo")
   @@map("cof_categoria_ofrenda")
@@ -539,6 +582,7 @@ model MeetingOccurrence {
   updatedBy         User?              @relation("OccurrenceEditor", fields: [updatedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_modificacion")
   details           OfferingDetail[]
   attendanceDetails AttendanceDetail[]
+  offeringReception OfferingReception?
 
   @@unique([meetingId, date], map: "uk_reo_reunion_fecha")
   @@index([status, date], map: "ix_reo_estado_fecha")
@@ -597,4 +641,63 @@ model OfferingDetail {
   @@index([occurrenceId], map: "ix_dof_ocurrencia")
   @@index([categoryId], map: "ix_dof_categoria")
   @@map("dof_detalle_ofrenda")
+}
+
+/// Recepción física en iglesia del sobre de ofrenda de una ocurrencia ya registrada.
+model OfferingReception {
+  id                   Int                       @id(map: "pk_rof_recepcion_ofrenda") @default(autoincrement()) @map("rof_id")
+  /// Ocurrencia capturada por el líder y corregible por supervisión.
+  occurrenceId         Int                       @unique(map: "uk_rof_ocurrencia") @map("rof_id_reo")
+  /// Código o folio escrito en el sobre físico, si se usa uno.
+  envelopeCode         String?                   @unique(map: "uk_rof_codigo_sobre") @map("rof_codigo_sobre") @db.VarChar(100)
+  /// Asistencia registrada en el sistema al momento de recibir o revisar el sobre.
+  systemAttendance     Int?                      @map("rof_asistencia_sistema")
+  /// Monto registrado en el sistema al momento de recibir o revisar el sobre.
+  systemAmount         Decimal?                  @map("rof_monto_sistema") @db.Decimal(19, 2)
+  /// Asistencia escrita en el sobre entregado en iglesia.
+  receivedAttendance   Int?                      @map("rof_asistencia_recibida")
+  /// Monto contado o declarado desde el sobre entregado en iglesia.
+  receivedAmount       Decimal                   @map("rof_monto_recibido") @db.Decimal(19, 2)
+  /// Diferencia entre asistencia recibida y asistencia registrada; nula si no se comparó.
+  attendanceDifference Int?                      @map("rof_diferencia_asistencia")
+  /// Diferencia entre monto recibido y monto registrado; nula si no se comparó.
+  amountDifference     Decimal?                  @map("rof_diferencia_monto") @db.Decimal(19, 2)
+  currency             String                    @default("USD") @map("rof_moneda") @db.VarChar(10)
+  status               OfferingReceptionStatus   @default(RECEIVED) @map("rof_estado")
+  /// Usuario que recibió el sobre en ventanilla o iglesia.
+  receivedById         Int?                      @map("rof_id_usu_receptor")
+  receivedAt           DateTime                  @default(now()) @map("rof_fecha_recepcion")
+  /// Usuario de tesorería que revisó la coincidencia contra el sistema.
+  reviewedById         Int?                      @map("rof_id_usu_revisor")
+  reviewedAt           DateTime?                 @map("rof_fecha_revision")
+  notes                String?                   @map("rof_nota") @db.VarChar(600)
+  createdAt            DateTime                  @default(now()) @map("rof_fecha_creacion")
+  updatedAt            DateTime                  @updatedAt @map("rof_fecha_modificacion")
+  occurrence           MeetingOccurrence         @relation(fields: [occurrenceId], references: [id], onDelete: Restrict, map: "fk_rof_id_reo")
+  receivedBy           User?                     @relation("OfferingReceptionReceiver", fields: [receivedById], references: [id], onDelete: SetNull, map: "fk_rof_id_usu_receptor")
+  reviewedBy           User?                     @relation("OfferingReceptionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, map: "fk_rof_id_usu_revisor")
+  details              OfferingReceptionDetail[]
+
+  @@index([status, receivedAt], map: "ix_rof_estado_recepcion")
+  @@index([receivedById], map: "ix_rof_usuario_receptor")
+  @@index([reviewedById], map: "ix_rof_usuario_revisor")
+  @@map("rof_recepcion_ofrenda")
+}
+
+/// Desglose opcional del monto recibido físicamente por categoría de ofrenda.
+model OfferingReceptionDetail {
+  id          Int               @id(map: "pk_dro_detalle_recepcion_ofrenda") @default(autoincrement()) @map("dro_id")
+  receptionId Int               @map("dro_id_rof")
+  categoryId  Int               @map("dro_id_cof")
+  amount      Decimal           @map("dro_monto") @db.Decimal(19, 2)
+  notes       String?           @map("dro_nota") @db.VarChar(300)
+  createdAt   DateTime          @default(now()) @map("dro_fecha_creacion")
+  updatedAt   DateTime          @updatedAt @map("dro_fecha_modificacion")
+  reception   OfferingReception @relation(fields: [receptionId], references: [id], onDelete: Cascade, map: "fk_dro_id_rof")
+  category    OfferingCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict, map: "fk_dro_id_cof")
+
+  @@unique([receptionId, categoryId], map: "uk_dro_recepcion_categoria")
+  @@index([receptionId], map: "ix_dro_recepcion")
+  @@index([categoryId], map: "ix_dro_categoria")
+  @@map("dro_detalle_recepcion_ofrenda")
 }
