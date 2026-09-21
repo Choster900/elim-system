@@ -17,6 +17,12 @@ interface PasswordResetEmailInput {
     expiresAt: Date
 }
 
+interface MfaCodeEmailInput {
+    email: string
+    code: string
+    purpose: 'LOGIN' | 'ENABLE_EMAIL' | 'DISABLE_EMAIL' | 'DISABLE_TOTP'
+}
+
 let transporter: ReturnType<typeof nodemailer.createTransport> | null = null
 
 function escapeHtml(value: string) {
@@ -150,6 +156,37 @@ export async function sendPasswordResetEmail(input: PasswordResetEmailInput) {
                     <a href="${safeUrl}" style="display:inline-block;background:#d9b56d;color:#171713;padding:13px 20px;text-decoration:none;font-weight:bold">Reiniciar contraseña</a>
                     <p style="margin:20px 0 0;color:#c9c2b4;font-size:13px">El enlace vence el <strong>${escapeHtml(expiration)}</strong> y solo puede utilizarse una vez.</p>
                     <p style="margin:8px 0 0;color:#c9c2b4;font-size:13px">Si no solicitaste este cambio, ignora este correo.</p>
+                </div>
+            </div>
+        `,
+    })
+}
+
+export async function sendMfaCodeEmail(input: MfaCodeEmailInput) {
+    const env = validateEnv()
+    const action = {
+        LOGIN: 'iniciar sesión',
+        ENABLE_EMAIL: 'activar la verificación por correo',
+        DISABLE_EMAIL: 'desactivar la verificación por correo',
+        DISABLE_TOTP: 'desactivar la verificación TOTP',
+    }[input.purpose]
+    await getTransporter().sendMail({
+        from: env.MAIL_FROM,
+        to: input.email,
+        subject: `Código de seguridad de Elim para ${action}`,
+        text: [
+            `Tu código para ${action} es: ${input.code}`,
+            'Vence en 5 minutos y solo puede usarse una vez.',
+            'Si no solicitaste este código, ignora el mensaje.',
+        ].join('\n'),
+        html: `
+            <div style="background:#171713;padding:32px;font-family:Arial,sans-serif;color:#f4efe4">
+                <div style="max-width:560px;margin:auto;background:#24231f;border:1px solid #49463d;padding:32px">
+                    <p style="color:#d9b56d;font-size:12px;letter-spacing:2px;text-transform:uppercase">Elim · Seguridad de cuenta</p>
+                    <h1 style="font-family:Georgia,serif;font-size:26px">Código de verificación</h1>
+                    <p>Usa este código para ${escapeHtml(action)}:</p>
+                    <p style="font-size:30px;letter-spacing:5px;font-weight:bold">${escapeHtml(input.code)}</p>
+                    <p>Vence en 5 minutos y solo puede usarse una vez. Si no lo solicitaste, ignora este mensaje.</p>
                 </div>
             </div>
         `,

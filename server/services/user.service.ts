@@ -137,7 +137,6 @@ export async function createUser(dto: CreateUserRequestDto, createdById: number)
         passwordHash: await hashPassword(temporaryPassword),
         roleIds,
         requirePasswordChange: dto.requirePasswordChange,
-        twoFactorEnabled: dto.twoFactorEnabled,
         invitationTokenHash: hashInvitationToken(invitationToken),
         invitationExpiresAt: expiresAt,
         createdById,
@@ -169,7 +168,6 @@ export async function updateUser(userId: number, dto: UpdateUserRequestDto, assi
         roleIds,
         status: dto.status,
         requirePasswordChange: dto.requirePasswordChange,
-        twoFactorEnabled: dto.twoFactorEnabled,
         assignedById,
     })
     if (!user) {

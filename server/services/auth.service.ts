@@ -31,6 +31,7 @@ import {
 } from '../utils/auth/password-reset-token.util'
 import { validateEnv } from '../../config/env'
 import { sendPasswordResetEmail } from './email.service'
+import { beginLoginChallenge, verifyLoginChallenge } from './mfa.service'
 
 interface AuthTokensResult extends AuthResponseDto {
     refreshToken: string
@@ -125,6 +126,7 @@ function mapUserAuth(user: NonNullable<Awaited<ReturnType<typeof findUserByEmail
             email: user.email,
             username: user.username,
             mustChangePassword: user.mustChangePassword,
+            mfaMethod: user.mfaMethod,
             roles,
             permissions: [...permissionMap.values()],
         } as AuthUserDto,
@@ -155,6 +157,7 @@ async function issueTokensAndSession(
         roles: roleCodes,
         permissions: permissionCodes,
         mustChangePassword: user.mustChangePassword,
+        mfaVersion: user.mfaVersion,
     })
 
     const sessionTokenId = randomUUID()
@@ -238,10 +241,18 @@ export async function login(dto: { email: string; password: string; invitationTo
         }
         user = await findUserByEmailWithAuthGraph(dto.email)
         if (!user) throw invalidCredentialsError()
-    } else {
-        await recordUserAccess(user.id)
     }
 
+    if (user.mfaMethod !== 'NONE') {
+        return beginLoginChallenge(user.id, user.mfaMethod)
+    }
+    await recordUserAccess(user.id)
+
+    return issueTokensAndSession(user)
+}
+
+export async function completeMfaLogin(token: string, code: string) {
+    const user = await verifyLoginChallenge(token, code)
     return issueTokensAndSession(user)
 }
 
