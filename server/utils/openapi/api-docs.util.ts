@@ -1871,7 +1871,6 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             type: 'boolean',
                             description: 'Forces /cambiar-clave on first login.',
                         },
-                        twoFactorEnabled: { type: 'boolean', default: false },
                         invitationExpiresInHours: {
                             type: 'integer',
                             minimum: 1,
@@ -1881,14 +1880,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
                 UpdateUserDto: {
                     type: 'object',
-                    required: [
-                        'username',
-                        'email',
-                        'roleCodes',
-                        'status',
-                        'requirePasswordChange',
-                        'twoFactorEnabled',
-                    ],
+                    required: ['username', 'email', 'roleCodes', 'status', 'requirePasswordChange'],
                     properties: {
                         username: {
                             type: 'string',
@@ -1906,7 +1898,6 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         },
                         status: { $ref: '#/components/schemas/UserStatus' },
                         requirePasswordChange: { type: 'boolean' },
-                        twoFactorEnabled: { type: 'boolean' },
                     },
                 },
                 UpdateUserStatusDto: {
