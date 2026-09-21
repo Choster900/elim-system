@@ -63,6 +63,11 @@ const auth = {
     passwordReset: (token: string) => ['auth', 'password-reset', token] as const,
 }
 
+const settings = {
+    all: ['settings'] as const,
+    mfa: ['settings', 'mfa'] as const,
+}
+
 export const queryKeys = {
     app: ['app'] as const,
     system: {
@@ -78,4 +83,5 @@ export const queryKeys = {
     dashboard,
     users,
     auth,
+    settings,
 }
