@@ -38,6 +38,10 @@ const STATUS_CODE_MAP: Record<number, { code: ApiErrorCode; message: string }> =
         code: ApiErrorCode.RESOURCE_ALREADY_EXISTS,
         message: 'No se pudo completar la operación',
     },
+    429: {
+        code: ApiErrorCode.RATE_LIMITED,
+        message: 'Demasiadas solicitudes',
+    },
     502: {
         code: ApiErrorCode.SERVICE_UNAVAILABLE,
         message: 'El servicio de correo no está disponible',

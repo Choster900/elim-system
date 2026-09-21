@@ -12,6 +12,7 @@ interface SignAccessTokenInput {
     roles: string[]
     permissions: string[]
     mustChangePassword: boolean
+    mfaVersion: number
 }
 
 interface SignRefreshTokenInput {
@@ -50,6 +51,7 @@ export function signAccessToken(input: SignAccessTokenInput) {
         roles: input.roles,
         permissions: input.permissions,
         mustChangePassword: input.mustChangePassword,
+        mfaVersion: input.mfaVersion,
         type: 'access',
     }
 
@@ -99,6 +101,7 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
         return {
             ...(decoded as AccessTokenPayload),
             mustChangePassword: decoded.mustChangePassword === true,
+            mfaVersion: typeof decoded.mfaVersion === 'number' ? decoded.mfaVersion : 0,
         }
     } catch (error) {
         if ((error as { statusCode?: number })?.statusCode === 401) {
