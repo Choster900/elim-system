@@ -18,7 +18,7 @@ export interface UserRoleOption {
     description: string
 }
 
-export interface SystemUser {
+export interface SystemUser extends Record<string, unknown> {
     id: number
     memberId: number | null
     memberCode: string
