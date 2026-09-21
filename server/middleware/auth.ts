@@ -1,11 +1,13 @@
 import { extractAccessToken } from '../utils/auth/token-extractor.util'
 import { verifyAccessToken } from '../utils/auth/jwt.util'
+import { findMfaVersion } from '../repositories/mfa.repository'
 
 const PUBLIC_API_PATHS = new Set([
     '/api/healthcheck',
     '/api/openapi.json',
     '/api/docs',
     '/api/auth/login',
+    '/api/auth/mfa/verify',
     '/api/auth/refresh',
     '/api/auth/logout',
     '/api/auth/invitations/validate',
@@ -24,7 +26,7 @@ function isPublicApiPath(path: string) {
     return path.startsWith('/api/docs/')
 }
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
     if (!event.path.startsWith('/api')) {
         return
     }
@@ -43,6 +45,16 @@ export default defineEventHandler((event) => {
 
     if (!Number.isSafeInteger(userId) || userId <= 0) {
         throw createError({ statusCode: 401, message: 'Token inválido' })
+    }
+
+    const current = await findMfaVersion(userId)
+    if (
+        !current ||
+        !current.isActive ||
+        current.status === 'BLOCKED' ||
+        current.mfaVersion !== (payload.mfaVersion ?? 0)
+    ) {
+        throw createError({ statusCode: 401, message: 'La sesión ya no está vigente' })
     }
 
     event.context.auth = {
