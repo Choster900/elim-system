@@ -6,7 +6,6 @@ export interface CreateUserRequestDto {
     email: string
     roleCodes: string[]
     requirePasswordChange: boolean
-    twoFactorEnabled: boolean
     invitationExpiresInHours: number
 }
 
@@ -16,7 +15,6 @@ export interface UpdateUserRequestDto {
     roleCodes: string[]
     status: UserStatusDto
     requirePasswordChange: boolean
-    twoFactorEnabled: boolean
 }
 
 export interface UpdateUserStatusRequestDto {

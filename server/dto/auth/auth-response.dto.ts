@@ -20,6 +20,7 @@ export interface AuthUserDto {
     email: string
     username: string | null
     mustChangePassword: boolean
+    mfaMethod: 'NONE' | 'TOTP' | 'EMAIL'
     roles: AuthRoleDto[]
     permissions: AuthPermissionDto[]
     tokenExpiresAt?: number | null
