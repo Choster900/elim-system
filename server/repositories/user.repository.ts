@@ -20,7 +20,6 @@ interface CreateUserRecordInput {
     passwordHash: string
     roleIds: number[]
     requirePasswordChange: boolean
-    twoFactorEnabled: boolean
     invitationTokenHash: string
     invitationExpiresAt: Date
     createdById: number
@@ -32,7 +31,6 @@ interface UpdateUserRecordInput {
     roleIds: number[]
     status: 'ACTIVE' | 'INVITED' | 'BLOCKED'
     requirePasswordChange: boolean
-    twoFactorEnabled: boolean
     assignedById: number
 }
 
@@ -116,7 +114,6 @@ export function createUserRecord(input: CreateUserRecordInput) {
                 isActive: true,
                 status: 'INVITED',
                 mustChangePassword: input.requirePasswordChange,
-                twoFactorEnabled: input.twoFactorEnabled,
                 userRoles: {
                     create: input.roleIds.map((roleId) => ({
                         roleId,
@@ -146,7 +143,6 @@ export function updateUserRecord(userId: number, input: UpdateUserRecordInput) {
                     email: input.email,
                     status: input.status,
                     mustChangePassword: input.requirePasswordChange,
-                    twoFactorEnabled: input.twoFactorEnabled,
                 },
             })
             await transaction.userRole.deleteMany({ where: { userId } })
@@ -281,7 +277,7 @@ export function consumeInvitation(invitationId: number, userId: number) {
 
         await transaction.user.update({
             where: { id: userId },
-            data: { status: 'ACTIVE', lastAccessAt: new Date() },
+            data: { status: 'ACTIVE' },
         })
         return true
     })
