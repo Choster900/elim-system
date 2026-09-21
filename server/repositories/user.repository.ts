@@ -58,6 +58,13 @@ export function findUserForManagementById(userId: number) {
     })
 }
 
+export function findUserByEmail(email: string) {
+    return prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+    })
+}
+
 export function findUserCatalogMembers() {
     return prisma.member.findMany({
         where: { status: 'ACTIVE' },

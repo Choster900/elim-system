@@ -116,6 +116,16 @@ export async function getUserCatalog() {
 }
 
 export async function createUser(dto: CreateUserRequestDto, createdById: number) {
+    if (await repository.findUserByEmail(dto.email)) {
+        throw createError({
+            statusCode: 409,
+            message: 'Este correo ya está registrado en otra cuenta de usuario.',
+            data: {
+                code: ApiErrorCode.RESOURCE_ALREADY_EXISTS,
+                fields: { email: ['Este correo ya está registrado en otra cuenta de usuario.'] },
+            },
+        })
+    }
     const roleIds = await resolveRoleIds(dto.roleCodes)
     const temporaryPassword = generateTemporaryPassword()
     const invitationToken = generateInvitationToken()

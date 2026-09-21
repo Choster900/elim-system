@@ -27,11 +27,13 @@ const props = defineProps<{
     roleOptions: UserRoleOption[]
     defaultInvitationExpiresInHours: number
     saving?: boolean
+    saveError?: string
 }>()
 
 const emit = defineEmits<{
     close: []
     save: [payload: UserFormPayload]
+    clearError: []
 }>()
 
 const invitationExpirationOptions = [
@@ -124,6 +126,8 @@ watch(
     },
 )
 
+watch(form, () => emit('clearError'))
+
 watch(
     () => form.memberId,
     (memberId, previousMemberId) => {
@@ -209,6 +213,15 @@ const labelClass =
                     <X class="size-5" />
                 </button>
             </header>
+
+            <div
+                v-if="saveError"
+                role="alert"
+                class="mx-6 mt-5 rounded border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:mx-8"
+                data-testid="user-save-error"
+            >
+                {{ saveError }}
+            </div>
 
             <form class="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8" @submit.prevent="submit">
                 <section>

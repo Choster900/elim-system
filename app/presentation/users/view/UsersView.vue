@@ -75,6 +75,7 @@ const canBlock = computed(() => authStore.hasPermission(routePermissionCodes.use
 const hasActions = computed(() => canUpdate.value || canBlock.value)
 
 const formOpen = ref(false)
+const saveError = ref('')
 const editingUser = ref<SystemUser | null>(null)
 const resetTarget = ref<SystemUser | null>(null)
 const resetRequirePasswordChange = ref(true)
@@ -188,16 +189,19 @@ function formatInvitationDate(value: string | null) {
 }
 
 function openCreate() {
+    saveError.value = ''
     editingUser.value = null
     formOpen.value = true
 }
 
 function openEdit(user: SystemUser) {
+    saveError.value = ''
     editingUser.value = user
     formOpen.value = true
 }
 
 async function saveUser(payload: UserFormPayload) {
+    saveError.value = ''
     try {
         if (editingUser.value) {
             await updateMutation.mutateAsync({ id: editingUser.value.id, payload })
@@ -209,7 +213,7 @@ async function saveUser(payload: UserFormPayload) {
         formOpen.value = false
         editingUser.value = null
     } catch (error) {
-        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar el usuario'))
+        saveError.value = resolveHttpErrorMessage(error, 'No fue posible guardar el usuario')
     }
 }
 
@@ -518,8 +522,10 @@ function retryQueries() {
             :role-options="roleOptions"
             :default-invitation-expires-in-hours="defaultInvitationExpiresInHours"
             :saving="isSaving"
+            :save-error="saveError"
             @close="formOpen = false"
             @save="saveUser"
+            @clear-error="saveError = ''"
         />
 
         <template v-if="resetTarget">
