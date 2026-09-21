@@ -7,6 +7,7 @@ import landingRoutes from '~/presentation/landing/router.index'
 import memberRoutes from '~/presentation/members/router.index'
 import meetingsRoutes from '~/presentation/meetings/router.index'
 import registerRoutes from '~/presentation/register/router.index'
+import settingsRoutes from '~/presentation/settings/router.index'
 import territoriesRoutes from '~/presentation/territories/router.index'
 import userRoutes from '~/presentation/users/router.index'
 
@@ -15,6 +16,7 @@ export default <RouterConfig>{
         ...landingRoutes,
         ...authRoutes,
         ...registerRoutes,
+        ...settingsRoutes,
         ...dashboardRoutes,
         ...memberRoutes,
         ...meetingsRoutes,
