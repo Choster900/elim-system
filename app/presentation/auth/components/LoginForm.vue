@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, Lock, Mail } from '@lucide/vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import SecurityCodeInput from '~/presentation/shared/components/SecurityCodeInput.vue'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type { HttpClientError } from '~/presentation/shared/interfaces/http/http-client-error.interface'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatValidationMessage } from '~/utils/string/text-format.util'
 import { useInvitationQuery } from '../composables/useInvitationQuery'
-import { useLoginMutation } from '../composables/useLoginMutation'
+import { useLoginMutation, useVerifyMfaLoginMutation } from '../composables/useLoginMutation'
+import type { LoginResponse, MfaLoginChallenge } from '../interfaces/login-response.interface'
 import { useAuthStore } from '../stores/auth.store'
 
 defineOptions({ name: 'AuthLoginForm' })
@@ -20,8 +22,8 @@ const invitationToken = computed(() =>
 const invitationQuery = useInvitationQuery(invitationToken)
 
 const form = reactive<Record<FieldKey, string>>({
-    email: 'admin@elim.com',
-    password: 'Admin12345!',
+    email: '',
+    password: '',
 })
 
 const fieldErrors = reactive<Record<FieldKey, string | null>>({
@@ -34,9 +36,17 @@ const showPassword = ref(false)
 const rememberEmail = ref(false)
 const toast = useAppToast()
 const loginMutation = useLoginMutation()
+const verifyMfaMutation = useVerifyMfaLoginMutation()
 const authStore = useAuthStore()
+const challenge = ref<MfaLoginChallenge | null>(null)
+const mfaCode = ref('')
+const isUsingRecoveryCode = ref(false)
+const mfaCodeLength = computed(() => {
+    if (challenge.value?.method === 'EMAIL') return 8
+    return isUsingRecoveryCode.value ? 16 : 6
+})
 
-const isLoading = computed(() => loginMutation.isPending.value)
+const isLoading = computed(() => loginMutation.isPending.value || verifyMfaMutation.isPending.value)
 const hasInvitation = computed(() => !!invitationToken.value)
 const invitationError = computed(() => {
     if (!hasInvitation.value) return ''
@@ -103,6 +113,52 @@ function safeRedirect() {
         : '/dashboard'
 }
 
+async function finishLogin(result: LoginResponse) {
+    authStore.setUser(result.user, result.tokens.accessTokenExpiresIn)
+
+    if (rememberEmail.value) {
+        authStore.setRememberedEmail(form.email)
+    } else {
+        authStore.clearRememberedEmail()
+    }
+
+    if (result.user.mustChangePassword) {
+        toast.info('Crea una contraseña propia para continuar')
+        await navigateTo({ path: '/cambiar-clave', query: { redirect: safeRedirect() } })
+        return
+    }
+
+    toast.success('Inicio de sesión exitoso')
+    await navigateTo(safeRedirect())
+}
+
+async function verifySecondFactor() {
+    formError.value = null
+    if (!challenge.value) return
+    try {
+        const result = await verifyMfaMutation.mutateAsync({
+            challengeToken: challenge.value.challengeToken,
+            code: mfaCode.value.trim(),
+        })
+        await finishLogin(result)
+    } catch (error) {
+        formError.value = resolveHttpErrorMessage(error, 'El código no pudo verificarse')
+    }
+}
+
+function backToPassword() {
+    challenge.value = null
+    mfaCode.value = ''
+    isUsingRecoveryCode.value = false
+    formError.value = null
+}
+
+function toggleRecoveryCode() {
+    isUsingRecoveryCode.value = !isUsingRecoveryCode.value
+    mfaCode.value = ''
+    formError.value = null
+}
+
 async function onSubmit() {
     fieldErrors.email = null
     fieldErrors.password = null
@@ -119,22 +175,13 @@ async function onSubmit() {
             password: form.password,
             ...(invitationToken.value ? { invitationToken: invitationToken.value } : {}),
         })
-        authStore.setUser(result.user, result.tokens.accessTokenExpiresIn)
-
-        if (rememberEmail.value) {
-            authStore.setRememberedEmail(form.email)
-        } else {
-            authStore.clearRememberedEmail()
-        }
-
-        if (result.user.mustChangePassword) {
-            toast.info('Crea una contraseña propia para continuar')
-            await navigateTo({ path: '/cambiar-clave', query: { redirect: safeRedirect() } })
+        if ('mfaRequired' in result) {
+            challenge.value = result
+            isUsingRecoveryCode.value = false
+            form.password = ''
             return
         }
-
-        toast.success('Inicio de sesión exitoso')
-        await navigateTo(safeRedirect())
+        await finishLogin(result)
     } catch (error: unknown) {
         const httpError = error as HttpClientError | undefined
         const apiResponse = httpError?.details as ApiResponse<null> | undefined
@@ -156,7 +203,54 @@ async function onSubmit() {
 </script>
 
 <template>
-    <form class="space-y-4" novalidate @submit.prevent="onSubmit">
+    <form v-if="challenge" class="space-y-5" @submit.prevent="verifySecondFactor">
+        <div class="text-center">
+            <h1 class="font-display text-3xl font-semibold text-on-surface">Verifica tu acceso</h1>
+            <p class="mt-2 text-sm text-on-surface-variant">
+                {{
+                    challenge.method === 'EMAIL'
+                        ? `Enviamos un código de 8 dígitos a ${form.email}.`
+                        : 'Ingresa el código de tu aplicación autenticadora o uno de recuperación.'
+                }}
+            </p>
+        </div>
+        <div>
+            <UiLabel for="mfa-code" class="text-xs uppercase text-on-surface-variant">
+                {{ isUsingRecoveryCode ? 'Código de recuperación' : 'Código de seguridad' }}
+            </UiLabel>
+            <SecurityCodeInput
+                v-model="mfaCode"
+                class="mt-3 justify-center"
+                :length="mfaCodeLength"
+                :inputmode="challenge.method === 'EMAIL' ? 'numeric' : 'numeric'"
+                :disabled="isLoading"
+                autofocus
+                aria-label="Código de seguridad"
+            />
+            <button
+                v-if="challenge.method === 'TOTP'"
+                type="button"
+                class="mt-3 w-full text-center text-xs font-semibold text-primary hover:underline"
+                @click="toggleRecoveryCode"
+            >
+                {{
+                    isUsingRecoveryCode
+                        ? 'Usar código de la app autenticadora'
+                        : 'Usar código de recuperación'
+                }}
+            </button>
+        </div>
+        <p v-if="formError" role="alert" class="text-sm text-destructive">{{ formError }}</p>
+        <UiButton type="submit" class="w-full" :loading="isLoading">Verificar e ingresar</UiButton>
+        <button
+            type="button"
+            class="w-full text-center text-sm text-on-surface-variant hover:text-primary"
+            @click="backToPassword"
+        >
+            Volver al inicio de sesión
+        </button>
+    </form>
+    <form v-else class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="mb-5 text-center">
             <h1 class="font-display text-3xl font-semibold text-on-surface">
                 {{ hasInvitation ? 'Activa tu cuenta' : 'Bienvenido' }}

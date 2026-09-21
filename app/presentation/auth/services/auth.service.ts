@@ -6,6 +6,7 @@ import type {
     ChangePasswordRequest,
     InvitationDetails,
     LoginResponse,
+    MfaLoginChallenge,
     PasswordResetDetails,
     RequestPasswordResetPayload,
     ResetPasswordPayload,
@@ -14,13 +15,27 @@ import type {
 export async function loginRequest(
     client: AxiosInstance,
     payload: LoginRequest,
-): Promise<LoginResponse> {
-    const response = await client.post<ApiResponse<LoginResponse>>('/auth/login', payload)
+): Promise<LoginResponse | MfaLoginChallenge> {
+    const response = await client.post<ApiResponse<LoginResponse | MfaLoginChallenge>>(
+        '/auth/login',
+        payload,
+    )
 
     if (!response.data.success || !response.data.data) {
         throw new Error(response.data.message || 'No fue posible iniciar sesión')
     }
 
+    return response.data.data
+}
+
+export async function verifyMfaLoginRequest(
+    client: AxiosInstance,
+    payload: { challengeToken: string; code: string },
+): Promise<LoginResponse> {
+    const response = await client.post<ApiResponse<LoginResponse>>('/auth/mfa/verify', payload)
+    if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.error?.details || 'No fue posible verificar el código')
+    }
     return response.data.data
 }
 

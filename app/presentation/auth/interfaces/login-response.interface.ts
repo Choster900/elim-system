@@ -20,6 +20,7 @@ export interface AuthUser {
     email: string
     username: string | null
     mustChangePassword: boolean
+    mfaMethod: 'NONE' | 'TOTP' | 'EMAIL'
     roles: AuthRole[]
     permissions: AuthPermission[]
     tokenExpiresAt?: number | null
@@ -35,6 +36,13 @@ export interface AuthTokens {
 export interface LoginResponse {
     user: AuthUser
     tokens: AuthTokens
+}
+
+export interface MfaLoginChallenge {
+    mfaRequired: true
+    method: 'TOTP' | 'EMAIL'
+    challengeToken: string
+    expiresIn: number
 }
 
 export interface InvitationDetails {
