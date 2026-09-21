@@ -42,7 +42,6 @@ export interface UserFormPayload {
     roles: SystemRole[]
     status: SystemUserStatus
     requirePasswordChange: boolean
-    twoFactorEnabled: boolean
     invitationExpiresInHours: number
 }
 

@@ -40,7 +40,6 @@ export async function createUser(
         email: payload.email,
         roleCodes: payload.roles,
         requirePasswordChange: payload.requirePasswordChange,
-        twoFactorEnabled: payload.twoFactorEnabled,
         invitationExpiresInHours: payload.invitationExpiresInHours,
     })
     return responseData(response.data, 'No fue posible crear el usuario')
@@ -57,7 +56,6 @@ export async function updateUser(
         roleCodes: payload.roles,
         status: payload.status,
         requirePasswordChange: payload.requirePasswordChange,
-        twoFactorEnabled: payload.twoFactorEnabled,
     })
     return responseData(response.data, 'No fue posible actualizar el usuario')
 }

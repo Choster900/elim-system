@@ -164,7 +164,6 @@ function submit() {
         roles: form.roles,
         status: form.status,
         requirePasswordChange: form.requirePasswordChange,
-        twoFactorEnabled: props.user?.twoFactorEnabled ?? false,
         invitationExpiresInHours: form.invitationExpiresInHours,
     })
 }
