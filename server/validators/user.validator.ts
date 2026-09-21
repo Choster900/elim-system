@@ -27,7 +27,6 @@ export const createUserSchema = Joi.object<CreateUserRequestDto>({
     email: email.required(),
     roleCodes: roleCodes.required(),
     requirePasswordChange: Joi.boolean().required(),
-    twoFactorEnabled: Joi.boolean().default(false),
     invitationExpiresInHours: invitationExpiresInHours.required(),
 })
 
@@ -37,7 +36,6 @@ export const updateUserSchema = Joi.object<UpdateUserRequestDto>({
     roleCodes: roleCodes.required(),
     status: Joi.string().valid('ACTIVE', 'INVITED', 'BLOCKED').required(),
     requirePasswordChange: Joi.boolean().required(),
-    twoFactorEnabled: Joi.boolean().required(),
 })
 
 export const updateUserStatusSchema = Joi.object<UpdateUserStatusRequestDto>({
