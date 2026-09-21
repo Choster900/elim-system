@@ -5,6 +5,7 @@ export interface AccessTokenPayload {
     roles: string[]
     permissions: string[]
     mustChangePassword: boolean
+    mfaVersion: number
     iat?: number
     exp?: number
 }
