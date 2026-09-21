@@ -4,11 +4,13 @@ import DashboardNavbar from '~/presentation/shared/components/DashboardNavbar.vu
 </script>
 
 <template>
-    <div class="min-h-screen bg-surface-container-lowest text-on-surface">
+    <div class="flex min-h-screen flex-col bg-surface-container-lowest text-on-surface">
         <DashboardNavbar />
         <SessionExpiryModal />
 
-        <slot />
+        <div class="flex flex-1 flex-col">
+            <slot />
+        </div>
 
         <footer class="border-t border-outline-variant bg-surface-container-lowest">
             <div
