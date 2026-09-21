@@ -7,6 +7,7 @@ import {
     CircleDollarSign,
     Clock3,
     HandCoins,
+    HelpCircle,
     MapPin,
     RefreshCw,
     TrendingDown,
@@ -22,6 +23,9 @@ import type {
     DashboardPeriodDays,
 } from '~/presentation/dashboard/interfaces/dashboard.interface'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import AppTour from '~/presentation/shared/components/AppTour.vue'
+import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
+import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
@@ -37,6 +41,112 @@ const dashboardQuery = useDashboardQuery(selectedPeriod, selectedDistrictId)
 const summary = computed(() => dashboardQuery.data.value ?? null)
 const isLoading = computed(() => dashboardQuery.isPending.value)
 const isRefreshing = computed(() => dashboardQuery.isFetching.value && !isLoading.value)
+const isTourOpen = ref(false)
+const isClientReady = ref(false)
+const { hasSeen, markSeen } = useTourProgress('dashboard', 1)
+
+const tourSteps: TourStep[] = [
+    {
+        id: 'welcome',
+        target: '[data-tour="dashboard-heading"]',
+        title: 'Tu panel de control',
+        description: 'Aquí tienes una vista general de la actividad reciente de la comunidad.',
+    },
+    {
+        id: 'period',
+        target: '[data-tour="dashboard-period"]',
+        title: 'Elige el período',
+        description:
+            'Consulta los últimos 30 o 90 días, o los últimos 12 meses. Puedes actualizar los datos aquí.',
+    },
+    {
+        id: 'district-filter',
+        target: '[data-tour="dashboard-district-filter"]',
+        title: 'Filtra por distrito',
+        description:
+            'Si tienes varios distritos, selecciona uno para ver sus reuniones y ofrendas.',
+    },
+    {
+        id: 'metrics',
+        target: '[data-tour="dashboard-metrics"]',
+        title: 'Indicadores principales',
+        description:
+            'Revisa ofrendas, asistencia, reuniones y miembros. Los cambios comparan con el período anterior.',
+    },
+    {
+        id: 'attendance',
+        target: '[data-tour="dashboard-attendance"]',
+        title: 'Tendencia de asistencia',
+        description: 'Sigue la evolución de la asistencia y el promedio de personas por reunión.',
+    },
+    {
+        id: 'offerings',
+        target: '[data-tour="dashboard-offerings"]',
+        title: 'Tendencia de ofrendas',
+        description: 'Observa cómo cambia la recaudación y el promedio de ofrendas por reunión.',
+    },
+    {
+        id: 'categories',
+        target: '[data-tour="dashboard-categories"]',
+        title: 'Ofrendas por categoría',
+        description:
+            'Este gráfico muestra cómo se distribuye el total recolectado entre las categorías.',
+    },
+    {
+        id: 'districts',
+        target: '[data-tour="dashboard-districts"]',
+        title: 'Desempeño por distrito',
+        description: 'Compara la asistencia, los registros y las ofrendas de cada distrito.',
+    },
+    {
+        id: 'secondary-metrics',
+        target: '[data-tour="dashboard-secondary-metrics"]',
+        title: 'Más indicadores',
+        description:
+            'Consulta el cumplimiento de asistencia, promedios de ofrenda y fechas analizadas.',
+    },
+    {
+        id: 'recent',
+        target: '[data-tour="dashboard-recent"]',
+        title: 'Últimos registros',
+        description:
+            'Aquí aparecen las reuniones con asistencia y ofrendas registradas recientemente.',
+    },
+    {
+        id: 'upcoming',
+        target: '[data-tour="dashboard-upcoming"]',
+        title: 'Próximas reuniones',
+        description: 'Revisa la agenda con fecha, hora y lugar de las siguientes reuniones.',
+    },
+    {
+        id: 'actions',
+        target: '[data-tour="dashboard-actions"]',
+        title: 'Acciones rápidas',
+        description: 'Inicia las tareas disponibles para tu cuenta desde estos accesos directos.',
+    },
+]
+
+function startTour() {
+    if (!summary.value) return
+    isTourOpen.value = true
+}
+
+function endTour() {
+    isTourOpen.value = false
+    if (authStore.user?.id) markSeen(authStore.user.id)
+}
+
+function startFirstVisitTour() {
+    const userId = authStore.user?.id
+    if (isClientReady.value && summary.value && userId && !hasSeen(userId)) startTour()
+}
+
+onMounted(() => {
+    isClientReady.value = true
+    startFirstVisitTour()
+})
+
+watch([summary, () => authStore.user?.id], startFirstVisitTour)
 
 const periodOptions: Array<{ value: DashboardPeriodDays; label: string }> = [
     { value: 30, label: '30 días' },
@@ -187,6 +297,7 @@ function openMeeting(id: number) {
 <template>
     <main class="mx-auto w-full max-w-system px-6 pb-20 pt-24 lg:px-10">
         <header
+            data-tour="dashboard-heading"
             class="flex flex-col gap-8 border-b border-outline-variant pb-9 lg:flex-row lg:items-end lg:justify-between"
         >
             <div>
@@ -202,7 +313,18 @@ function openMeeting(id: number) {
                 </p>
             </div>
 
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div
+                data-tour="dashboard-period"
+                class="flex flex-col gap-3 sm:flex-row sm:items-center"
+            >
+                <button
+                    type="button"
+                    class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-outline-variant px-3 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    :disabled="!summary"
+                    @click="startTour"
+                >
+                    <HelpCircle class="size-4" /> Ver recorrido
+                </button>
                 <div class="inline-flex rounded-lg border border-outline-variant bg-surface p-1">
                     <button
                         v-for="period in periodOptions"
@@ -233,6 +355,7 @@ function openMeeting(id: number) {
 
         <section
             v-if="districtOptions.length > 1"
+            data-tour="dashboard-district-filter"
             class="mt-6 flex flex-col gap-3 rounded-xl border border-outline-variant bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
         >
             <div>
@@ -288,7 +411,10 @@ function openMeeting(id: number) {
         </section>
 
         <template v-else>
-            <section class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section
+                data-tour="dashboard-metrics"
+                class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            >
                 <UiCard
                     v-for="card in metricCards"
                     :key="card.label"
@@ -331,7 +457,7 @@ function openMeeting(id: number) {
             </section>
 
             <section class="mt-6 grid gap-6 xl:grid-cols-2">
-                <UiCard class="rounded-xl p-6 md:p-8">
+                <UiCard data-tour="dashboard-attendance" class="rounded-xl p-6 md:p-8">
                     <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                         <div>
                             <p
@@ -363,7 +489,7 @@ function openMeeting(id: number) {
                     />
                 </UiCard>
 
-                <UiCard class="rounded-xl p-6 md:p-8">
+                <UiCard data-tour="dashboard-offerings" class="rounded-xl p-6 md:p-8">
                     <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                         <div>
                             <p
@@ -396,7 +522,7 @@ function openMeeting(id: number) {
             </section>
 
             <section class="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-                <UiCard class="rounded-xl p-6 md:p-8">
+                <UiCard data-tour="dashboard-categories" class="rounded-xl p-6 md:p-8">
                     <div class="mb-7">
                         <p
                             class="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary"
@@ -413,7 +539,7 @@ function openMeeting(id: number) {
                     />
                 </UiCard>
 
-                <UiCard class="rounded-xl p-6 md:p-8">
+                <UiCard data-tour="dashboard-districts" class="rounded-xl p-6 md:p-8">
                     <div class="mb-7 flex items-end justify-between gap-4">
                         <div>
                             <p
@@ -471,7 +597,10 @@ function openMeeting(id: number) {
                 </UiCard>
             </section>
 
-            <section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section
+                data-tour="dashboard-secondary-metrics"
+                class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            >
                 <div class="rounded-xl border border-outline-variant bg-surface-container-low p-5">
                     <p
                         class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
@@ -534,7 +663,7 @@ function openMeeting(id: number) {
             </section>
 
             <section class="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-                <UiCard class="overflow-hidden rounded-xl">
+                <UiCard data-tour="dashboard-recent" class="overflow-hidden rounded-xl">
                     <div
                         class="flex items-end justify-between gap-4 border-b border-outline-variant p-6 md:px-8"
                     >
@@ -603,7 +732,7 @@ function openMeeting(id: number) {
                     </p>
                 </UiCard>
 
-                <UiCard class="rounded-xl p-6 md:p-8">
+                <UiCard data-tour="dashboard-upcoming" class="rounded-xl p-6 md:p-8">
                     <div class="mb-6 flex items-end justify-between gap-4">
                         <div>
                             <p
@@ -666,7 +795,7 @@ function openMeeting(id: number) {
                 </UiCard>
             </section>
 
-            <section v-if="hasQuickActions" class="mt-6">
+            <section v-if="hasQuickActions" data-tour="dashboard-actions" class="mt-6">
                 <UiCard class="rounded-xl p-6 md:px-8">
                     <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                         <div>
@@ -709,5 +838,6 @@ function openMeeting(id: number) {
                 </UiCard>
             </section>
         </template>
+        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </main>
 </template>
