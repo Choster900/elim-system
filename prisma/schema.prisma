@@ -44,6 +44,25 @@ enum SystemUserStatus {
   @@map("eus_estado_usuario")
 }
 
+/// Segundo factor elegido por el propietario de la cuenta.
+enum MfaMethod {
+  NONE  @map("ninguno")
+  TOTP  @map("totp")
+  EMAIL @map("correo")
+
+  @@map("emu_metodo_doble_factor")
+}
+
+/// Operación autorizada por un desafío de segundo factor.
+enum MfaChallengePurpose {
+  LOGIN         @map("ingreso")
+  ENABLE_EMAIL  @map("activar_correo")
+  DISABLE_EMAIL @map("desactivar_correo")
+  DISABLE_TOTP  @map("desactivar_totp")
+
+  @@map("edf_destino_factor")
+}
+
 enum AccessRecordStatus {
   ACTIVE   @map("activo")
   INACTIVE @map("inactivo")
@@ -218,6 +237,18 @@ model User {
   isActive               Boolean              @default(true) @map("usu_activo")
   status                 SystemUserStatus     @default(ACTIVE) @map("usu_estado")
   twoFactorEnabled       Boolean              @default(false) @map("usu_doble_factor")
+  /// Método activo; el indicador anterior se conserva para compatibilidad.
+  mfaMethod              MfaMethod            @default(NONE) @map("usu_metodo_doble_factor")
+  /// Secreto TOTP cifrado con AES-256-GCM; nunca se devuelve después del alta.
+  mfaTotpSecret          String?              @map("usu_secreto_totp") @db.VarChar(300)
+  /// Secreto pendiente de validar antes de activar TOTP.
+  mfaPendingTotpSecret   String?              @map("usu_secreto_totp_pendiente") @db.VarChar(300)
+  /// Fecha límite para confirmar el secreto TOTP pendiente.
+  mfaPendingExpiresAt    DateTime?            @map("usu_fecha_expiracion_totp_pendiente")
+  /// Último período TOTP consumido para impedir reutilización.
+  mfaLastUsedStep        Int?                 @map("usu_paso_totp_ultimo")
+  /// Versión de seguridad: invalida tokens emitidos antes de cambiar el factor.
+  mfaVersion             Int                  @default(0) @map("usu_version_doble_factor")
   mustChangePassword     Boolean              @default(true) @map("usu_cambiar_clave")
   lastAccessAt           DateTime?            @map("usu_fecha_ultimo_acceso")
   createdAt              DateTime             @default(now()) @map("usu_fecha_creacion")
@@ -234,11 +265,63 @@ model User {
   receivedInvitations    UserInvitation[]     @relation("UserInvitationRecipient")
   createdInvitations     UserInvitation[]     @relation("UserInvitationCreator")
   passwordResetTokens    PasswordResetToken[]
+  /// Desafíos de segundo factor solicitados por esta cuenta.
+  mfaChallenges          MfaChallenge[]
+  /// Códigos de recuperación pertenecientes a esta cuenta.
+  mfaRecoveryCodes       MfaRecoveryCode[]
 
   @@index([isActive], map: "ix_usu_activo")
   @@index([status], map: "ix_usu_estado")
   @@index([lastAccessAt], map: "ix_usu_fecha_ultimo_acceso")
   @@map("usu_usuario")
+}
+
+/// Desafío de un solo uso para ingreso o cambio de factor por correo.
+model MfaChallenge {
+  /// Identificador interno del desafío.
+  id         Int                 @id(map: "pk_dfa_desafio_factor") @default(autoincrement()) @map("dfa_id")
+  /// Usuario que debe verificar el segundo factor.
+  userId     Int                 @map("dfa_id_usu")
+  /// Resumen del identificador público; el original solo se muestra al solicitante.
+  tokenHash  String              @unique(map: "uk_dfa_resumen_token") @map("dfa_resumen_token") @db.VarChar(100)
+  /// Resumen HMAC del código enviado por correo; nulo para TOTP.
+  /// Resumen HMAC del código de correo; vacío cuando se usa TOTP.
+  codeHash   String?             @map("dfa_resumen_codigo") @db.VarChar(100)
+  /// Operación autorizada por este desafío.
+  purpose    MfaChallengePurpose @map("dfa_destino")
+  /// Número de intentos fallidos.
+  attempts   Int                 @default(0) @map("dfa_intento")
+  /// Fecha límite para verificar el desafío.
+  expiresAt  DateTime            @map("dfa_fecha_expiracion")
+  /// Fecha en que se consumió el desafío.
+  consumedAt DateTime?           @map("dfa_fecha_uso")
+  /// Fecha de creación del desafío.
+  createdAt  DateTime            @default(now()) @map("dfa_fecha_creacion")
+  /// Cuenta propietaria del desafío.
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_dfa_id_usu")
+
+  @@index([userId, createdAt], map: "ix_dfa_usuario_fecha")
+  @@index([expiresAt], map: "ix_dfa_fecha_expiracion")
+  @@map("dfa_desafio_factor")
+}
+
+/// Código de recuperación TOTP, mostrado una sola vez al activarlo.
+model MfaRecoveryCode {
+  /// Identificador interno del código.
+  id        Int       @id(map: "pk_crf_codigo_recuperacion_factor") @default(autoincrement()) @map("crf_id")
+  /// Cuenta propietaria del código.
+  userId    Int       @map("crf_id_usu")
+  /// Resumen HMAC del código de recuperación.
+  codeHash  String    @unique(map: "uk_crf_resumen_codigo") @map("crf_resumen_codigo") @db.VarChar(100)
+  /// Fecha en que el código fue consumido.
+  usedAt    DateTime? @map("crf_fecha_uso")
+  /// Fecha de creación del código.
+  createdAt DateTime  @default(now()) @map("crf_fecha_creacion")
+  /// Cuenta propietaria del código.
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_crf_id_usu")
+
+  @@index([userId], map: "ix_crf_usuario")
+  @@map("crf_codigo_recuperacion_factor")
 }
 
 /// Invitación de acceso de un solo uso enviada a un usuario del sistema.
