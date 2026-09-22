@@ -5,7 +5,12 @@ import type { UpdatePermissionDto } from '../dto/permission/update-permission.dt
 
 export async function findAllPermissions(skip: number, take: number) {
     const [items, totalItems] = await prisma.$transaction([
-        prisma.permission.findMany({ orderBy: { createdAt: 'desc' }, skip, take }),
+        prisma.permission.findMany({
+            include: { _count: { select: { rolePermissions: true } } },
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take,
+        }),
         prisma.permission.count(),
     ])
     return { items, totalItems }
