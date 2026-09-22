@@ -71,7 +71,13 @@ const memberSelectOptions = computed(() =>
         ...member,
         value: member.id,
         label: member.fullName,
-        description: `${member.code} · ${member.communityRoles.join(', ') || 'Miembro'}`,
+        description: [
+            member.code,
+            member.documentNumber ? `DUI ${member.documentNumber}` : null,
+            member.communityRoles.join(', ') || 'Miembro',
+        ]
+            .filter(Boolean)
+            .join(' · '),
     })),
 )
 
@@ -247,8 +253,8 @@ const labelClass =
                             v-model="form.memberId"
                             :options="memberSelectOptions"
                             option-description="description"
-                            placeholder="Busca por nombre, código o rol"
-                            search-placeholder="Buscar miembro..."
+                            placeholder="Busca por nombre, DUI, código o rol"
+                            search-placeholder="Buscar miembro o DUI..."
                             empty-message="No hay miembros disponibles"
                             :disabled="!!user"
                             :invalid="!!errors.member"
@@ -259,6 +265,9 @@ const labelClass =
                                 <p class="font-medium text-on-surface">{{ option.fullName }}</p>
                                 <p class="mt-0.5 text-[11px] text-on-surface-variant">
                                     {{ option.code }} ·
+                                    <template v-if="option.documentNumber">
+                                        DUI {{ option.documentNumber }} ·
+                                    </template>
                                     {{ option.communityRoles.join(', ') || 'Miembro' }}
                                 </p>
                             </template>
@@ -310,7 +319,6 @@ const labelClass =
                                 v-model="form.username"
                                 :class="[inputClass, errors.username ? 'border-destructive' : '']"
                                 autocomplete="off"
-                                placeholder="mlopez"
                                 maxlength="100"
                                 data-testid="user-username"
                             />
@@ -325,7 +333,6 @@ const labelClass =
                                 v-model="form.email"
                                 type="email"
                                 :class="[inputClass, errors.email ? 'border-destructive' : '']"
-                                placeholder="persona@correo.com"
                                 data-testid="user-email"
                             />
                             <p v-if="errors.email" class="mt-1 text-xs text-destructive">
@@ -381,7 +388,6 @@ const labelClass =
                                 multiple
                                 :max-items="8"
                                 option-description="description"
-                                placeholder="Selecciona uno o más roles"
                                 search-placeholder="Buscar rol..."
                                 :invalid="!!errors.roles"
                                 content-class="!z-[80]"
