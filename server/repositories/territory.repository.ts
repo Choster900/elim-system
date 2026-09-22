@@ -253,7 +253,7 @@ export function deleteSector(id: number) {
 }
 
 export async function findSectorSupervisors() {
-    return findActiveSystemRoleMembers('SUPERVISOR')
+    return findActiveCommunityRoleMembers('SUPERVISOR')
 }
 
 export async function findTerritoryLeaders() {
@@ -284,32 +284,7 @@ async function findActiveCommunityRoleMembers(roleCode: string) {
         id: member.id,
         code: member.code,
         fullName: memberFullName(member),
-        email: member.email,
-        phone: member.phone,
-    }))
-}
-
-async function findActiveSystemRoleMembers(roleCode: string) {
-    const members = await prisma.member.findMany({
-        where: {
-            status: 'ACTIVE',
-            user: {
-                isActive: true,
-                status: { in: ['ACTIVE', 'INVITED'] },
-                userRoles: {
-                    some: {
-                        role: { code: roleCode, status: 'ACTIVE' },
-                    },
-                },
-            },
-        },
-        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-    })
-
-    return members.map((member) => ({
-        id: member.id,
-        code: member.code,
-        fullName: memberFullName(member),
+        documentNumber: member.documentNumber,
         email: member.email,
         phone: member.phone,
     }))
