@@ -6,6 +6,7 @@ export interface UserMemberOption {
     id: number
     code: string
     fullName: string
+    documentNumber: string | null
     email: string | null
     phone: string | null
     communityRoles: string[]
