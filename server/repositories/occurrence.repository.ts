@@ -96,9 +96,13 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
             : null,
         recordedById: occurrence.recordedById,
         recordedByName: personName(occurrence.recordedBy),
+        recordedByUsername: occurrence.recordedBy?.username ?? null,
+        recordedByEmail: occurrence.recordedBy?.email ?? null,
         recordedAt: occurrence.recordedAt,
         updatedById: occurrence.updatedById,
         updatedByName: personName(occurrence.updatedBy),
+        updatedByUsername: occurrence.updatedBy?.username ?? null,
+        updatedByEmail: occurrence.updatedBy?.email ?? null,
         attendanceDetails: occurrence.attendanceDetails.map((detail) => ({
             id: detail.id,
             typeId: detail.typeId,
