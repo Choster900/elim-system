@@ -13,6 +13,7 @@ import {
     useStartEmailSetupMutation,
     useStartTotpSetupMutation,
 } from '../composables/useMfaMutations'
+import ChangePasswordCard from '../components/ChangePasswordCard.vue'
 import { useMfaSettingsQuery } from '../composables/useMfaSettings'
 import type { MfaChallenge, TotpSetup } from '../interfaces/mfa.interface'
 
@@ -252,6 +253,8 @@ async function disableFactor() {
             variant="card"
             :territory="authStore.user?.territoryAssignment"
         />
+
+        <ChangePasswordCard />
 
         <UiCard v-if="loading" class="mt-5 p-5 text-sm text-on-surface-variant">
             Cargando seguridad de la cuenta…
