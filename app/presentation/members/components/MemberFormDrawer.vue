@@ -16,7 +16,7 @@ import type {
     MemberStatus,
 } from '../interfaces/member.interface'
 import { toInputDate } from '../utils/member-format.util'
-import { formatDuiInput, isValidDui, normalizeDui } from '#shared/utils/dui.util'
+import { formatDuiInput, hasDuiFormat, isValidDui, normalizeDui } from '#shared/utils/dui.util'
 
 type DocumentNumberError = '' | 'required' | 'invalid'
 type InvalidMemberField =
@@ -26,6 +26,7 @@ type InvalidMemberField =
     | 'gender'
     | 'sector'
     | 'email'
+    | 'occupation'
 
 interface FormState {
     code: string
@@ -69,6 +70,7 @@ const emit = defineEmits<{
 }>()
 
 const catalogsQuery = useMemberCatalogsQuery()
+const shouldValidateDuiChecksum = !import.meta.dev
 const catalogs = computed(() => catalogsQuery.data.value)
 const countryOptions = computed(() => catalogs.value?.countries ?? [])
 const departmentOptions = computed(() =>
@@ -126,6 +128,7 @@ const errors = reactive({
     gender: false,
     sector: false,
     email: false,
+    occupation: false,
 })
 
 const invalidFieldOrder: InvalidMemberField[] = [
@@ -133,6 +136,7 @@ const invalidFieldOrder: InvalidMemberField[] = [
     'lastName',
     'documentNumber',
     'gender',
+    'occupation',
     'sector',
     'email',
 ]
@@ -154,6 +158,7 @@ function resetForm() {
     errors.documentNumber = ''
     errors.gender = false
     errors.email = false
+    errors.occupation = false
     if (!props.member) return
 
     Object.assign(form, {
@@ -236,6 +241,11 @@ watch(
 )
 
 watch(
+    () => form.occupation,
+    () => dismissServerFieldError('occupation'),
+)
+
+watch(
     () => form.department,
     (departmentCode) => {
         const municipality = catalogs.value?.municipalities.find(
@@ -270,7 +280,11 @@ function optional(value: string) {
 function validateDocumentNumber() {
     if (!form.documentNumber.trim()) {
         errors.documentNumber = 'required'
-    } else if (!isValidDui(form.documentNumber)) {
+    } else if (
+        shouldValidateDuiChecksum
+            ? !isValidDui(form.documentNumber)
+            : !hasDuiFormat(form.documentNumber)
+    ) {
         errors.documentNumber = 'invalid'
     } else {
         errors.documentNumber = ''
@@ -322,7 +336,9 @@ function firstInvalidField() {
 }
 
 function fieldShellClass(field: InvalidMemberField) {
-    return highlightedField.value === field ? 'member-invalid-jump' : ''
+    return highlightedField.value === field
+        ? 'member-invalid-jump -m-2 rounded-lg bg-destructive/5 p-2 ring-2 ring-destructive/50'
+        : ''
 }
 
 function focusFirstInvalidField() {
@@ -603,7 +619,11 @@ const currentYear = new Date().getFullYear()
                                 v-else-if="errors.documentNumber === 'invalid'"
                                 class="mt-1 text-xs text-destructive"
                             >
-                                El DUI no es válido. Revisa sus 8 dígitos y el dígito verificador.
+                                {{
+                                    shouldValidateDuiChecksum
+                                        ? 'El DUI no es válido. Revisa sus 8 dígitos y el dígito verificador.'
+                                        : 'El documento de prueba debe tener 8 dígitos, guion y un dígito final.'
+                                }}
                             </p>
                             <p
                                 v-else-if="serverFieldMessage('documentNumber')"
@@ -612,8 +632,11 @@ const currentYear = new Date().getFullYear()
                                 {{ serverFieldMessage('documentNumber') }}
                             </p>
                             <p v-else class="mt-1 text-[11px] text-on-surface-variant">
-                                Formato DUI: 8 dígitos, guion y dígito verificador. También debe ser
-                                único.
+                                {{
+                                    shouldValidateDuiChecksum
+                                        ? 'Formato DUI: 8 dígitos, guion y dígito verificador. También debe ser único.'
+                                        : 'Desarrollo: se acepta cualquier documento con formato 00000000-0.'
+                                }}
                             </p>
                         </div>
                         <div>
@@ -653,17 +676,33 @@ const currentYear = new Date().getFullYear()
                                 :searchable="false"
                             />
                         </div>
-                        <div class="sm:col-span-2">
+                        <div
+                            :class="fieldShellClass('occupation')"
+                            class="sm:col-span-2"
+                            data-member-field="occupation"
+                        >
                             <label :class="labelClass" for="member-occupation"
                                 >Ocupación (opcional)</label
                             >
                             <input
                                 id="member-occupation"
                                 v-model="form.occupation"
-                                :class="inputClass"
+                                :class="[
+                                    inputClass,
+                                    serverFieldMessage('occupation') ? 'border-destructive' : '',
+                                ]"
                                 placeholder="Profesión u oficio"
-                                maxlength="150"
+                                maxlength="100"
+                                :aria-invalid="!!serverFieldMessage('occupation')"
+                                aria-describedby="member-occupation-error"
                             />
+                            <p
+                                v-if="serverFieldMessage('occupation')"
+                                id="member-occupation-error"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ serverFieldMessage('occupation') }}
+                            </p>
                         </div>
                     </div>
                 </section>
