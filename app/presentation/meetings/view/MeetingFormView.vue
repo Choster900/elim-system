@@ -16,8 +16,8 @@ import {
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
     useMeetingLeadersQuery,
-    useMeetingMembersQuery,
     useMeetingSectorsQuery,
+    useMeetingSupervisorsQuery,
     useMeetingTypesQuery,
 } from '~/presentation/meetings/composables/useMeetingCatalogQueries'
 import {
@@ -61,29 +61,29 @@ useHead({
 const meetingQuery = useMeetingQuery(meetingId)
 const meetingTypesQuery = useMeetingTypesQuery()
 const sectorsQuery = useMeetingSectorsQuery()
-const membersQuery = useMeetingMembersQuery()
 const leadersQuery = useMeetingLeadersQuery()
+const supervisorsQuery = useMeetingSupervisorsQuery()
 const createMeetingMutation = useCreateMeetingMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
 
 const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
-const members = computed(() => membersQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
+const supervisors = computed(() => supervisorsQuery.data.value ?? [])
 const isLoading = computed(
     () =>
         meetingTypesQuery.isPending.value ||
         sectorsQuery.isPending.value ||
-        membersQuery.isPending.value ||
         leadersQuery.isPending.value ||
+        supervisorsQuery.isPending.value ||
         (isEditing.value && meetingQuery.isPending.value),
 )
 const loadError = computed(
     () =>
         meetingTypesQuery.error.value ??
         sectorsQuery.error.value ??
-        membersQuery.error.value ??
         leadersQuery.error.value ??
+        supervisorsQuery.error.value ??
         meetingQuery.error.value,
 )
 const notFound = computed(() => isEditing.value && meetingQuery.isError.value)
@@ -93,8 +93,8 @@ if (import.meta.server) {
         Promise.allSettled([
             meetingTypesQuery.suspense(),
             sectorsQuery.suspense(),
-            membersQuery.suspense(),
             leadersQuery.suspense(),
+            supervisorsQuery.suspense(),
             ...(isEditing.value ? [meetingQuery.suspense()] : []),
         ]),
     )
@@ -375,7 +375,15 @@ watch(
 )
 
 watch(
-    [isLoading, loadError, () => meetingQuery.data.value, meetingTypes, sectors, members, leaders],
+    [
+        isLoading,
+        loadError,
+        () => meetingQuery.data.value,
+        meetingTypes,
+        sectors,
+        leaders,
+        supervisors,
+    ],
     async () => {
         if (formInitialized.value || isLoading.value || loadError.value) return
 
@@ -596,7 +604,7 @@ const recurrenceSummary = computed(() =>
     ),
 )
 const coSupervisorOptions = computed(() =>
-    members.value.filter((member) => member.id !== form.supervisorId),
+    supervisors.value.filter((member) => member.id !== form.supervisorId),
 )
 
 const inputClass =
@@ -793,15 +801,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                             <div>
                                 <label :class="labelClass" for="meeting-start">Inicio *</label>
-                                <input
+                                <UiTimePicker
                                     id="meeting-start"
                                     v-model="form.startTime"
-                                    type="time"
-                                    :class="[
-                                        inputClass,
-                                        'mt-1',
-                                        formErrors.startTime ? 'border-destructive' : '',
-                                    ]"
+                                    class="mt-1"
+                                    :invalid="!!formErrors.startTime"
+                                    aria-label="Hora de inicio"
                                 />
                                 <p
                                     v-if="formErrors.startTime"
@@ -812,15 +817,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                             <div>
                                 <label :class="labelClass" for="meeting-end">Fin *</label>
-                                <input
+                                <UiTimePicker
                                     id="meeting-end"
                                     v-model="form.endTime"
-                                    type="time"
-                                    :class="[
-                                        inputClass,
-                                        'mt-1',
-                                        formErrors.endTime ? 'border-destructive' : '',
-                                    ]"
+                                    class="mt-1"
+                                    :invalid="!!formErrors.endTime"
+                                    aria-label="Hora de finalización"
                                 />
                                 <p v-if="formErrors.endTime" class="mt-1 text-xs text-destructive">
                                     {{ formErrors.endTime }}
@@ -1031,8 +1033,9 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :options="sectors"
                                         option-value="id"
                                         option-label="name"
+                                        option-description="code"
                                         placeholder="Selecciona un sector"
-                                        search-placeholder="Buscar sector..."
+                                        search-placeholder="Buscar sector por nombre o código..."
                                         :invalid="!!formErrors.sectorId"
                                     />
                                 </div>
@@ -1048,8 +1051,10 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :options="leaders"
                                         option-value="id"
                                         option-label="fullName"
+                                        option-description="documentNumber"
+                                        :search-fields="['code', 'email', 'phone']"
                                         placeholder="Selecciona un líder"
-                                        search-placeholder="Buscar líder..."
+                                        search-placeholder="Buscar líder por nombre, DUI, código, correo o teléfono..."
                                         :invalid="!!formErrors.leaderId"
                                     />
                                 </div>
@@ -1092,10 +1097,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :options="coSupervisorOptions"
                                         option-value="id"
                                         option-label="fullName"
+                                        option-description="documentNumber"
+                                        :search-fields="['code', 'email', 'phone']"
                                         multiple
                                         clearable
-                                        placeholder="Añade uno o varios"
-                                        search-placeholder="Buscar co-supervisor..."
+                                        placeholder="Añade supervisores"
+                                        search-placeholder="Buscar supervisor por nombre, DUI, código, correo o teléfono..."
                                     />
                                 </div>
                             </div>
@@ -1405,7 +1412,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                                 form.coSupervisorIds
                                                     .map(
                                                         (id) =>
-                                                            members.find((s) => s.id === id)
+                                                            supervisors.find((s) => s.id === id)
                                                                 ?.fullName,
                                                     )
                                                     .filter(Boolean)
