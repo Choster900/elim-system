@@ -80,6 +80,7 @@ export interface MemberOption {
     id: number
     code: string
     fullName: string
+    documentNumber: string | null
     email: string | null
     phone: string | null
     status: string
