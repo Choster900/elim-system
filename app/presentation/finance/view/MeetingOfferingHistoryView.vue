@@ -9,14 +9,27 @@ import {
     UserRound,
     Users,
 } from '@lucide/vue'
+import {
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogOverlay,
+    DialogPortal,
+    DialogRoot,
+    DialogTitle,
+} from 'radix-vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
 import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
 import { formatShortIsoDate } from '~/utils/date/date-format.util'
 import { useMeetingHistoryQuery } from '../composables/useOccurrenceQueries'
+import type { OccurrenceRecord } from '../interfaces/occurrence.interface'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 
 defineOptions({ name: 'MeetingOfferingHistoryView' })
 
 const route = useRoute()
+const authStore = useAuthStore()
 const meetingId = computed(() => {
     const raw = Number(route.params.id)
     return Number.isSafeInteger(raw) && raw > 0 ? raw : null
@@ -28,6 +41,13 @@ const occurrences = computed(() => historyQuery.data.value ?? [])
 const recorded = computed(() => occurrences.value.filter((item) => item.status === 'registrada'))
 const meeting = computed(() => occurrences.value[0] ?? null)
 const meetingTitle = computed(() => meeting.value?.meetingTitle ?? 'Reunión')
+const selectedOccurrence = ref<OccurrenceRecord | null>(null)
+const occurrenceDetailOpen = computed({
+    get: () => selectedOccurrence.value !== null,
+    set: (open: boolean) => {
+        if (!open) selectedOccurrence.value = null
+    },
+})
 
 useHead({ title: computed(() => `${meetingTitle.value} · Historial · Sistema`) })
 
@@ -118,6 +138,38 @@ const byAttendanceType = computed(() => {
 
 function formatMoney(value: number) {
     return value.toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatRecordedAt(value: string | null) {
+    if (!value) return null
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+
+    return date.toLocaleString('es-SV', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    })
+}
+
+function userAccountLabel(item: (typeof occurrences.value)[number], type: 'recorded' | 'updated') {
+    const username = type === 'recorded' ? item.recordedByUsername : item.updatedByUsername
+    const email = type === 'recorded' ? item.recordedByEmail : item.updatedByEmail
+    return username ? `@${username}` : email
+}
+
+function openOccurrenceDetail(occurrence: OccurrenceRecord) {
+    selectedOccurrence.value = occurrence
+}
+
+function recordOccurrence(occurrence: OccurrenceRecord) {
+    return navigateTo({
+        path: `/finanzas/ofrendas/registrar/${occurrence.meetingId}`,
+        query: { occurrence: String(occurrence.id) },
+    })
 }
 </script>
 
@@ -336,7 +388,7 @@ function formatMoney(value: number) {
                     Registro por fecha
                 </h2>
                 <div class="overflow-x-auto rounded-xl border border-outline-variant">
-                    <table class="w-full min-w-[680px] border-collapse text-sm">
+                    <table class="w-full min-w-[840px] border-collapse text-sm">
                         <thead>
                             <tr class="bg-surface-container-high text-on-surface-variant">
                                 <th
@@ -363,6 +415,9 @@ function formatMoney(value: number) {
                                     class="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider"
                                 >
                                     Registró
+                                </th>
+                                <th class="w-28 px-4 py-3">
+                                    <span class="sr-only">Ver detalle de la fecha</span>
                                 </th>
                             </tr>
                         </thead>
@@ -408,20 +463,56 @@ function formatMoney(value: number) {
                                     }}
                                 </td>
                                 <td class="px-4 py-3 text-on-surface-variant">
-                                    <span
+                                    <div
                                         v-if="item.recordedByName"
-                                        class="inline-flex items-center gap-1.5"
+                                        class="flex min-w-[210px] items-start gap-2.5"
                                     >
-                                        <UserCheck class="size-3.5 text-primary" />
-                                        {{ item.recordedByName }}
                                         <span
-                                            v-if="item.updatedByName"
-                                            class="text-[11px] text-on-surface-variant/70"
+                                            class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
                                         >
-                                            (corregido por {{ item.updatedByName }})
+                                            <UserCheck class="size-3.5" />
                                         </span>
-                                    </span>
+                                        <span class="min-w-0">
+                                            <span class="block font-medium text-on-surface">
+                                                {{ item.recordedByName }}
+                                            </span>
+                                            <span
+                                                v-if="userAccountLabel(item, 'recorded')"
+                                                class="mt-0.5 block truncate text-[11px] text-on-surface-variant"
+                                            >
+                                                {{ userAccountLabel(item, 'recorded') }}
+                                            </span>
+                                            <span
+                                                v-if="formatRecordedAt(item.recordedAt)"
+                                                class="mt-0.5 block text-[10px] tabular-nums text-on-surface-variant/80"
+                                            >
+                                                Registró el {{ formatRecordedAt(item.recordedAt) }}
+                                            </span>
+                                            <span
+                                                v-if="item.updatedByName"
+                                                class="mt-1 block text-[10px] text-on-surface-variant"
+                                            >
+                                                Corregido por {{ item.updatedByName
+                                                }}<template
+                                                    v-if="userAccountLabel(item, 'updated')"
+                                                >
+                                                    · {{ userAccountLabel(item, 'updated') }}
+                                                </template>
+                                            </span>
+                                        </span>
+                                    </div>
                                     <span v-else>—</span>
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <UiButton
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-8 px-3 text-xs"
+                                        @click="openOccurrenceDetail(item)"
+                                    >
+                                        Ver detalle
+                                    </UiButton>
                                 </td>
                             </tr>
                         </tbody>
@@ -429,5 +520,192 @@ function formatMoney(value: number) {
                 </div>
             </section>
         </template>
+
+        <DialogRoot v-model:open="occurrenceDetailOpen">
+            <DialogPortal>
+                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
+                <DialogContent
+                    class="fixed left-1/2 top-1/2 z-[71] max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-outline-variant bg-surface p-5 shadow-xl outline-none sm:p-6"
+                >
+                    <template v-if="selectedOccurrence">
+                        <div class="flex items-start justify-between gap-4">
+                            <div>
+                                <p
+                                    class="text-xs font-semibold uppercase tracking-[0.2em] text-primary"
+                                >
+                                    Detalle del registro
+                                </p>
+                                <DialogTitle
+                                    class="mt-2 font-display text-2xl font-semibold text-on-surface"
+                                >
+                                    {{ formatShortIsoDate(selectedOccurrence.date) }}
+                                </DialogTitle>
+                                <DialogDescription class="mt-1 text-sm text-on-surface-variant">
+                                    {{ selectedOccurrence.meetingCode }} ·
+                                    {{ selectedOccurrence.meetingTitle }}
+                                </DialogDescription>
+                            </div>
+                            <span
+                                class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                :class="
+                                    selectedOccurrence.status === 'registrada'
+                                        ? 'bg-primary/15 text-primary'
+                                        : 'bg-destructive/15 text-destructive'
+                                "
+                            >
+                                {{
+                                    selectedOccurrence.status === 'registrada'
+                                        ? 'Registrada'
+                                        : 'Pendiente'
+                                }}
+                            </span>
+                        </div>
+
+                        <section class="mt-6 grid gap-3 sm:grid-cols-2">
+                            <div class="rounded-lg bg-surface-container-low p-4">
+                                <p
+                                    class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    Asistencia total
+                                </p>
+                                <p class="mt-1 text-2xl font-semibold tabular-nums text-on-surface">
+                                    {{ selectedOccurrence.attendance ?? '—' }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg bg-surface-container-low p-4">
+                                <p
+                                    class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    Ofrenda total
+                                </p>
+                                <p class="mt-1 text-2xl font-semibold tabular-nums text-on-surface">
+                                    {{
+                                        selectedOccurrence.totalAmount === null
+                                            ? '—'
+                                            : `$${formatMoney(selectedOccurrence.totalAmount)}`
+                                    }}
+                                </p>
+                            </div>
+                        </section>
+
+                        <section class="mt-5 grid gap-5 md:grid-cols-2">
+                            <div>
+                                <h3 class="text-sm font-semibold text-on-surface">
+                                    Detalle de asistencia
+                                </h3>
+                                <div
+                                    v-if="selectedOccurrence.attendanceDetails.length"
+                                    class="mt-2 divide-y divide-outline-variant rounded-lg border border-outline-variant"
+                                >
+                                    <div
+                                        v-for="detail in selectedOccurrence.attendanceDetails"
+                                        :key="detail.id"
+                                        class="flex items-center justify-between gap-4 px-3 py-2 text-sm"
+                                    >
+                                        <span class="text-on-surface-variant">{{
+                                            detail.typeName ?? 'Sin tipo'
+                                        }}</span>
+                                        <strong class="tabular-nums text-on-surface">{{
+                                            detail.quantity
+                                        }}</strong>
+                                    </div>
+                                </div>
+                                <p v-else class="mt-2 text-sm text-on-surface-variant">
+                                    Se registró el total sin desglose por tipo.
+                                </p>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-semibold text-on-surface">
+                                    Detalle de ofrenda
+                                </h3>
+                                <div
+                                    v-if="selectedOccurrence.details.length"
+                                    class="mt-2 divide-y divide-outline-variant rounded-lg border border-outline-variant"
+                                >
+                                    <div
+                                        v-for="detail in selectedOccurrence.details"
+                                        :key="detail.id"
+                                        class="px-3 py-2 text-sm"
+                                    >
+                                        <div class="flex items-center justify-between gap-4">
+                                            <span class="text-on-surface-variant">{{
+                                                detail.categoryName ?? 'Sin categoría'
+                                            }}</span>
+                                            <strong class="tabular-nums text-on-surface"
+                                                >${{ formatMoney(detail.amount) }}</strong
+                                            >
+                                        </div>
+                                        <p
+                                            v-if="detail.notes"
+                                            class="mt-1 text-xs text-on-surface-variant"
+                                        >
+                                            {{ detail.notes }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <p v-else class="mt-2 text-sm text-on-surface-variant">
+                                    Se registró una ofrenda general sin desglose por categoría.
+                                </p>
+                            </div>
+                        </section>
+
+                        <section
+                            v-if="selectedOccurrence.notes"
+                            class="mt-5 rounded-lg border border-outline-variant bg-surface-container-low p-4"
+                        >
+                            <h3 class="text-sm font-semibold text-on-surface">Observaciones</h3>
+                            <p class="mt-1 whitespace-pre-wrap text-sm text-on-surface-variant">
+                                {{ selectedOccurrence.notes }}
+                            </p>
+                        </section>
+
+                        <section class="mt-5 rounded-lg border border-outline-variant p-4">
+                            <h3 class="text-sm font-semibold text-on-surface">
+                                Auditoría del registro
+                            </h3>
+                            <p class="mt-2 text-sm text-on-surface">
+                                Registró:
+                                {{ selectedOccurrence.recordedByName ?? 'Sin registro de usuario' }}
+                                <template v-if="userAccountLabel(selectedOccurrence, 'recorded')">
+                                    · {{ userAccountLabel(selectedOccurrence, 'recorded') }}
+                                </template>
+                            </p>
+                            <p
+                                v-if="formatRecordedAt(selectedOccurrence.recordedAt)"
+                                class="mt-1 text-xs text-on-surface-variant"
+                            >
+                                {{ formatRecordedAt(selectedOccurrence.recordedAt) }}
+                            </p>
+                            <p
+                                v-if="selectedOccurrence.updatedByName"
+                                class="mt-3 text-sm text-on-surface"
+                            >
+                                Corregido por {{ selectedOccurrence.updatedByName
+                                }}<template v-if="userAccountLabel(selectedOccurrence, 'updated')">
+                                    · {{ userAccountLabel(selectedOccurrence, 'updated') }}
+                                </template>
+                            </p>
+                        </section>
+
+                        <div class="mt-6 flex justify-end">
+                            <UiButton
+                                v-if="
+                                    selectedOccurrence.status === 'pendiente' &&
+                                    authStore.hasPermission(routePermissionCodes.financeRecord)
+                                "
+                                type="button"
+                                class="mr-auto"
+                                @click="recordOccurrence(selectedOccurrence)"
+                            >
+                                Agregar asistencia y ofrenda
+                            </UiButton>
+                            <DialogClose as-child>
+                                <UiButton type="button" variant="outline">Cerrar</UiButton>
+                            </DialogClose>
+                        </div>
+                    </template>
+                </DialogContent>
+            </DialogPortal>
+        </DialogRoot>
     </main>
 </template>
