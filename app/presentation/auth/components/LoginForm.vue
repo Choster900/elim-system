@@ -10,6 +10,7 @@ import { useInvitationQuery } from '../composables/useInvitationQuery'
 import { useLoginMutation, useVerifyMfaLoginMutation } from '../composables/useLoginMutation'
 import type { LoginResponse, MfaLoginChallenge } from '../interfaces/login-response.interface'
 import { useAuthStore } from '../stores/auth.store'
+import { resolveAccessibleRedirectPath } from '../utils/accessible-home-path.util'
 
 defineOptions({ name: 'AuthLoginForm' })
 
@@ -105,12 +106,9 @@ function applyValidationErrors(apiResponse: ApiResponse<null> | undefined) {
     return applied
 }
 
-function safeRedirect() {
-    const requestedRedirect =
-        typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
-    return requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
-        ? requestedRedirect
-        : '/dashboard'
+function safeRedirect(permissionCodes = authStore.permissionCodes) {
+    const requestedRedirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+    return resolveAccessibleRedirectPath(permissionCodes, requestedRedirect)
 }
 
 async function finishLogin(result: LoginResponse) {
@@ -124,12 +122,15 @@ async function finishLogin(result: LoginResponse) {
 
     if (result.user.mustChangePassword) {
         toast.info('Crea una contraseña propia para continuar')
-        await navigateTo({ path: '/cambiar-clave', query: { redirect: safeRedirect() } })
+        await navigateTo({
+            path: '/cambiar-clave',
+            query: { redirect: safeRedirect(result.user.permissions.map(({ code }) => code)) },
+        })
         return
     }
 
     toast.success('Inicio de sesión exitoso')
-    await navigateTo(safeRedirect())
+    await navigateTo(safeRedirect(result.user.permissions.map(({ code }) => code)))
 }
 
 async function verifySecondFactor() {
