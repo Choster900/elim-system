@@ -1,3 +1,5 @@
+import type { TerritoryAssignment } from '~/presentation/shared/interfaces/territory-assignment.interface'
+
 export interface AuthPermission {
     id: number
     name: string
@@ -21,6 +23,7 @@ export interface AuthUser {
     username: string | null
     mustChangePassword: boolean
     mfaMethod: 'NONE' | 'TOTP' | 'EMAIL'
+    territoryAssignment: TerritoryAssignment | null
     roles: AuthRole[]
     permissions: AuthPermission[]
     tokenExpiresAt?: number | null
