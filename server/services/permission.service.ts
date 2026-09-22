@@ -4,8 +4,16 @@ import { ApiErrorCode } from '../types/api-response.types'
 import type { CreatePermissionDto } from '../dto/permission/create-permission.dto'
 import type { UpdatePermissionDto } from '../dto/permission/update-permission.dto'
 
-export function getAllPermissions(skip: number, take: number) {
-    return repo.findAllPermissions(skip, take)
+export async function getAllPermissions(skip: number, take: number) {
+    const { items, totalItems } = await repo.findAllPermissions(skip, take)
+    return {
+        items: items.map(({ _count, ...permission }) => ({
+            ...permission,
+            description: permission.description ?? '',
+            roleCount: _count.rolePermissions,
+        })),
+        totalItems,
+    }
 }
 
 export async function getPermissionById(id: number) {
