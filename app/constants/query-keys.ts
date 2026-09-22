@@ -58,6 +58,16 @@ const users = {
     catalog: ['users', 'catalog'] as const,
 }
 
+const roles = {
+    all: ['roles'] as const,
+    list: ['roles', 'list'] as const,
+}
+
+const permissions = {
+    all: ['permissions'] as const,
+    list: ['permissions', 'list'] as const,
+}
+
 const auth = {
     all: ['auth'] as const,
     invitation: (token: string) => ['auth', 'invitation', token] as const,
@@ -83,6 +93,8 @@ export const queryKeys = {
     offeringCategories,
     dashboard,
     users,
+    roles,
+    permissions,
     auth,
     settings,
 }
