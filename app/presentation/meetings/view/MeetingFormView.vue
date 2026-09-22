@@ -409,7 +409,7 @@ watch(
                 weekOrdinal: existing.weekOrdinal ?? 1,
                 weekday: existing.weekday ?? new Date(`${existing.date}T00:00:00Z`).getUTCDay(),
                 expectedAttendees: existing.expectedAttendees,
-                isActive: existing.isActive,
+                isActive: true,
                 isPublic: existing.isPublic,
                 notes: existing.notes ?? '',
                 color: existing.color,
