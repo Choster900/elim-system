@@ -166,6 +166,14 @@ export async function findMeetingById(id: number) {
 }
 
 export async function findMeetingLeaders() {
+    return findActiveCommunityRoleMembers('LEADER')
+}
+
+export async function findMeetingSupervisors() {
+    return findActiveCommunityRoleMembers('SUPERVISOR')
+}
+
+async function findActiveCommunityRoleMembers(roleCode: string) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
 
@@ -174,7 +182,7 @@ export async function findMeetingLeaders() {
             status: 'ACTIVE',
             communityRoles: {
                 some: {
-                    role: { code: 'LEADER', isActive: true },
+                    role: { code: roleCode, isActive: true },
                     AND: [
                         { OR: [{ startedAt: null }, { startedAt: { lte: today } }] },
                         { OR: [{ endedAt: null }, { endedAt: { gte: today } }] },
@@ -191,6 +199,7 @@ export async function findMeetingLeaders() {
         fullName: [leader.firstName, leader.middleName, leader.lastName, leader.secondLastName]
             .filter(Boolean)
             .join(' '),
+        documentNumber: leader.documentNumber,
         email: leader.email,
         phone: leader.phone,
         status: leader.status,
@@ -198,6 +207,14 @@ export async function findMeetingLeaders() {
 }
 
 export async function isMeetingLeader(memberId: number) {
+    return hasActiveCommunityRole(memberId, 'LEADER')
+}
+
+export async function isMeetingSupervisor(memberId: number) {
+    return hasActiveCommunityRole(memberId, 'SUPERVISOR')
+}
+
+async function hasActiveCommunityRole(memberId: number, roleCode: string) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
 
@@ -207,7 +224,7 @@ export async function isMeetingLeader(memberId: number) {
             status: 'ACTIVE',
             communityRoles: {
                 some: {
-                    role: { code: 'LEADER', isActive: true },
+                    role: { code: roleCode, isActive: true },
                     AND: [
                         { OR: [{ startedAt: null }, { startedAt: { lte: today } }] },
                         { OR: [{ endedAt: null }, { endedAt: { gte: today } }] },
