@@ -366,7 +366,7 @@ const filterLabelClass =
                         clearable
                         :disabled="meetingOptions.length === 0"
                         placeholder="Todas las reuniones"
-                        search-placeholder="Buscar reunión..."
+                        search-placeholder="Buscar código o nombre..."
                     />
                 </div>
                 <div>
@@ -387,8 +387,8 @@ const filterLabelClass =
                     <input
                         v-model="search"
                         type="search"
-                        placeholder="Buscar por código, reunión, sector o quién registró"
-                        aria-label="Buscar por código, reunión, sector o quién registró"
+                        placeholder="Buscar por código o nombre de reunión, sector o quién registró"
+                        aria-label="Buscar por código o nombre de reunión, sector o quién registró"
                         :class="[controlClass, 'w-full py-2 pl-9 pr-3']"
                     />
                 </div>
