@@ -1,6 +1,10 @@
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type { AuthUser } from '~/presentation/auth/interfaces/login-response.interface'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import {
+    resolveAccessibleHomePath,
+    resolveAccessibleRedirectPath,
+} from '~/presentation/auth/utils/accessible-home-path.util'
 import type { RouteLocationNormalized } from 'vue-router'
 
 function resolveRequiredPermission(to: RouteLocationNormalized) {
@@ -15,7 +19,25 @@ function resolveRequiredPermission(to: RouteLocationNormalized) {
 export default defineNuxtRouteMiddleware(async (to) => {
     const authStore = useAuthStore()
 
+    if (to.path === '/login' && !authStore.sessionChecked) {
+        try {
+            const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
+            const response = await $fetch<ApiResponse<AuthUser>>('/api/auth/me', { headers })
+
+            if (!response.success || !response.data) throw new Error('Invalid auth response')
+            authStore.setUser(response.data)
+        } catch {
+            authStore.clearUser()
+        }
+    }
+
     if (!to.meta.requiresAuth) {
+        if (to.path === '/login' && authStore.isAuthenticated) {
+            if (authStore.user?.mustChangePassword) return navigateTo('/cambiar-clave')
+            return navigateTo(
+                resolveAccessibleRedirectPath(authStore.permissionCodes, to.query.redirect),
+            )
+        }
         if (
             authStore.sessionChecked &&
             authStore.user?.mustChangePassword &&
@@ -57,7 +79,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
 
     if (!authStore.user?.mustChangePassword && to.path === '/cambiar-clave') {
-        return navigateTo('/dashboard')
+        return navigateTo(resolveAccessibleHomePath(authStore.permissionCodes))
     }
 
     const requiredPermission = resolveRequiredPermission(to)
@@ -67,6 +89,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
             query: {
                 from: to.fullPath,
                 permission: requiredPermission,
+                destination: resolveAccessibleHomePath(authStore.permissionCodes),
             },
             replace: true,
         })
