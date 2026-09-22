@@ -15,12 +15,19 @@ export interface AuthRoleDto {
     permissions: AuthPermissionDto[]
 }
 
+export interface AuthTerritoryAssignmentDto {
+    districtName: string
+    zoneName: string
+    sectorName: string
+}
+
 export interface AuthUserDto {
     id: number
     email: string
     username: string | null
     mustChangePassword: boolean
     mfaMethod: 'NONE' | 'TOTP' | 'EMAIL'
+    territoryAssignment: AuthTerritoryAssignmentDto | null
     roles: AuthRoleDto[]
     permissions: AuthPermissionDto[]
     tokenExpiresAt?: number | null
