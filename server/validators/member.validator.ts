@@ -6,10 +6,11 @@ import {
     MEMBER_STATUS_OPTIONS,
 } from '../constants/member.constants'
 import type { CreateMemberDto, ImportMembersDto, UpdateMemberDto } from '../dto/member/member.dto'
-import { isValidDui, normalizeDui } from '#shared/utils/dui.util'
+import { hasDuiFormat, isValidDui, normalizeDui } from '#shared/utils/dui.util'
 
 const optionalText = (maximum: number) => Joi.string().trim().max(maximum).allow('', null)
 const date = Joi.string().isoDate().allow(null)
+const shouldValidateDuiChecksum = process.env.NODE_ENV !== 'development'
 
 const fields = {
     code: Joi.string()
@@ -27,10 +28,13 @@ const fields = {
         .trim()
         .custom((value: string, helpers) => {
             const dui = normalizeDui(value)
-            return isValidDui(dui) ? dui : helpers.error('string.dui')
+            const isAccepted = shouldValidateDuiChecksum ? isValidDui(dui) : hasDuiFormat(dui)
+            return isAccepted ? dui : helpers.error('string.dui')
         })
         .messages({
-            'string.dui': 'El documento debe ser un DUI válido con formato 00000000-0.',
+            'string.dui': shouldValidateDuiChecksum
+                ? 'El documento debe ser un DUI válido con formato 00000000-0.'
+                : 'El documento de prueba debe tener el formato 00000000-0.',
         }),
     birthDate: date,
     gender: Joi.string().valid(...MEMBER_GENDER_OPTIONS.map((option) => option.value)),
@@ -44,7 +48,9 @@ const fields = {
     country: optionalText(100),
     municipality: optionalText(100),
     department: optionalText(100),
-    occupation: optionalText(100),
+    occupation: optionalText(100).messages({
+        'string.max': 'La ocupación no puede superar los 100 caracteres.',
+    }),
     status: Joi.string().valid(...MEMBER_STATUS_OPTIONS.map((option) => option.value)),
     roles: Joi.array()
         .items(Joi.string().valid(...MEMBER_ROLE_CODES))
