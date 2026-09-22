@@ -27,6 +27,7 @@ const dateRange = ref<DatePickerRange>({ start: null, end: null })
 const selectedDistrict = ref<number | null>(null)
 const selectedZone = ref<number | null>(null)
 const selectedSector = ref<number | null>(null)
+const selectedMeeting = ref<number | null>(null)
 
 // El rango de fechas viaja al servidor, que ya sabe acotar por fecha; el territorio
 // se filtra sobre lo recibido, que es justo el alcance del usuario.
@@ -77,6 +78,21 @@ const sectorOptions = computed(() =>
     ),
 )
 
+// La API ya limita la lista al alcance del usuario. El selector nunca muestra
+// reuniones fuera de los sectores supervisados o de las reuniones lideradas.
+const meetingOptions = computed(() =>
+    [
+        ...new Map(
+            occurrences.value.map((item) => [
+                item.meetingId,
+                `${item.meetingCode} · ${item.meetingTitle}`,
+            ]),
+        ),
+    ]
+        .map(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es')),
+)
+
 // Cambiar un nivel invalida los de abajo: dejar un sector de otra zona no filtra nada.
 watch(selectedDistrict, () => {
     selectedZone.value = null
@@ -93,7 +109,8 @@ const hasFilters = computed(
         !!dateRange.value.end ||
         selectedDistrict.value !== null ||
         selectedZone.value !== null ||
-        selectedSector.value !== null,
+        selectedSector.value !== null ||
+        selectedMeeting.value !== null,
 )
 
 function clearFilters() {
@@ -102,6 +119,7 @@ function clearFilters() {
     selectedDistrict.value = null
     selectedZone.value = null
     selectedSector.value = null
+    selectedMeeting.value = null
 }
 
 const visible = computed(() => {
@@ -111,6 +129,7 @@ const visible = computed(() => {
         if (selectedDistrict.value && item.districtId !== selectedDistrict.value) return false
         if (selectedZone.value && item.zoneId !== selectedZone.value) return false
         if (selectedSector.value && item.sectorId !== selectedSector.value) return false
+        if (selectedMeeting.value && item.meetingId !== selectedMeeting.value) return false
         if (!term) return true
 
         return [item.meetingCode, item.meetingTitle, item.sectorName, item.recordedByName ?? '']
@@ -306,7 +325,7 @@ const filterLabelClass =
 
         <!-- Filtros: territorio en cascada, rango de fechas y búsqueda -->
         <section class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4">
-            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <div>
                     <span :class="filterLabelClass">Distrito</span>
                     <UiSearchSelect
@@ -337,6 +356,17 @@ const filterLabelClass =
                         :disabled="sectorOptions.length === 0"
                         placeholder="Todos los sectores"
                         search-placeholder="Buscar sector..."
+                    />
+                </div>
+                <div>
+                    <span :class="filterLabelClass">Reunión</span>
+                    <UiSearchSelect
+                        v-model="selectedMeeting"
+                        :options="meetingOptions"
+                        clearable
+                        :disabled="meetingOptions.length === 0"
+                        placeholder="Todas las reuniones"
+                        search-placeholder="Buscar reunión..."
                     />
                 </div>
                 <div>
