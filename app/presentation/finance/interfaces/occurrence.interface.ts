@@ -57,9 +57,13 @@ export interface OccurrenceRecord {
     leaderName: string | null
     recordedById: number | null
     recordedByName: string | null
+    recordedByUsername: string | null
+    recordedByEmail: string | null
     recordedAt: string | null
     updatedById: number | null
     updatedByName: string | null
+    updatedByUsername: string | null
+    updatedByEmail: string | null
     details: OccurrenceDetail[]
     createdAt: string
     updatedAt: string
