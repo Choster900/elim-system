@@ -91,14 +91,6 @@ export async function getMeetingTypes(
     return responseData(response.data, 'No fue posible cargar los tipos de reunión')
 }
 
-export async function getMembers(
-    apiClient: AxiosInstance,
-    signal?: AbortSignal,
-): Promise<MemberOption[]> {
-    const response = await apiClient.get<ApiResponse<MemberOption[]>>('/members', { signal })
-    return responseData(response.data, 'No fue posible cargar los miembros')
-}
-
 export async function getMeetingLeaders(
     apiClient: AxiosInstance,
     signal?: AbortSignal,
@@ -107,6 +99,16 @@ export async function getMeetingLeaders(
         signal,
     })
     return responseData(response.data, 'No fue posible cargar los líderes de reunión')
+}
+
+export async function getMeetingSupervisors(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<MemberOption[]> {
+    const response = await apiClient.get<ApiResponse<MemberOption[]>>('/meetings/supervisors', {
+        signal,
+    })
+    return responseData(response.data, 'No fue posible cargar los supervisores de reunión')
 }
 
 export async function getSectors(
