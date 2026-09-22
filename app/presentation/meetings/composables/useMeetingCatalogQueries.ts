@@ -3,8 +3,8 @@ import type { MaybeRefOrGetter } from 'vue'
 import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import {
-    getMembers,
     getMeetingLeaders,
+    getMeetingSupervisors,
     getMeetingTypes,
     getSectors,
 } from '../services/meeting.service'
@@ -21,23 +21,23 @@ export function useMeetingTypesQuery() {
     })
 }
 
-export function useMeetingMembersQuery(enabled: MaybeRefOrGetter<boolean> = true) {
-    const apiClient = useApiClient()
-
-    return useQuery({
-        queryKey: queryKeys.members.options,
-        queryFn: ({ signal }) => getMembers(apiClient, signal),
-        enabled,
-        staleTime: CATALOG_STALE_TIME_MS,
-    })
-}
-
 export function useMeetingLeadersQuery(enabled: MaybeRefOrGetter<boolean> = true) {
     const apiClient = useApiClient()
 
     return useQuery({
         queryKey: queryKeys.members.meetingLeaders,
         queryFn: ({ signal }) => getMeetingLeaders(apiClient, signal),
+        enabled,
+        staleTime: CATALOG_STALE_TIME_MS,
+    })
+}
+
+export function useMeetingSupervisorsQuery(enabled: MaybeRefOrGetter<boolean> = true) {
+    const apiClient = useApiClient()
+
+    return useQuery({
+        queryKey: queryKeys.members.meetingSupervisors,
+        queryFn: ({ signal }) => getMeetingSupervisors(apiClient, signal),
         enabled,
         staleTime: CATALOG_STALE_TIME_MS,
     })
