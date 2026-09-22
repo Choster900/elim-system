@@ -39,8 +39,8 @@ import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
     useMeetingLeadersQuery,
-    useMeetingMembersQuery,
     useMeetingSectorsQuery,
+    useMeetingSupervisorsQuery,
     useMeetingTypesQuery,
 } from '~/presentation/meetings/composables/useMeetingCatalogQueries'
 import {
@@ -86,8 +86,8 @@ const canManage = computed(() => authStore.hasPermission('meetings.manage'))
 const meetingsQuery = useMeetingsQuery()
 const meetingTypesQuery = useMeetingTypesQuery()
 const sectorsQuery = useMeetingSectorsQuery()
-const membersQuery = useMeetingMembersQuery(canManage)
 const leadersQuery = useMeetingLeadersQuery(canManage)
+const supervisorsQuery = useMeetingSupervisorsQuery(canManage)
 const createMeetingMutation = useCreateMeetingMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
 const deleteMeetingMutation = useDeleteMeetingMutation()
@@ -96,20 +96,20 @@ const importMeetingsMutation = useImportMeetingsMutation()
 const meetings = computed(() => meetingsQuery.data.value ?? [])
 const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
-const members = computed(() => membersQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
+const supervisors = computed(() => supervisorsQuery.data.value ?? [])
 const importCatalogs = computed<MeetingImportCatalogs>(() => ({
     meetingTypes: meetingTypes.value,
     sectors: sectors.value,
-    members: members.value,
+    supervisors: supervisors.value,
     leaders: leaders.value,
 }))
 const importCatalogsLoading = computed(
     () =>
         meetingTypesQuery.isPending.value ||
         sectorsQuery.isPending.value ||
-        membersQuery.isPending.value ||
-        leadersQuery.isPending.value,
+        leadersQuery.isPending.value ||
+        supervisorsQuery.isPending.value,
 )
 const isLoading = computed(
     () =>
@@ -140,8 +140,8 @@ if (import.meta.client) {
             meetingsQuery.error.value,
             meetingTypesQuery.error.value,
             sectorsQuery.error.value,
-            membersQuery.error.value,
             leadersQuery.error.value,
+            supervisorsQuery.error.value,
         ],
         (errors) => {
             const error = errors.find(Boolean)
