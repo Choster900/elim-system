@@ -17,6 +17,11 @@ export interface AuthRole {
     permissions: AuthPermission[]
 }
 
+export interface AuthCommunityRole {
+    code: string
+    name: string
+}
+
 export interface AuthUser {
     id: number
     email: string
@@ -24,6 +29,7 @@ export interface AuthUser {
     mustChangePassword: boolean
     mfaMethod: 'NONE' | 'TOTP' | 'EMAIL'
     territoryAssignment: TerritoryAssignment | null
+    communityRoles: AuthCommunityRole[]
     roles: AuthRole[]
     permissions: AuthPermission[]
     tokenExpiresAt?: number | null

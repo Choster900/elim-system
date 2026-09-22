@@ -128,6 +128,17 @@ function mapUserAuth(user: NonNullable<Awaited<ReturnType<typeof findUserByEmail
               sectorName: territorySector.name,
           }
         : null
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    const communityRoles =
+        user.member?.communityRoles
+            .filter(
+                ({ role, startedAt, endedAt }) =>
+                    role.isActive &&
+                    (!startedAt || startedAt <= today) &&
+                    (!endedAt || endedAt >= today),
+            )
+            .map(({ role }) => ({ code: role.code, name: role.name })) ?? []
 
     return {
         user: {
@@ -137,6 +148,7 @@ function mapUserAuth(user: NonNullable<Awaited<ReturnType<typeof findUserByEmail
             mustChangePassword: user.mustChangePassword,
             mfaMethod: user.mfaMethod,
             territoryAssignment,
+            communityRoles,
             roles,
             permissions: [...permissionMap.values()],
         } as AuthUserDto,

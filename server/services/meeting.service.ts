@@ -177,6 +177,9 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     const frequency = dto.frequency ?? existing.frequency
     const normalizedDto = {
         ...dto,
+        // Toda edición reactiva la reunión por defecto. La desactivación solo
+        // ocurre cuando la petición envía explícitamente isActive: false.
+        isActive: dto.isActive ?? true,
         supervisorId,
         ...(frequency === 'unica' ? { recurrenceEndDate: null } : {}),
     }

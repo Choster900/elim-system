@@ -1446,6 +1446,13 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         },
                     },
                 },
+                AuthCommunityRole: {
+                    type: 'object',
+                    properties: {
+                        code: { type: 'string', example: 'LEADER' },
+                        name: { type: 'string', example: 'Líder' },
+                    },
+                },
                 TerritoryAssignment: {
                     type: 'object',
                     properties: {
@@ -1463,6 +1470,10 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         territoryAssignment: {
                             allOf: [{ $ref: '#/components/schemas/TerritoryAssignment' }],
                             nullable: true,
+                        },
+                        communityRoles: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/AuthCommunityRole' },
                         },
                         roles: {
                             type: 'array',

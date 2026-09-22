@@ -4,6 +4,9 @@ import { mapPrismaError } from '../utils/database/prisma-error.util'
 const authGraphInclude = {
     member: {
         include: {
+            communityRoles: {
+                include: { role: true },
+            },
             territorySector: {
                 include: {
                     zone: {

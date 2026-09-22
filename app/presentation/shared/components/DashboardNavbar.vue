@@ -33,6 +33,7 @@ const userInitials = computed(() => authStore.initials)
 const userDisplayName = computed(() => authStore.displayName)
 const userEmail = computed(() => authStore.user?.email ?? '')
 const userTerritory = computed(() => authStore.user?.territoryAssignment)
+const userCommunityRoles = computed(() => authStore.user?.communityRoles ?? [])
 
 async function handleLogout() {
     try {
@@ -279,6 +280,18 @@ const visibleNavItems = computed(() =>
                                 >
                                     {{ userEmail }}
                                 </p>
+                                <div
+                                    v-if="userCommunityRoles.length"
+                                    class="mt-2 flex flex-wrap gap-1"
+                                >
+                                    <span
+                                        v-for="role in userCommunityRoles"
+                                        :key="role.code"
+                                        class="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary"
+                                    >
+                                        {{ role.name }}
+                                    </span>
+                                </div>
                             </div>
                             <TerritoryAssignment :territory="userTerritory" variant="menu" />
 
@@ -335,6 +348,12 @@ const visibleNavItems = computed(() =>
                         </p>
                         <p v-if="userEmail" class="truncate text-xs text-on-surface-variant">
                             {{ userEmail }}
+                        </p>
+                        <p
+                            v-if="userCommunityRoles.length"
+                            class="mt-1 truncate text-xs text-primary"
+                        >
+                            {{ userCommunityRoles.map((role) => role.name).join(' · ') }}
                         </p>
                         <p v-if="userTerritory" class="mt-1 truncate text-xs text-primary">
                             {{ userTerritory.districtName }} · {{ userTerritory.zoneName }} ·
