@@ -24,6 +24,7 @@ import type {
 } from '~/presentation/dashboard/interfaces/dashboard.interface'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import AppTour from '~/presentation/shared/components/AppTour.vue'
+import TerritoryAssignment from '~/presentation/shared/components/TerritoryAssignment.vue'
 import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
 import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
@@ -311,6 +312,7 @@ function openMeeting(id: number) {
                     Hola, {{ authStore.displayName }}. Consulta asistencia, ofrendas y actividad de
                     reuniones con información consolidada en tiempo real.
                 </p>
+                <TerritoryAssignment :territory="authStore.user?.territoryAssignment" />
             </div>
 
             <div
