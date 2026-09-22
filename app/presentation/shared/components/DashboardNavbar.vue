@@ -13,6 +13,7 @@ import { routePermissionCodes } from '~/presentation/auth/constants/permission.c
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import AppBrand from './AppBrand.vue'
+import TerritoryAssignment from './TerritoryAssignment.vue'
 
 type DashboardMenuItem = {
     label: string
@@ -31,6 +32,7 @@ const isLoggingOut = computed(() => logoutMutation.isPending.value)
 const userInitials = computed(() => authStore.initials)
 const userDisplayName = computed(() => authStore.displayName)
 const userEmail = computed(() => authStore.user?.email ?? '')
+const userTerritory = computed(() => authStore.user?.territoryAssignment)
 
 async function handleLogout() {
     try {
@@ -278,6 +280,7 @@ const visibleNavItems = computed(() =>
                                     {{ userEmail }}
                                 </p>
                             </div>
+                            <TerritoryAssignment :territory="userTerritory" variant="menu" />
 
                             <DropdownMenuItem
                                 class="flex cursor-pointer items-center gap-3 px-4 py-3 text-xs font-semibold uppercase text-on-surface-variant outline-none transition-colors data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
@@ -332,6 +335,10 @@ const visibleNavItems = computed(() =>
                         </p>
                         <p v-if="userEmail" class="truncate text-xs text-on-surface-variant">
                             {{ userEmail }}
+                        </p>
+                        <p v-if="userTerritory" class="mt-1 truncate text-xs text-primary">
+                            {{ userTerritory.districtName }} · {{ userTerritory.zoneName }} ·
+                            {{ userTerritory.sectorName }}
                         </p>
                     </div>
                 </div>
