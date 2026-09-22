@@ -120,6 +120,15 @@ function mapUserAuth(user: NonNullable<Awaited<ReturnType<typeof findUserByEmail
             }
         })
 
+    const territorySector = user.member?.territorySector
+    const territoryAssignment = territorySector
+        ? {
+              districtName: territorySector.zone.district.name,
+              zoneName: territorySector.zone.name,
+              sectorName: territorySector.name,
+          }
+        : null
+
     return {
         user: {
             id: user.id,
@@ -127,6 +136,7 @@ function mapUserAuth(user: NonNullable<Awaited<ReturnType<typeof findUserByEmail
             username: user.username,
             mustChangePassword: user.mustChangePassword,
             mfaMethod: user.mfaMethod,
+            territoryAssignment,
             roles,
             permissions: [...permissionMap.values()],
         } as AuthUserDto,
