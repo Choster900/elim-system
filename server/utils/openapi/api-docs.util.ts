@@ -1446,12 +1446,24 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         },
                     },
                 },
+                TerritoryAssignment: {
+                    type: 'object',
+                    properties: {
+                        districtName: { type: 'string' },
+                        zoneName: { type: 'string' },
+                        sectorName: { type: 'string' },
+                    },
+                },
                 AuthUser: {
                     type: 'object',
                     properties: {
                         id: { type: 'integer', format: 'int32' },
                         email: { type: 'string', format: 'email' },
                         username: { type: 'string', nullable: true },
+                        territoryAssignment: {
+                            allOf: [{ $ref: '#/components/schemas/TerritoryAssignment' }],
+                            nullable: true,
+                        },
                         roles: {
                             type: 'array',
                             items: { $ref: '#/components/schemas/AuthRole' },
