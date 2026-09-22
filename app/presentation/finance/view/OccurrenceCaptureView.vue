@@ -49,6 +49,13 @@ const meetingId = computed(() => {
     return Number.isSafeInteger(raw) && raw > 0 ? raw : null
 })
 
+// Al abrir desde el historial se marca la fecha solicitada; las demás siguen
+// disponibles para una captura en lote.
+const targetedOccurrenceId = computed(() => {
+    const raw = Number(route.query.occurrence)
+    return Number.isSafeInteger(raw) && raw > 0 ? raw : null
+})
+
 const categories = computed(() =>
     (categoriesQuery.data.value ?? []).filter((category) => category.isActive),
 )
@@ -94,7 +101,7 @@ function buildRows() {
     rows.value = occurrences.value.map((occurrence) => ({
         occurrenceId: occurrence.id,
         date: occurrence.date,
-        selected: false,
+        selected: occurrence.id === targetedOccurrenceId.value,
         attendanceByType: Object.fromEntries(attendanceTypes.value.map((type) => [type.id, null])),
         attendanceTotal: null,
         amounts: Object.fromEntries(categories.value.map((category) => [category.id, null])),
