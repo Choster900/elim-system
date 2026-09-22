@@ -23,8 +23,13 @@ import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import PermissionFormDrawer from '../components/PermissionFormDrawer.vue'
-import { useAccessControlPreview } from '../composables/useAccessControlPreview'
+import {
+    useCreatePermissionMutation,
+    usePermissionsQuery,
+    useUpdatePermissionMutation,
+} from '../composables/usePermissionsQuery'
 import {
     accessModuleOptions,
     accessStatusOptions,
@@ -41,7 +46,10 @@ defineOptions({ name: 'PermissionsView' })
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const toast = useAppToast()
-const { permissions } = useAccessControlPreview()
+const permissionsQuery = usePermissionsQuery()
+const createPermissionMutation = useCreatePermissionMutation()
+const updatePermissionMutation = useUpdatePermissionMutation()
+const permissions = computed(() => permissionsQuery.data.value ?? [])
 const formOpen = ref(false)
 const editingPermission = ref<AccessPermission | null>(null)
 
@@ -111,60 +119,45 @@ function openEdit(permission: AccessPermission) {
     formOpen.value = true
 }
 
-function savePermission(payload: PermissionFormPayload) {
-    const duplicatedCode = permissions.value.some(
-        (permission) =>
-            permission.code === payload.code && permission.id !== editingPermission.value?.id,
-    )
-    if (duplicatedCode) {
-        toast.error('Ya existe un permiso con ese código')
-        return
+async function savePermission(payload: PermissionFormPayload) {
+    try {
+        if (editingPermission.value) {
+            await updatePermissionMutation.mutateAsync({ id: editingPermission.value.id, payload })
+            toast.success('Permiso actualizado correctamente')
+        } else {
+            await createPermissionMutation.mutateAsync(payload)
+            toast.success('Permiso creado correctamente')
+        }
+        formOpen.value = false
+        editingPermission.value = null
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar el permiso'))
     }
-
-    if (editingPermission.value) {
-        permissions.value = permissions.value.map((permission) =>
-            permission.id === editingPermission.value?.id
-                ? {
-                      ...permission,
-                      name: payload.name,
-                      code: permission.isSystem ? permission.code : payload.code,
-                      module: payload.module,
-                      resource: permission.isSystem ? permission.resource : payload.resource,
-                      action: permission.isSystem ? permission.action : payload.action,
-                      description: payload.description,
-                      status: permission.isSystem ? permission.status : payload.status,
-                  }
-                : permission,
-        )
-        toast.success('Permiso actualizado en esta vista previa')
-    } else {
-        const nextId = Math.max(0, ...permissions.value.map((permission) => permission.id)) + 1
-        permissions.value = [
-            {
-                id: nextId,
-                ...payload,
-                isSystem: false,
-                roleCount: 0,
-            },
-            ...permissions.value,
-        ]
-        toast.success('Permiso creado en esta vista previa')
-    }
-
-    formOpen.value = false
-    editingPermission.value = null
 }
 
-function toggleStatus(permission: AccessPermission) {
+async function toggleStatus(permission: AccessPermission) {
     if (permission.isSystem) {
         toast.error('Los permisos protegidos no pueden desactivarse')
         return
     }
-    const nextStatus: AccessRecordStatus = permission.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-    permissions.value = permissions.value.map((item) =>
-        item.id === permission.id ? { ...item, status: nextStatus } : item,
-    )
-    toast.success(nextStatus === 'ACTIVE' ? 'Permiso habilitado' : 'Permiso desactivado')
+    const status: AccessRecordStatus = permission.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    try {
+        await updatePermissionMutation.mutateAsync({
+            id: permission.id,
+            payload: {
+                name: permission.name,
+                code: permission.code,
+                module: permission.module,
+                resource: permission.resource,
+                action: permission.action,
+                description: permission.description,
+                status,
+            },
+        })
+        toast.success(status === 'ACTIVE' ? 'Permiso habilitado' : 'Permiso desactivado')
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible actualizar el permiso'))
+    }
 }
 </script>
 
@@ -262,6 +255,7 @@ function toggleStatus(permission: AccessPermission) {
                 :columns="columns"
                 row-key="id"
                 :page-size="10"
+                :loading="permissionsQuery.isPending.value"
                 show-search
                 search-placeholder="Buscar por nombre, código, recurso o acción…"
                 empty-title="Sin permisos"
