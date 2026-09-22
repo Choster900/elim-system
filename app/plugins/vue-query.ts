@@ -18,40 +18,43 @@ function shouldRetry(failureCount: number, error: Error) {
     return failureCount < 1
 }
 
-export default defineNuxtPlugin((nuxtApp) => {
-    const vueQueryState = useState<DehydratedState | null>('vue-query', () => null)
+export default defineNuxtPlugin({
+    name: 'vue-query',
+    setup(nuxtApp) {
+        const vueQueryState = useState<DehydratedState | null>('vue-query', () => null)
 
-    const queryClient = new QueryClient({
-        defaultOptions: {
-            queries: {
-                retry: shouldRetry,
-                staleTime: DEFAULT_STALE_TIME_MS,
-                gcTime: DEFAULT_GC_TIME_MS,
-                refetchOnWindowFocus: false,
+        const queryClient = new QueryClient({
+            defaultOptions: {
+                queries: {
+                    retry: shouldRetry,
+                    staleTime: DEFAULT_STALE_TIME_MS,
+                    gcTime: DEFAULT_GC_TIME_MS,
+                    refetchOnWindowFocus: false,
+                },
+                mutations: {
+                    retry: false,
+                },
             },
-            mutations: {
-                retry: false,
-            },
-        },
-    })
-
-    const options: VueQueryPluginOptions = {
-        queryClient,
-        enableDevtoolsV6Plugin: import.meta.client && import.meta.dev,
-    }
-    nuxtApp.vueApp.use(VueQueryPlugin, options)
-
-    if (import.meta.server) {
-        nuxtApp.hooks.hook('app:rendered', () => {
-            vueQueryState.value = dehydrate(queryClient)
         })
-    }
 
-    if (import.meta.client && vueQueryState.value) hydrate(queryClient, vueQueryState.value)
-
-    return {
-        provide: {
+        const options: VueQueryPluginOptions = {
             queryClient,
-        },
-    }
+            enableDevtoolsV6Plugin: import.meta.client && import.meta.dev,
+        }
+        nuxtApp.vueApp.use(VueQueryPlugin, options)
+
+        if (import.meta.server) {
+            nuxtApp.hooks.hook('app:rendered', () => {
+                vueQueryState.value = dehydrate(queryClient)
+            })
+        }
+
+        if (import.meta.client && vueQueryState.value) hydrate(queryClient, vueQueryState.value)
+
+        return {
+            provide: {
+                queryClient,
+            },
+        }
+    },
 })
