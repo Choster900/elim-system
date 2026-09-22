@@ -16,6 +16,7 @@ const members = {
     catalogs: ['members', 'catalogs'] as const,
     options: ['members', 'options'] as const,
     meetingLeaders: ['members', 'meeting-leaders'] as const,
+    meetingSupervisors: ['members', 'meeting-supervisors'] as const,
 }
 
 const territories = {
