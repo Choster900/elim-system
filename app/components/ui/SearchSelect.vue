@@ -26,6 +26,7 @@ const props = withDefaults(
         optionValue?: keyof T
         optionLabel?: keyof T
         optionDescription?: keyof T
+        searchFields?: (keyof T)[]
         placeholder?: string
         searchPlaceholder?: string
         emptyMessage?: string
@@ -89,6 +90,13 @@ function getDescription(opt: T): string | null {
     return v == null ? null : String(v)
 }
 
+function getSearchFieldValues(opt: T): string[] {
+    return (props.searchFields ?? []).flatMap((field) => {
+        const value = opt[field]
+        return value == null ? [] : [String(value)]
+    })
+}
+
 function normalizeSearch(value: string) {
     return value
         .normalize('NFD')
@@ -106,7 +114,9 @@ function matchesTerm(value: Value, normalizedTerm: string) {
     if (!option) return false
 
     return normalizeSearch(
-        [getLabel(option), getDescription(option)].filter(Boolean).join(' '),
+        [getLabel(option), getDescription(option), ...getSearchFieldValues(option)]
+            .filter(Boolean)
+            .join(' '),
     ).includes(normalizedTerm)
 }
 
