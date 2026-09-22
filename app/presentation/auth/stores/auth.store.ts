@@ -7,6 +7,7 @@ import {
 } from '~/utils/storage/json-storage.util'
 import type { AuthUser } from '../interfaces/login-response.interface'
 import { SYSTEM_PERMISSION_CODE } from '../constants/permission.constants'
+import { publishAuthSessionEvent } from '../utils/auth-session-sync.util'
 
 const STORAGE_KEY = 'auth-user'
 // Solo el correo. La contraseña nunca se guarda en el navegador.
@@ -63,8 +64,28 @@ export const useAuthStore = defineStore('auth', {
             this.sessionChecked = true
             writeJsonStorage(STORAGE_KEY, userWithoutSession)
             writeJsonStorage('auth-session-expires-at', this.sessionExpiresAt)
+            publishAuthSessionEvent({
+                type: 'SIGNED_IN',
+                user: userWithoutSession,
+                sessionExpiresAt: this.sessionExpiresAt,
+            })
+        },
+        setUserFromExternalSession(user: AuthUser, sessionExpiresAt: number | null) {
+            this.user = user
+            this.sessionExpiresAt = sessionExpiresAt
+            this.sessionChecked = true
+            writeJsonStorage(STORAGE_KEY, user)
+            writeJsonStorage('auth-session-expires-at', sessionExpiresAt)
         },
         clearUser() {
+            this.user = null
+            this.sessionExpiresAt = null
+            this.sessionChecked = true
+            removeStorageItem(STORAGE_KEY)
+            removeStorageItem('auth-session-expires-at')
+            publishAuthSessionEvent({ type: 'SIGNED_OUT' })
+        },
+        clearUserFromExternalSession() {
             this.user = null
             this.sessionExpiresAt = null
             this.sessionChecked = true
