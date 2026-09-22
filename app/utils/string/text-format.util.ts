@@ -27,6 +27,8 @@ export function formatValidationMessage(message: string) {
 
 export function normalizeSearchText(value: unknown) {
     return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
         .trim()
         .toLocaleLowerCase('es')
 }
