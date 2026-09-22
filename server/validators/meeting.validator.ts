@@ -13,7 +13,7 @@ const baseFields = {
     sectorId: Joi.number().integer().positive(),
     leaderId: Joi.number().integer().positive(),
     supervisorId: Joi.number().integer().positive(),
-    coSupervisorIds: Joi.array().items(Joi.number().integer().positive()).default([]),
+    coSupervisorIds: Joi.array().items(Joi.number().integer().positive()).unique().default([]),
     title: Joi.string().trim().min(2).max(100),
     description: Joi.string().trim().max(300).allow('', null),
     date: Joi.string().isoDate(),
