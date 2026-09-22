@@ -33,6 +33,38 @@ async function assertMeetingLeader(memberId: number) {
     })
 }
 
+async function assertMeetingCoSupervisors(memberIds: number[], supervisorId: number) {
+    if (memberIds.includes(supervisorId)) {
+        throw createError({
+            statusCode: 400,
+            message: 'El supervisor principal no puede repetirse como co-supervisor',
+            data: {
+                code: ApiErrorCode.VALIDATION_ERROR,
+                fields: { coSupervisorIds: ['El supervisor principal ya está asignado al sector'] },
+            },
+        })
+    }
+
+    const assignments = await Promise.all(
+        memberIds.map(async (memberId) => ({
+            memberId,
+            isSupervisor: await repo.isMeetingSupervisor(memberId),
+        })),
+    )
+    if (assignments.every((assignment) => assignment.isSupervisor)) return
+
+    throw createError({
+        statusCode: 400,
+        message: 'Uno de los co-supervisores no tiene un rol comunitario Supervisor activo',
+        data: {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            fields: {
+                coSupervisorIds: ['Selecciona miembros con rol comunitario Supervisor activo'],
+            },
+        },
+    })
+}
+
 async function sectorSupervisorId(sectorId: number) {
     const sector = await getSectorById(sectorId)
     if (sector.supervisorId) return sector.supervisorId
@@ -104,9 +136,14 @@ export function getMeetingLeaders() {
     return repo.findMeetingLeaders()
 }
 
+export function getMeetingSupervisors() {
+    return repo.findMeetingSupervisors()
+}
+
 export async function createMeeting(dto: CreateMeetingDto) {
     await assertMeetingLeader(dto.leaderId)
     const supervisorId = await sectorSupervisorId(dto.sectorId)
+    await assertMeetingCoSupervisors(dto.coSupervisorIds, supervisorId)
     const normalizedDto = {
         ...dto,
         supervisorId,
@@ -134,6 +171,9 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     const existing = await getMeetingById(id)
     if (dto.leaderId !== undefined) await assertMeetingLeader(dto.leaderId)
     const supervisorId = await sectorSupervisorId(dto.sectorId ?? existing.sectorId)
+    if (dto.coSupervisorIds !== undefined) {
+        await assertMeetingCoSupervisors(dto.coSupervisorIds, supervisorId)
+    }
     const frequency = dto.frequency ?? existing.frequency
     const normalizedDto = {
         ...dto,
