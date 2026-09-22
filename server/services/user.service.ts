@@ -101,6 +101,7 @@ export async function getUserCatalog() {
             fullName: [member.firstName, member.middleName, member.lastName, member.secondLastName]
                 .filter(Boolean)
                 .join(' '),
+            documentNumber: member.documentNumber,
             email: member.email,
             phone: member.phone,
             communityRoles: member.communityRoles.map(({ role }) => role.name),
