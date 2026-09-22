@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { Download, KeyRound, Mail, ShieldCheck, Smartphone } from '@lucide/vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import SecurityCodeInput from '~/presentation/shared/components/SecurityCodeInput.vue'
+import TerritoryAssignment from '~/presentation/shared/components/TerritoryAssignment.vue'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import {
     useConfirmEmailSetupMutation,
@@ -245,6 +246,12 @@ async function disableFactor() {
                 {{ successMessage }}
             </div>
         </div>
+
+        <TerritoryAssignment
+            class="mt-5"
+            variant="card"
+            :territory="authStore.user?.territoryAssignment"
+        />
 
         <UiCard v-if="loading" class="mt-5 p-5 text-sm text-on-surface-variant">
             Cargando seguridad de la cuenta…
