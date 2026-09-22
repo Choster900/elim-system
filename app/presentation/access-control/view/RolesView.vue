@@ -25,8 +25,14 @@ import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import RoleFormDrawer from '../components/RoleFormDrawer.vue'
-import { useAccessControlPreview } from '../composables/useAccessControlPreview'
+import { usePermissionsQuery } from '../composables/usePermissionsQuery'
+import {
+    useCreateRoleMutation,
+    useRolesQuery,
+    useUpdateRoleMutation,
+} from '../composables/useRolesQuery'
 import { accessStatusOptions, getAccessStatusLabel } from '../constants/access-control.constants'
 import type {
     AccessRecordStatus,
@@ -39,7 +45,12 @@ defineOptions({ name: 'RolesView' })
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const toast = useAppToast()
-const { roles, permissions } = useAccessControlPreview()
+const rolesQuery = useRolesQuery()
+const permissionsQuery = usePermissionsQuery()
+const createRoleMutation = useCreateRoleMutation()
+const updateRoleMutation = useUpdateRoleMutation()
+const roles = computed(() => rolesQuery.data.value ?? [])
+const permissions = computed(() => permissionsQuery.data.value ?? [])
 const formOpen = ref(false)
 const editingRole = ref<AccessRole | null>(null)
 
@@ -123,51 +134,23 @@ function openEdit(role: AccessRole) {
     formOpen.value = true
 }
 
-function saveRole(payload: RoleFormPayload) {
-    const duplicatedCode = roles.value.some(
-        (role) => role.code === payload.code && role.id !== editingRole.value?.id,
-    )
-    if (duplicatedCode) {
-        toast.error('Ya existe un rol con ese código')
-        return
+async function saveRole(payload: RoleFormPayload) {
+    try {
+        if (editingRole.value) {
+            await updateRoleMutation.mutateAsync({ id: editingRole.value.id, payload })
+            toast.success('Rol actualizado correctamente')
+        } else {
+            await createRoleMutation.mutateAsync(payload)
+            toast.success('Rol creado correctamente')
+        }
+        formOpen.value = false
+        editingRole.value = null
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar el rol'))
     }
-
-    if (editingRole.value) {
-        roles.value = roles.value.map((role) =>
-            role.id === editingRole.value?.id
-                ? {
-                      ...role,
-                      name: role.isSystem ? role.name : payload.name,
-                      code: role.isSystem ? role.code : payload.code,
-                      description: payload.description,
-                      status: role.isSystem ? role.status : payload.status,
-                      permissionIds: [...payload.permissionIds],
-                      updatedAt: new Date().toISOString(),
-                  }
-                : role,
-        )
-        toast.success('Rol actualizado en esta vista previa')
-    } else {
-        const nextId = Math.max(0, ...roles.value.map((role) => role.id)) + 1
-        roles.value = [
-            {
-                id: nextId,
-                ...payload,
-                isSystem: false,
-                userCount: 0,
-                updatedAt: new Date().toISOString(),
-            },
-            ...roles.value,
-        ]
-        toast.success('Rol creado en esta vista previa')
-    }
-
-    formOpen.value = false
-    editingRole.value = null
 }
 
-function duplicateRole(role: AccessRole) {
-    const nextId = Math.max(0, ...roles.value.map((item) => item.id)) + 1
+async function duplicateRole(role: AccessRole) {
     const baseCode = `${role.code}_COPY`
     let code = baseCode
     let suffix = 2
@@ -175,33 +158,42 @@ function duplicateRole(role: AccessRole) {
         code = `${baseCode}_${suffix}`
         suffix += 1
     }
-    const duplicate: AccessRole = {
-        ...role,
-        id: nextId,
-        name: `${role.name} (copia)`,
-        code,
-        isSystem: false,
-        userCount: 0,
-        permissionIds: [...role.permissionIds],
-        updatedAt: new Date().toISOString(),
+    try {
+        const duplicate = await createRoleMutation.mutateAsync({
+            name: `${role.name} (copia)`,
+            code,
+            description: role.description,
+            status: 'ACTIVE',
+            permissionIds: [...role.permissionIds],
+        })
+        toast.success('Rol duplicado correctamente')
+        openEdit(duplicate)
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible duplicar el rol'))
     }
-    roles.value = [duplicate, ...roles.value]
-    toast.success('Rol duplicado; ya puedes personalizarlo')
-    openEdit(duplicate)
 }
 
-function toggleStatus(role: AccessRole) {
+async function toggleStatus(role: AccessRole) {
     if (role.isSystem) {
         toast.error('Los roles protegidos no pueden desactivarse')
         return
     }
-    const nextStatus: AccessRecordStatus = role.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-    roles.value = roles.value.map((item) =>
-        item.id === role.id
-            ? { ...item, status: nextStatus, updatedAt: new Date().toISOString() }
-            : item,
-    )
-    toast.success(nextStatus === 'ACTIVE' ? 'Rol habilitado' : 'Rol desactivado')
+    const status: AccessRecordStatus = role.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    try {
+        await updateRoleMutation.mutateAsync({
+            id: role.id,
+            payload: {
+                name: role.name,
+                code: role.code,
+                description: role.description,
+                status,
+                permissionIds: role.permissionIds,
+            },
+        })
+        toast.success(status === 'ACTIVE' ? 'Rol habilitado' : 'Rol desactivado')
+    } catch (error) {
+        toast.error(resolveHttpErrorMessage(error, 'No fue posible actualizar el rol'))
+    }
 }
 </script>
 
@@ -237,8 +229,8 @@ function toggleStatus(role: AccessRole) {
         >
             <ShieldCheck class="mt-0.5 size-4 shrink-0 text-primary" />
             <p>
-                Vista visual sin conexión al backend. Los roles protegidos conservan su identidad,
-                pero puedes explorar cómo se administrarían sus permisos.
+                Los cambios se guardan de inmediato. Los roles protegidos conservan su nombre y
+                código, pero sus permisos se pueden administrar.
             </p>
         </div>
 
@@ -299,6 +291,7 @@ function toggleStatus(role: AccessRole) {
                 :columns="columns"
                 row-key="id"
                 :page-size="10"
+                :loading="rolesQuery.isPending.value"
                 show-search
                 search-placeholder="Buscar por nombre, código o descripción…"
                 empty-title="Sin roles"
