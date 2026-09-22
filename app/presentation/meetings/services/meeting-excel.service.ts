@@ -50,7 +50,7 @@ export interface MeetingImportCatalogs {
     meetingTypes: MeetingTypeOption[]
     sectors: SectorOption[]
     leaders: MemberOption[]
-    members: MemberOption[]
+    supervisors: MemberOption[]
 }
 
 export interface MeetingWorkbookImportRow {
@@ -338,11 +338,11 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
             [24, 46, 18],
         ),
         catalogSheet(
-            'Miembros',
-            'Miembros para co-supervisión',
+            'Supervisores',
+            'Supervisores disponibles para co-supervisión',
             'Puedes copiar varios códigos y separarlos por punto y coma.',
             ['Código', 'Nombre', 'Estado'],
-            catalogs.members.map((member) => [member.code, member.fullName, member.status]),
+            catalogs.supervisors.map((member) => [member.code, member.fullName, member.status]),
             [24, 46, 18],
         ),
         catalogSheet(
@@ -814,7 +814,7 @@ export async function parseMeetingsWorkbook(
             supervisorId: sector?.supervisorId ?? 0,
             coSupervisorIds: resolveCoSupervisors(
                 value(row, 'Co-supervisores'),
-                catalogs.members,
+                catalogs.supervisors,
                 sector?.supervisorId ?? null,
                 issues,
             ),
