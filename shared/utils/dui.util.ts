@@ -16,9 +16,13 @@ export function normalizeDui(value: string) {
     return /^\d{9}$/.test(digits) ? formatDigits(digits) : trimmed
 }
 
+export function hasDuiFormat(value: string) {
+    return DUI_PATTERN.test(normalizeDui(value))
+}
+
 export function isValidDui(value: string) {
     const normalized = normalizeDui(value)
-    if (!DUI_PATTERN.test(normalized)) return false
+    if (!hasDuiFormat(normalized)) return false
 
     const digits = normalized.replace('-', '')
     if (/^0{9}$/.test(digits)) return false
