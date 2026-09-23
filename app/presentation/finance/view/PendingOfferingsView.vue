@@ -29,8 +29,8 @@ const pendingQuery = usePendingOccurrencesQuery({ autoRefresh: true })
 
 const canRecord = computed(() => authStore.hasPermission(routePermissionCodes.financeRecord))
 
-const selectedZone = ref<string>('')
-const selectedSector = ref<string>('')
+const selectedZone = ref<number | null>(null)
+const selectedSector = ref<number | null>(null)
 
 const MS_PER_DAY = 86_400_000
 
@@ -44,26 +44,28 @@ function daysSince(isoDate: string) {
 const occurrences = computed(() => pendingQuery.data.value ?? [])
 
 const zoneOptions = computed(() =>
-    [...new Set(occurrences.value.map((item) => item.zoneName))].sort((a, b) =>
-        a.localeCompare(b, 'es'),
-    ),
+    [...new Map(occurrences.value.map((item) => [item.zoneId, item.zoneName]))]
+        .map(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es')),
 )
 
 const sectorOptions = computed(() =>
     [
-        ...new Set(
+        ...new Map(
             occurrences.value
-                .filter((item) => !selectedZone.value || item.zoneName === selectedZone.value)
-                .map((item) => item.sectorName),
+                .filter((item) => !selectedZone.value || item.zoneId === selectedZone.value)
+                .map((item) => [item.sectorId, item.sectorName]),
         ),
-    ].sort((a, b) => a.localeCompare(b, 'es')),
+    ]
+        .map(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es')),
 )
 
 const filtered = computed(() =>
     occurrences.value.filter(
         (item) =>
-            (!selectedZone.value || item.zoneName === selectedZone.value) &&
-            (!selectedSector.value || item.sectorName === selectedSector.value),
+            (!selectedZone.value || item.zoneId === selectedZone.value) &&
+            (!selectedSector.value || item.sectorId === selectedSector.value),
     ),
 )
 
@@ -125,11 +127,8 @@ function openCapture(group: PendingGroup) {
 }
 
 watch(selectedZone, () => {
-    selectedSector.value = ''
+    selectedSector.value = null
 })
-
-const selectClass =
-    'rounded border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface outline-none focus:border-primary'
 </script>
 
 <template>
@@ -137,7 +136,7 @@ const selectClass =
         <section
             class="flex flex-col gap-6 border-b border-outline-variant pb-10 md:flex-row md:items-end md:justify-between"
         >
-            <div>
+            <div class="w-full sm:w-72">
                 <p class="text-xs font-semibold uppercase tracking-[0.4em] text-on-surface-variant">
                     Finanzas · Ofrendas
                 </p>
@@ -213,19 +212,21 @@ const selectClass =
             v-if="!personalScope && zoneOptions.length > 1"
             class="mt-8 flex flex-wrap items-end gap-3"
         >
-            <div>
+            <div class="w-full sm:w-72">
                 <label
                     class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                     for="filtro-zona"
                 >
                     Zona
                 </label>
-                <select id="filtro-zona" v-model="selectedZone" :class="selectClass">
-                    <option value="">Todas</option>
-                    <option v-for="zone in zoneOptions" :key="zone" :value="zone">
-                        {{ zone }}
-                    </option>
-                </select>
+                <UiSearchSelect
+                    id="filtro-zona"
+                    v-model="selectedZone"
+                    :options="zoneOptions"
+                    clearable
+                    placeholder="Todas las zonas"
+                    search-placeholder="Buscar zona..."
+                />
             </div>
             <div>
                 <label
@@ -234,12 +235,15 @@ const selectClass =
                 >
                     Sector
                 </label>
-                <select id="filtro-sector" v-model="selectedSector" :class="selectClass">
-                    <option value="">Todos</option>
-                    <option v-for="sector in sectorOptions" :key="sector" :value="sector">
-                        {{ sector }}
-                    </option>
-                </select>
+                <UiSearchSelect
+                    id="filtro-sector"
+                    v-model="selectedSector"
+                    :options="sectorOptions"
+                    clearable
+                    :disabled="sectorOptions.length === 0"
+                    placeholder="Todos los sectores"
+                    search-placeholder="Buscar sector..."
+                />
             </div>
         </section>
 
