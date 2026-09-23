@@ -228,7 +228,7 @@ watch(selectedZone, () => {
                     search-placeholder="Buscar zona..."
                 />
             </div>
-            <div>
+            <div class="w-full sm:w-72">
                 <label
                     class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                     for="filtro-sector"
