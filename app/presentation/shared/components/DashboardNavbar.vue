@@ -24,6 +24,7 @@ type DashboardMenuItem = {
 }
 
 const isOpen = ref(false)
+const route = useRoute()
 const toast = useAppToast()
 const logoutMutation = useLogoutMutation()
 const authStore = useAuthStore()
@@ -180,6 +181,16 @@ function filterMenuItem(item: DashboardMenuItem): DashboardMenuItem | null {
 const visibleNavItems = computed(() =>
     navItems.map(filterMenuItem).filter((item): item is DashboardMenuItem => item !== null),
 )
+
+function routeMatches(href?: string) {
+    if (!href || href === PLACEHOLDER_HREF) return false
+    const path = href.split('?')[0]!
+    return route.path === path || (path !== '/dashboard' && route.path.startsWith(`${path}/`))
+}
+
+function isActiveModule(item: DashboardMenuItem): boolean {
+    return routeMatches(item.href) || item.children?.some(isActiveModule) === true
+}
 </script>
 
 <template>
@@ -195,7 +206,7 @@ const visibleNavItems = computed(() =>
                             :to="item.href"
                             :class="[
                                 'text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface',
-                                item.label === 'Panel'
+                                isActiveModule(item)
                                     ? 'border-b-2 border-primary pb-1 text-primary'
                                     : '',
                             ]"
@@ -206,7 +217,12 @@ const visibleNavItems = computed(() =>
                         <button
                             v-else
                             type="button"
-                            class="flex items-center gap-1 text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface"
+                            :class="[
+                                'flex items-center gap-1 border-b-2 pb-1 text-sm font-medium transition-colors',
+                                isActiveModule(item)
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-on-surface-variant hover:text-on-surface',
+                            ]"
                         >
                             {{ item.label }}
                             <ChevronDown class="size-4" />
@@ -220,7 +236,12 @@ const visibleNavItems = computed(() =>
                                 <NuxtLink
                                     v-if="child.href"
                                     :to="child.href"
-                                    class="block px-4 py-3 text-xs font-semibold uppercase text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary"
+                                    :class="[
+                                        'block px-4 py-3 text-xs font-semibold uppercase transition-colors hover:bg-surface-container-high hover:text-primary',
+                                        isActiveModule(child)
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'text-on-surface-variant',
+                                    ]"
                                 >
                                     {{ child.label }}
                                 </NuxtLink>
@@ -366,13 +387,21 @@ const visibleNavItems = computed(() =>
                     <NuxtLink
                         v-if="item.href"
                         :to="item.href"
-                        class="text-sm font-semibold uppercase text-primary"
+                        :class="[
+                            'text-sm font-semibold uppercase',
+                            isActiveModule(item) ? 'text-primary' : 'text-on-surface-variant',
+                        ]"
                         @click="isOpen = false"
                     >
                         {{ item.label }}
                     </NuxtLink>
                     <div v-else class="space-y-2">
-                        <p class="text-sm font-semibold uppercase text-on-surface">
+                        <p
+                            :class="[
+                                'text-sm font-semibold uppercase',
+                                isActiveModule(item) ? 'text-primary' : 'text-on-surface',
+                            ]"
+                        >
                             {{ item.label }}
                         </p>
                         <div class="grid gap-2 pl-4">
@@ -380,7 +409,12 @@ const visibleNavItems = computed(() =>
                                 v-for="child in item.children"
                                 :key="child.label"
                                 :to="child.href ?? '#'"
-                                class="text-sm text-on-surface-variant"
+                                :class="[
+                                    'text-sm',
+                                    isActiveModule(child)
+                                        ? 'text-primary'
+                                        : 'text-on-surface-variant',
+                                ]"
                                 @click="isOpen = false"
                             >
                                 {{ child.label }}
