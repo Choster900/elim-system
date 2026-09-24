@@ -5,12 +5,17 @@ import {
     CheckCircle2,
     ChevronDown,
     ClipboardList,
+    Eye,
     History,
 } from '@lucide/vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+import MeetingDetailDrawer from '~/presentation/meetings/components/MeetingDetailDrawer.vue'
 import { formatShortIsoDate } from '~/utils/date/date-format.util'
-import { usePendingOccurrencesQuery } from '../composables/useOccurrenceQueries'
+import {
+    usePendingMeetingDetailQuery,
+    usePendingOccurrencesQuery,
+} from '../composables/useOccurrenceQueries'
 import type { OccurrenceRecord, PendingGroup } from '../interfaces/occurrence.interface'
 
 defineOptions({ name: 'PendingOfferingsView' })
@@ -31,6 +36,8 @@ const canRecord = computed(() => authStore.hasPermission(routePermissionCodes.fi
 
 const selectedZone = ref<number | null>(null)
 const selectedSector = ref<number | null>(null)
+const detailMeetingId = ref<number | null>(null)
+const meetingDetailQuery = usePendingMeetingDetailQuery(detailMeetingId)
 
 const MS_PER_DAY = 86_400_000
 
@@ -124,6 +131,14 @@ function behindLabel(daysBehind: number) {
 
 function openCapture(group: PendingGroup) {
     return navigateTo(`/finanzas/ofrendas/registrar/${group.meetingId}`)
+}
+
+function openMeetingDetail(group: PendingGroup) {
+    detailMeetingId.value = group.meetingId
+}
+
+function closeMeetingDetail() {
+    detailMeetingId.value = null
 }
 
 watch(selectedZone, () => {
@@ -331,14 +346,25 @@ watch(selectedZone, () => {
                                     la más antigua
                                 </p>
                             </div>
-                            <UiButton
-                                v-if="canRecord"
-                                type="button"
-                                class="h-10 rounded px-4 text-xs uppercase tracking-wider"
-                                @click="openCapture(group)"
-                            >
-                                Registrar
-                            </UiButton>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    class="flex size-10 items-center justify-center rounded border border-outline-variant text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                                    :aria-label="`Ver detalle de ${group.meetingTitle}`"
+                                    :title="`Ver detalle de ${group.meetingTitle}`"
+                                    @click="openMeetingDetail(group)"
+                                >
+                                    <Eye class="size-4" />
+                                </button>
+                                <UiButton
+                                    v-if="canRecord"
+                                    type="button"
+                                    class="h-10 rounded px-4 text-xs uppercase tracking-wider"
+                                    @click="openCapture(group)"
+                                >
+                                    Registrar
+                                </UiButton>
+                            </div>
                         </div>
                     </div>
 
@@ -364,5 +390,17 @@ watch(selectedZone, () => {
                 </article>
             </div>
         </section>
+
+        <MeetingDetailDrawer
+            :open="detailMeetingId !== null"
+            :meeting="meetingDetailQuery.data.value ?? null"
+            :loading="meetingDetailQuery.isPending.value"
+            :error="
+                meetingDetailQuery.error.value
+                    ? 'No fue posible cargar el detalle de la reunión.'
+                    : ''
+            "
+            @close="closeMeetingDetail"
+        />
     </main>
 </template>
