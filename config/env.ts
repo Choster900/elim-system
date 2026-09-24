@@ -8,6 +8,8 @@ export interface AppEnv {
     JWT_SECRET: string
     PORT?: number
     NUXT_PUBLIC_APP_NAME: string
+    NUXT_PUBLIC_GOOGLE_MAPS_API_KEY: string
+    NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID: string
     NODE_ENV: 'development' | 'production' | 'test'
     APP_BASE_URL: string
     SMTP_HOST: string
@@ -33,6 +35,10 @@ const envSchema = Joi.object<AppEnv>({
     JWT_SECRET: Joi.string().min(32).required(),
     PORT: Joi.number().integer().min(1).max(65535).optional(),
     NUXT_PUBLIC_APP_NAME: Joi.string().min(1).required(),
+    // Es pública porque el navegador carga Maps JavaScript API. La seguridad
+    // depende de restringirla por dominio y por API en Google Cloud.
+    NUXT_PUBLIC_GOOGLE_MAPS_API_KEY: Joi.string().allow('').default(''),
+    NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID: Joi.string().allow('').default(''),
     NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
     APP_BASE_URL: Joi.string().uri().default('http://127.0.0.1:3000'),
     SMTP_HOST: Joi.string().min(1).default('127.0.0.1'),
