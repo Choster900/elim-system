@@ -9,7 +9,7 @@ export default [
         meta: {
             layout: 'dashboard',
             requiresAuth: true,
-            requiredPermission: routePermissionCodes.financeView,
+            requiredPermission: routePermissionCodes.financeRecord,
         },
     },
     {
@@ -44,10 +44,10 @@ export default [
         },
     },
     {
-        // Vista del líder: sus reuniones y nada más.
+        // Se conserva para enlaces compartidos y marcadores anteriores.
         name: 'my-meetings',
         path: '/finanzas/ofrendas/mis-reuniones',
-        component: () => import('~/presentation/finance/view/MyMeetingsView.vue'),
+        redirect: '/finanzas/ofrendas',
         meta: {
             layout: 'dashboard',
             requiresAuth: true,
