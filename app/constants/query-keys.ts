@@ -30,6 +30,7 @@ const territories = {
 const occurrences = {
     all: ['occurrences'] as const,
     pending: ['occurrences', 'pending'] as const,
+    pendingMeeting: (id: number) => ['occurrences', 'pending-meeting', id] as const,
     lists: ['occurrences', 'list'] as const,
     list: <TFilters extends object>(filters: TFilters) => ['occurrences', 'list', filters] as const,
     detail: (id: number) => ['occurrences', 'detail', id] as const,
