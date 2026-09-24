@@ -8,6 +8,7 @@ import type {
     OfferingCategoryOption,
     RecordOccurrenceInput,
 } from '../interfaces/occurrence.interface'
+import type { MeetingRecord } from '~/presentation/meetings/interfaces/meeting.interface'
 
 function responseData<T>(response: ApiResponse<T>, fallbackMessage: string): T {
     if (!response.success || response.data === null || response.data === undefined) {
@@ -24,6 +25,17 @@ export async function getPendingOccurrences(
         signal,
     })
     return responseData(response.data, 'No fue posible cargar los pendientes')
+}
+
+export async function getPendingMeetingDetail(
+    apiClient: AxiosInstance,
+    id: number,
+    signal?: AbortSignal,
+): Promise<MeetingRecord> {
+    const response = await apiClient.get<ApiResponse<MeetingRecord>>(`/offerings/meetings/${id}`, {
+        signal,
+    })
+    return responseData(response.data, 'No fue posible cargar el detalle de la reunión')
 }
 
 export async function getOccurrences(
