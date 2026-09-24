@@ -177,6 +177,12 @@ const formParentLabel = ref<string | null>(null)
 let formEditId: string | null = null
 let formParentDistrictId: string | null = null
 let formParentZoneId: string | null = null
+const supervisorConflict = ref<{
+    supervisorName: string
+    sectorName: string
+    districtName: string
+} | null>(null)
+const pendingTerritorySave = ref<TerritoryInput | null>(null)
 
 // Assign-meeting drawer
 const assignOpen = ref(false)
@@ -1082,13 +1088,44 @@ function openEdit(level: EntityLevel, id: string) {
     formMode.value = 'edit'
     formLevel.value = level
     formEditId = id
+    formParentDistrictId = level === 'zona' ? (entity as Zone).districtId : null
+    formParentZoneId = level === 'sector' ? (entity as TerritorySector).zoneId : null
     formEntity.value = toEntityInput(entity)
     formParentCentroid.value = centroid(entity.polygon)
     formParentLabel.value = parentLabel
     formOpen.value = true
 }
 
-async function onFormSave(payload: TerritoryInput) {
+function findSupervisorDistrictConflict(payload: TerritoryInput) {
+    if (formLevel.value !== 'sector' || !payload.supervisorId || !formParentZoneId) return null
+
+    const targetZone = zones.value.find((zone) => zone.id === formParentZoneId)
+    const targetDistrict = targetZone
+        ? districts.value.find((district) => district.id === targetZone.districtId)
+        : null
+    if (!targetDistrict) return null
+
+    const assignedSector = sectors.value.find((sector) => {
+        if (sector.supervisorId !== payload.supervisorId || sector.id === formEditId) return false
+        const sectorZone = zones.value.find((zone) => zone.id === sector.zoneId)
+        return sectorZone?.districtId !== targetDistrict.id
+    })
+    if (!assignedSector) return null
+
+    const assignedZone = zones.value.find((zone) => zone.id === assignedSector.zoneId)
+    const assignedDistrict = assignedZone
+        ? districts.value.find((district) => district.id === assignedZone.districtId)
+        : null
+    const supervisor = supervisors.value.find((item) => item.id === payload.supervisorId)
+
+    return {
+        supervisorName: supervisor?.fullName ?? assignedSector.supervisorName,
+        sectorName: assignedSector.name,
+        districtName: assignedDistrict?.name ?? 'otro distrito',
+    }
+}
+
+async function persistTerritory(payload: TerritoryInput) {
     const level = formLevel.value
     if (!canManage.value) return
 
@@ -1137,6 +1174,27 @@ async function onFormSave(payload: TerritoryInput) {
             ),
         )
     }
+}
+
+function onFormSave(payload: TerritoryInput) {
+    const conflict = findSupervisorDistrictConflict(payload)
+    if (conflict) {
+        pendingTerritorySave.value = payload
+        supervisorConflict.value = conflict
+        return
+    }
+    void persistTerritory(payload)
+}
+
+function cancelSupervisorConflict() {
+    pendingTerritorySave.value = null
+    supervisorConflict.value = null
+}
+
+function confirmSupervisorConflict() {
+    const payload = pendingTerritorySave.value
+    cancelSupervisorConflict()
+    if (payload) void persistTerritory(payload)
 }
 
 // ===== assign meetings =====
@@ -2049,6 +2107,52 @@ onBeforeUnmount(() => {
             @retry-leaders="leadersQuery.refetch()"
             @retry-supervisors="supervisorsQuery.refetch()"
         />
+
+        <DialogRoot
+            :open="!!supervisorConflict"
+            @update:open="(open) => !open && cancelSupervisorConflict()"
+        >
+            <DialogPortal>
+                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
+                <DialogContent
+                    class="fixed left-1/2 top-1/2 z-[71] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-warning/40 bg-surface-container p-6 shadow-2xl outline-none"
+                >
+                    <div class="flex gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning"
+                        >
+                            <AlertTriangle class="size-5" />
+                        </div>
+                        <div>
+                            <DialogTitle class="font-display text-lg font-semibold text-on-surface">
+                                Supervisor asignado en otro distrito
+                            </DialogTitle>
+                            <DialogDescription
+                                class="mt-2 text-sm leading-6 text-on-surface-variant"
+                            >
+                                {{ supervisorConflict?.supervisorName }} ya supervisa el sector
+                                <strong class="font-semibold text-on-surface">{{
+                                    supervisorConflict?.sectorName
+                                }}</strong>
+                                en
+                                <strong class="font-semibold text-on-surface">{{
+                                    supervisorConflict?.districtName
+                                }}</strong
+                                >. Puedes mantener esta asignación si también cubrirá este sector.
+                            </DialogDescription>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex flex-wrap justify-end gap-3">
+                        <UiButton variant="outline" @click="cancelSupervisorConflict">
+                            Revisar selección
+                        </UiButton>
+                        <UiButton :loading="hierarchySaving" @click="confirmSupervisorConflict">
+                            Guardar de todas formas
+                        </UiButton>
+                    </div>
+                </DialogContent>
+            </DialogPortal>
+        </DialogRoot>
 
         <!-- Assign existing catalog meetings to the selected sector -->
         <AssignMeetingDrawer
