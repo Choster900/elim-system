@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
     ArrowLeft,
+    AlertTriangle,
     CalendarDays,
     Check,
     Info,
@@ -13,6 +14,14 @@ import {
     Trash2,
     Users,
 } from '@lucide/vue'
+import {
+    DialogContent,
+    DialogDescription,
+    DialogOverlay,
+    DialogPortal,
+    DialogRoot,
+    DialogTitle,
+} from 'radix-vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
     useMeetingLeadersQuery,
@@ -25,6 +34,7 @@ import {
     useUpdateMeetingMutation,
 } from '~/presentation/meetings/composables/useMeetingMutations'
 import { useMeetingQuery } from '~/presentation/meetings/composables/useMeetingQuery'
+import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
 import {
     frequencyOptions,
     meetingColorPalette,
@@ -35,6 +45,7 @@ import {
 import type {
     MeetingFrequency,
     MeetingInput,
+    MeetingRecord,
     MonthlyMode,
 } from '~/presentation/meetings/interfaces/meeting.interface'
 import { formatMeetingRecurrence } from '~/presentation/meetings/utils/meeting-format.util'
@@ -59,6 +70,7 @@ useHead({
 })
 
 const meetingQuery = useMeetingQuery(meetingId)
+const meetingsQuery = useMeetingsQuery()
 const meetingTypesQuery = useMeetingTypesQuery()
 const sectorsQuery = useMeetingSectorsQuery()
 const leadersQuery = useMeetingLeadersQuery()
@@ -70,12 +82,14 @@ const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
 const supervisors = computed(() => supervisorsQuery.data.value ?? [])
+const existingMeetings = computed(() => meetingsQuery.data.value ?? [])
 const isLoading = computed(
     () =>
         meetingTypesQuery.isPending.value ||
         sectorsQuery.isPending.value ||
         leadersQuery.isPending.value ||
         supervisorsQuery.isPending.value ||
+        meetingsQuery.isPending.value ||
         (isEditing.value && meetingQuery.isPending.value),
 )
 const loadError = computed(
@@ -95,6 +109,7 @@ if (import.meta.server) {
             sectorsQuery.suspense(),
             leadersQuery.suspense(),
             supervisorsQuery.suspense(),
+            meetingsQuery.suspense(),
             ...(isEditing.value ? [meetingQuery.suspense()] : []),
         ]),
     )
@@ -526,6 +541,85 @@ function validateForm() {
 const isSaving = computed(
     () => createMeetingMutation.isPending.value || updateMeetingMutation.isPending.value,
 )
+const leaderScheduleConflict = ref<MeetingRecord | null>(null)
+
+type MeetingSchedule = Pick<
+    MeetingRecord,
+    | 'date'
+    | 'recurrenceEndDate'
+    | 'startTime'
+    | 'endTime'
+    | 'frequency'
+    | 'monthlyMode'
+    | 'weekOrdinal'
+    | 'weekday'
+>
+
+function dateFromIso(value: string) {
+    return new Date(`${value}T00:00:00Z`)
+}
+
+function isoDate(value: Date) {
+    return value.toISOString().slice(0, 10)
+}
+
+function addDays(value: Date, days: number) {
+    const copy = new Date(value)
+    copy.setUTCDate(copy.getUTCDate() + days)
+    return copy
+}
+
+function minutesOf(time: string) {
+    const [hours = '0', minutes = '0'] = time.split(':')
+    return Number(hours) * 60 + Number(minutes)
+}
+
+function timeRangesOverlap(first: MeetingSchedule, second: MeetingSchedule) {
+    return (
+        minutesOf(first.startTime) < minutesOf(second.endTime) &&
+        minutesOf(second.startTime) < minutesOf(first.endTime)
+    )
+}
+
+function occursOn(schedule: MeetingSchedule, date: Date) {
+    const occurrence = isoDate(date)
+    if (
+        occurrence < schedule.date ||
+        (schedule.recurrenceEndDate && occurrence > schedule.recurrenceEndDate)
+    ) {
+        return false
+    }
+
+    const start = dateFromIso(schedule.date)
+    const daysSinceStart = Math.floor((date.getTime() - start.getTime()) / 86_400_000)
+    if (schedule.frequency === 'unica') return daysSinceStart === 0
+    if (schedule.frequency === 'diaria') return true
+    if (schedule.frequency === 'semanal') return daysSinceStart % 7 === 0
+    if (schedule.frequency === 'quincenal') return daysSinceStart % 14 === 0
+
+    if (schedule.monthlyMode !== 'ordinal') return date.getUTCDate() === start.getUTCDate()
+
+    const weekday = schedule.weekday ?? start.getUTCDay()
+    const ordinal = schedule.weekOrdinal ?? 1
+    return date.getUTCDay() === weekday && Math.ceil(date.getUTCDate() / 7) === ordinal
+}
+
+function schedulesOverlap(first: MeetingSchedule, second: MeetingSchedule) {
+    if (!timeRangesOverlap(first, second)) return false
+
+    const firstStart = dateFromIso(first.date)
+    const secondStart = dateFromIso(second.date)
+    const start = firstStart > secondStart ? firstStart : secondStart
+    const fallbackEnd = addDays(start, 730)
+    const firstEnd = first.recurrenceEndDate ? dateFromIso(first.recurrenceEndDate) : fallbackEnd
+    const secondEnd = second.recurrenceEndDate ? dateFromIso(second.recurrenceEndDate) : fallbackEnd
+    const end = firstEnd < secondEnd ? firstEnd : secondEnd
+
+    for (let date = start; date <= end; date = addDays(date, 1)) {
+        if (occursOn(first, date) && occursOn(second, date)) return true
+    }
+    return false
+}
 
 function buildInput(): MeetingInput {
     return {
@@ -560,12 +654,19 @@ function buildInput(): MeetingInput {
     }
 }
 
-async function saveMeeting() {
-    if (!validateForm()) {
-        toast.error('Revisa los campos marcados en rojo')
-        return
-    }
+function findLeaderScheduleConflict(input: MeetingInput) {
+    return (
+        existingMeetings.value.find(
+            (meeting) =>
+                meeting.isActive &&
+                meeting.leaderId === input.leaderId &&
+                meeting.id !== meetingId.value &&
+                schedulesOverlap(meeting, input),
+        ) ?? null
+    )
+}
 
+async function persistMeeting() {
     try {
         if (isEditing.value && meetingId.value !== null) {
             await updateMeetingMutation.mutateAsync({
@@ -581,6 +682,29 @@ async function saveMeeting() {
     } catch (error) {
         toast.error(resolveHttpErrorMessage(error, 'No fue posible guardar la reunión'))
     }
+}
+
+async function saveMeeting() {
+    if (!validateForm()) {
+        toast.error('Revisa los campos marcados en rojo')
+        return
+    }
+
+    const conflict = findLeaderScheduleConflict(buildInput())
+    if (conflict) {
+        leaderScheduleConflict.value = conflict
+        return
+    }
+    await persistMeeting()
+}
+
+function cancelLeaderScheduleConflict() {
+    leaderScheduleConflict.value = null
+}
+
+function confirmLeaderScheduleConflict() {
+    cancelLeaderScheduleConflict()
+    void persistMeeting()
 }
 
 function cancel() {
@@ -1435,6 +1559,56 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                 </aside>
             </form>
         </main>
+
+        <DialogRoot
+            :open="!!leaderScheduleConflict"
+            @update:open="(open) => !open && cancelLeaderScheduleConflict()"
+        >
+            <DialogPortal>
+                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
+                <DialogContent
+                    class="fixed left-1/2 top-1/2 z-[71] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-warning/40 bg-surface-container p-6 shadow-2xl outline-none"
+                >
+                    <div class="flex gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning"
+                        >
+                            <AlertTriangle class="size-5" />
+                        </div>
+                        <div>
+                            <DialogTitle class="font-display text-lg font-semibold text-on-surface">
+                                Horario en conflicto
+                            </DialogTitle>
+                            <DialogDescription
+                                class="mt-2 text-sm leading-6 text-on-surface-variant"
+                            >
+                                Este líder ya está asignado a
+                                <strong class="font-semibold text-on-surface">{{
+                                    leaderScheduleConflict?.title
+                                }}</strong>
+                                en un horario que se traslapa con esta reunión. Puedes guardar de
+                                todas formas si otra persona cubrirá uno de los dos encuentros.
+                            </DialogDescription>
+                            <p
+                                class="mt-3 rounded-lg bg-surface-container-high px-3 py-2 text-xs text-on-surface-variant"
+                            >
+                                {{ leaderScheduleConflict?.date }} ·
+                                {{ leaderScheduleConflict?.startTime }} –
+                                {{ leaderScheduleConflict?.endTime }}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex flex-wrap justify-end gap-3">
+                        <UiButton variant="outline" @click="cancelLeaderScheduleConflict">
+                            Revisar programación
+                        </UiButton>
+                        <UiButton :loading="isSaving" @click="confirmLeaderScheduleConflict">
+                            Guardar de todas formas
+                        </UiButton>
+                    </div>
+                </DialogContent>
+            </DialogPortal>
+        </DialogRoot>
     </div>
 </template>
 
