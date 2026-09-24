@@ -8,6 +8,7 @@ import {
     getOccurrence,
     getOccurrences,
     getOfferingCategories,
+    getPendingMeetingDetail,
     getPendingOccurrences,
 } from '../services/occurrence.service'
 
@@ -19,6 +20,16 @@ export function usePendingOccurrencesQuery(options: { autoRefresh?: boolean } = 
         queryFn: ({ signal }) => getPendingOccurrences(apiClient, signal),
         refetchInterval: options.autoRefresh ? 60_000 : false,
         refetchOnWindowFocus: options.autoRefresh ?? false,
+    })
+}
+
+export function usePendingMeetingDetailQuery(id: Ref<number | null>) {
+    const apiClient = useApiClient()
+
+    return useQuery({
+        queryKey: computed(() => queryKeys.occurrences.pendingMeeting(id.value ?? 0)),
+        queryFn: ({ signal }) => getPendingMeetingDetail(apiClient, id.value!, signal),
+        enabled: computed(() => id.value !== null),
     })
 }
 
