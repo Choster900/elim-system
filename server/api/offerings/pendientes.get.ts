@@ -6,7 +6,7 @@ import { handleApiError } from '../../utils/http/error-handler.util'
 
 export default defineEventHandler(async (event) => {
     try {
-        const auth = requirePermission(event, 'finance.view')
+        const auth = requirePermission(event, 'finance.record')
         const scope = await resolveOccurrenceScope(auth)
         const data = await getPendingOccurrences(scope)
         return ApiResponseFactory.success(data, 'Pendientes obtenidos correctamente')
