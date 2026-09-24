@@ -107,7 +107,7 @@ const navItems: DashboardMenuItem[] = [
             },
             {
                 label: 'Mis reuniones',
-                href: '/finanzas/mis-reuniones',
+                href: '/finanzas/ofrendas/mis-reuniones',
                 requiredPermission: routePermissionCodes.financeRecord,
             },
             {

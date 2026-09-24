@@ -8,7 +8,7 @@ interface AccessibleRoute {
 const accessibleRoutes: AccessibleRoute[] = [
     { path: '/dashboard', permission: routePermissionCodes.dashboard },
     { path: '/finanzas/ofrendas', permission: routePermissionCodes.financeView },
-    { path: '/finanzas/mis-reuniones', permission: routePermissionCodes.financeRecord },
+    { path: '/finanzas/ofrendas/mis-reuniones', permission: routePermissionCodes.financeRecord },
     { path: '/catalogos/reuniones', permission: routePermissionCodes.meetingsView },
     { path: '/comunidad/miembros', permission: routePermissionCodes.membersView },
     { path: '/territorios', permission: routePermissionCodes.territoriesView },

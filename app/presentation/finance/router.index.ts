@@ -46,7 +46,7 @@ export default [
     {
         // Vista del líder: sus reuniones y nada más.
         name: 'my-meetings',
-        path: '/finanzas/mis-reuniones',
+        path: '/finanzas/ofrendas/mis-reuniones',
         component: () => import('~/presentation/finance/view/MyMeetingsView.vue'),
         meta: {
             layout: 'dashboard',
