@@ -103,11 +103,6 @@ const navItems: DashboardMenuItem[] = [
             {
                 label: 'Pendientes de registro',
                 href: '/finanzas/ofrendas',
-                requiredPermission: routePermissionCodes.financeView,
-            },
-            {
-                label: 'Mis reuniones',
-                href: '/finanzas/ofrendas/mis-reuniones',
                 requiredPermission: routePermissionCodes.financeRecord,
             },
             {
