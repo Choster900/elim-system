@@ -1,34 +1,51 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Project Structure & Architecture
 
-This is a Nuxt 4 full-stack TypeScript application. Frontend code lives in `app/`: feature modules are grouped under `app/presentation/<feature>/`, reusable UI primitives are in `app/components/ui/`, shared presentation code is in `app/presentation/shared/`, and global styles and images are under `app/assets/`. Routes are registered manually in `app/router.options.ts`.
+This is a Nuxt 4 full-stack TypeScript application. Frontend features live in
+`app/presentation/<feature>/`; shared UI primitives are in `app/components/ui/`, and
+shared presentation code is in `app/presentation/shared/`. Keep app utilities in
+`app/utils/`, global styles and images in `app/assets/`, static files in `public/`, and
+manual client routes in `app/router.options.ts`.
 
-Nitro API handlers live in `server/api/`; keep business logic in `server/services/`, persistence in `server/repositories/`, validation in `server/validators/`, and request/response shapes in `server/dto/`. Prisma schema, migrations, and seeds are under `prisma/`. Static files belong in `public/`; database setup helpers belong in `scripts/`.
+Nitro endpoints belong in `server/api/`. Maintain the API layering: request validation in
+`server/validators/`, shapes in `server/dto/`, business rules in `server/services/`, and
+database access in `server/repositories/`. Shared server types, constants, plugins, and
+middleware live under their respective `server/` directories. Prisma schema, migrations,
+and seeders are in `prisma/`; runtime configuration is in `config/`; operational scripts
+are in `scripts/`.
 
-## Build, Test, and Development Commands
+## Development, Build, and Database Commands
 
-- `npm install`: install dependencies and configure Husky.
-- `Copy-Item .env.example .env`: create local configuration before development.
-- `npm run dev`: generate Prisma Client, prepare the database, and start Nuxt.
-- `npm run build`: create the production output in `.output/`.
-- `npm run preview`: serve the production build locally.
-- `npm run lint`: check the repository with ESLint.
-- `npm run format`: format supported files with Prettier.
-- `npm run prisma:migrate`: create/apply development migrations.
-- `npm run prisma:seed`: seed the configured database.
-- `docker compose up --build`: run the development stack in containers.
+- `npm install` installs dependencies and configures Husky.
+- `Copy-Item .env.example .env` creates local configuration; never commit `.env` files.
+- `npm run dev` generates Prisma Client, prepares the local database, and starts Nuxt.
+- `npm run lint` checks ESLint rules; `npm run lint:fix` applies safe lint fixes.
+- `npm run format` formats supported files with Prettier.
+- `npm run build` generates Prisma Client and creates the production `.output/` bundle.
+- `npm run prisma:migrate`, `npm run prisma:seed`, and `npm run db:status` manage the
+  development database. Use `npm run db:deploy` for deployment migrations.
+- `npm run test:smtp` verifies configured SMTP connectivity.
 
-## Coding Style & Naming Conventions
+## Coding Style & Naming
 
-Use TypeScript and Vue Single-File Components with four-space indentation, LF endings, single quotes, no semicolons, trailing commas, and a 100-character print width. ESLint uses Nuxt's stylistic configuration; staged files are formatted by Prettier through Husky.
+Write TypeScript and Vue SFCs with four spaces, LF endings, single quotes, no semicolons,
+trailing commas, and a 100-character line width. Prettier and Nuxt ESLint enforce these
+settings; staged supported files are formatted through Husky.
 
-Name Vue components in PascalCase (`LoginForm.vue`), composables with `use` (`useLoginMutation.ts`), and infrastructure files by role (`auth.service.ts`, `permission.repository.ts`, `login-request.dto.ts`). Database tables and columns use `snake_case` through Prisma `@@map` and `@map` directives.
+Use PascalCase components (`LoginForm.vue`), `use`-prefixed composables
+(`useLoginMutation.ts`), and role-oriented infrastructure files
+(`auth.service.ts`, `permission.repository.ts`). Map Prisma database tables and columns to
+`snake_case` with `@@map` and `@map`.
 
-## Testing Guidelines
+## Testing and Review
 
-No automated test framework, coverage threshold, or `npm test` script is currently configured. Before submitting changes, run `npm run lint` and `npm run build`, then manually exercise affected routes and API endpoints. If adding tests, include the framework setup and scripts in the same change and use `*.spec.ts` consistently.
+No automated test suite or coverage target is configured. Before opening a pull request,
+run `npm run lint` and `npm run build`, then manually exercise changed screens and API
+endpoints. If adding tests, include the test tooling and scripts in the same change and use
+`*.spec.ts` filenames.
 
-## Commit & Pull Request Guidelines
-
-History mixes Conventional Commit prefixes (`feat:`, `feat(auth):`) with informal summaries. Prefer concise, imperative Conventional Commit messages, such as `fix(auth): refresh expired sessions`. Pull requests should explain the user-visible change, list verification performed, link relevant issues, call out migrations or environment changes, and include screenshots for UI work. Never commit `.env` values or credentials; document new keys in `.env.example`.
+Use concise, imperative Conventional Commit messages, such as
+`feat(offerings): add period filtering` or `fix(auth): refresh expired sessions`. Pull
+requests should describe the user-visible result, list verification, link relevant issues,
+call out migrations or new environment keys, and include screenshots for UI changes.
