@@ -8,7 +8,8 @@ export default defineEventHandler(async (event) => {
     try {
         const auth = requirePermission(event, 'finance.record')
         const scope = await resolveOccurrenceScope(auth)
-        const data = await getPendingOccurrences(scope)
+        const includeUnfinished = getQuery(event).includeUnfinished === 'true'
+        const data = await getPendingOccurrences(scope, new Date(), { includeUnfinished })
         return ApiResponseFactory.success(data, 'Pendientes obtenidos correctamente')
     } catch (error) {
         return handleApiError(event, error)
