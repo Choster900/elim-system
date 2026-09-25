@@ -25,7 +25,7 @@ const props = withDefaults(defineProps<{ personalScope?: boolean }>(), { persona
 
 useHead({
     title: computed(() =>
-        props.personalScope ? 'Mis reuniones · Sistema' : 'Pendientes de ofrenda · Sistema',
+        props.personalScope ? 'Mis reuniones · Sistema' : 'Registro de ofrendas · Sistema',
     ),
 })
 
@@ -156,13 +156,13 @@ watch(selectedZone, () => {
                     Finanzas · Ofrendas
                 </p>
                 <h1 class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl">
-                    {{ personalScope ? 'Mis reuniones' : 'Pendientes de registro' }}
+                    {{ personalScope ? 'Mis reuniones' : 'Registro de ofrendas' }}
                 </h1>
                 <p class="mt-3 max-w-xl text-sm leading-relaxed text-on-surface-variant">
                     {{
                         personalScope
                             ? 'Las fechas de tus reuniones que todavía no tienen asistencia ni ofrenda registradas.'
-                            : 'Cada fecha en que una reunión se realizó y nadie capturó los datos. Registra las que tengas; el resto sigue esperando.'
+                            : 'Reuniones realizadas que aún requieren asistencia y ofrenda.'
                     }}
                 </p>
             </div>
