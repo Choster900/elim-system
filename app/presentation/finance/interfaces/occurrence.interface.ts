@@ -42,6 +42,8 @@ export interface OccurrenceRecord {
     endTime: string
     date: string
     status: OccurrenceStatus
+    /// Solo la bandeja de captura lo envía; evita registrar una reunión aún en curso.
+    isRecordable?: boolean
     attendance: number | null
     attendanceDetails: AttendanceDetail[]
     totalAmount: number | null
