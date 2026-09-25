@@ -26,6 +26,8 @@ defineOptions({ name: 'OccurrenceCaptureView' })
 interface CaptureRow {
     occurrenceId: number
     date: string
+    endTime: string
+    recordable: boolean
     /// Una fila sin marcar no se envía: llenar 2 de 4 es lo normal.
     selected: boolean
     /// Asistencia desglosada por tipo; el total de la fecha es la suma del desglose.
@@ -39,7 +41,7 @@ interface CaptureRow {
 
 const route = useRoute()
 const toast = useAppToast()
-const pendingQuery = usePendingOccurrencesQuery()
+const pendingQuery = usePendingOccurrencesQuery({ includeUnfinished: true })
 const categoriesQuery = useOfferingCategoriesQuery()
 const attendanceTypesQuery = useAttendanceTypesQuery()
 const bulkMutation = useRecordOccurrencesBulkMutation()
@@ -75,6 +77,9 @@ const occurrences = computed(() =>
         .filter((item) => item.meetingId === meetingId.value)
         .sort((left, right) => left.date.localeCompare(right.date)),
 )
+const recordableOccurrences = computed(() =>
+    occurrences.value.filter((occurrence) => occurrence.isRecordable !== false),
+)
 
 const meeting = computed(() => occurrences.value[0] ?? null)
 
@@ -101,7 +106,9 @@ function buildRows() {
     rows.value = occurrences.value.map((occurrence) => ({
         occurrenceId: occurrence.id,
         date: occurrence.date,
-        selected: occurrence.id === targetedOccurrenceId.value,
+        endTime: occurrence.endTime,
+        recordable: occurrence.isRecordable !== false,
+        selected: occurrence.id === targetedOccurrenceId.value && occurrence.isRecordable !== false,
         attendanceByType: Object.fromEntries(attendanceTypes.value.map((type) => [type.id, null])),
         attendanceTotal: null,
         amounts: Object.fromEntries(categories.value.map((category) => [category.id, null])),
@@ -114,7 +121,9 @@ watch([occurrences, categories, attendanceTypes], buildRows, { immediate: true }
 
 const selectedRows = computed(() => rows.value.filter((row) => row.selected))
 const allSelected = computed(
-    () => rows.value.length > 0 && selectedRows.value.length === rows.value.length,
+    () =>
+        recordableOccurrences.value.length > 0 &&
+        selectedRows.value.length === recordableOccurrences.value.length,
 )
 
 function rowTotal(row: CaptureRow) {
@@ -156,6 +165,7 @@ function categoryTotal(categoryId: number) {
 
 /// Marcar la fila al escribir evita el paso extra de tildar la casilla.
 function touchRow(row: CaptureRow) {
+    if (!row.recordable) return
     row.selected = true
     formError.value = null
 }
@@ -217,7 +227,7 @@ function selectCellContents(event: FocusEvent) {
 function toggleAll() {
     const next = !allSelected.value
     rows.value.forEach((row) => {
-        row.selected = next
+        if (row.recordable) row.selected = next
     })
 }
 
@@ -235,8 +245,9 @@ function daysSince(isoDate: string | undefined) {
 // El encabezado se deriva de las ocurrencias, no de `rows`: el watcher que
 // construye las filas corre en el siguiente tick, y en ese hueco `rows` está
 // vacío aunque la reunión ya se conozca.
-const pendingCount = computed(() => occurrences.value.length)
-const oldestDaysBehind = computed(() => daysSince(occurrences.value[0]?.date))
+const pendingCount = computed(() => recordableOccurrences.value.length)
+const inProgressCount = computed(() => occurrences.value.length - pendingCount.value)
+const oldestDaysBehind = computed(() => daysSince(recordableOccurrences.value[0]?.date))
 
 function weekdayOf(isoDate: string) {
     return formatLocalIsoDate(isoDate, { weekday: 'long' })
@@ -258,6 +269,10 @@ function behindLabel(days: number) {
     if (days === 0) return 'hoy'
     if (days === 1) return 'hace 1 día'
     return `hace ${days} días`
+}
+
+function availableAfterLabel(row: CaptureRow) {
+    return `Disponible después de las ${row.endTime}`
 }
 
 function formatMoney(value: number) {
@@ -422,7 +437,7 @@ const cellInputClass =
                             <p
                                 class="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
                             >
-                                pendientes
+                                disponibles
                             </p>
                         </div>
                         <span class="h-10 w-px bg-outline-variant" />
@@ -444,6 +459,16 @@ const cellInputClass =
                     </div>
                 </div>
             </section>
+
+            <p
+                v-if="inProgressCount > 0"
+                class="mt-4 flex items-start gap-2 rounded-xl border border-secondary/30 bg-secondary/10 px-4 py-3 text-sm text-on-surface-variant"
+            >
+                <Clock class="mt-0.5 size-4 shrink-0 text-secondary" />
+                Hay {{ inProgressCount }}
+                {{ inProgressCount === 1 ? 'fecha en curso' : 'fechas en curso' }}. Se mostrará en
+                la matriz, pero solo se habilitará al terminar la reunión.
+            </p>
 
             <section
                 class="mt-6 overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-sm"
@@ -530,6 +555,7 @@ const cellInputClass =
                         <button
                             type="button"
                             class="self-start text-xs font-semibold uppercase tracking-wider text-primary transition-opacity hover:opacity-70 sm:self-auto"
+                            :disabled="pendingCount === 0"
                             @click="toggleAll"
                         >
                             {{ allSelected ? 'Desmarcar todas' : 'Marcar todas' }}
@@ -572,6 +598,7 @@ const cellInputClass =
                                                 <input
                                                     type="checkbox"
                                                     :checked="allSelected"
+                                                    :disabled="pendingCount === 0"
                                                     class="size-4 shrink-0 accent-primary"
                                                     aria-label="Seleccionar todas las fechas"
                                                     @change="toggleAll"
@@ -667,9 +694,11 @@ const cellInputClass =
                                         :key="row.occurrenceId"
                                         class="group transition-colors"
                                         :class="
-                                            row.selected
-                                                ? 'bg-primary/[0.035]'
-                                                : 'bg-surface hover:bg-surface-container-low'
+                                            !row.recordable
+                                                ? 'bg-surface-container-low opacity-65'
+                                                : row.selected
+                                                  ? 'bg-primary/[0.035]'
+                                                  : 'bg-surface hover:bg-surface-container-low'
                                         "
                                     >
                                         <th
@@ -682,11 +711,17 @@ const cellInputClass =
                                             "
                                         >
                                             <label
-                                                class="flex min-h-[64px] cursor-pointer items-center gap-3 px-3 py-2"
+                                                class="flex min-h-[64px] items-center gap-3 px-3 py-2"
+                                                :class="
+                                                    row.recordable
+                                                        ? 'cursor-pointer'
+                                                        : 'cursor-not-allowed'
+                                                "
                                             >
                                                 <input
                                                     v-model="row.selected"
                                                     type="checkbox"
+                                                    :disabled="!row.recordable"
                                                     class="size-4 shrink-0 accent-primary"
                                                     :aria-label="`Seleccionar ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
                                                 />
@@ -718,8 +753,11 @@ const cellInputClass =
                                                     <span
                                                         class="mt-0.5 block text-[10px] font-normal tabular-nums text-on-surface-variant"
                                                     >
-                                                        {{ yearOf(row.date) }} ·
-                                                        {{ behindLabel(daysSince(row.date)) }}
+                                                        {{
+                                                            row.recordable
+                                                                ? `${yearOf(row.date)} · ${behindLabel(daysSince(row.date))}`
+                                                                : availableAfterLabel(row)
+                                                        }}
                                                     </span>
                                                 </span>
                                             </label>
@@ -740,6 +778,7 @@ const cellInputClass =
                                                     step="1"
                                                     placeholder="0"
                                                     autocomplete="off"
+                                                    :disabled="!row.recordable"
                                                     :aria-label="`${type.name} del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
                                                     :data-capture-column="`attendance-${type.id}`"
                                                     :class="cellInputClass"
@@ -772,6 +811,7 @@ const cellInputClass =
                                                 step="1"
                                                 placeholder="0"
                                                 autocomplete="off"
+                                                :disabled="!row.recordable"
                                                 :aria-label="`Asistencia total del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
                                                 data-capture-column="attendance-total"
                                                 :class="cellInputClass"
@@ -802,6 +842,7 @@ const cellInputClass =
                                                         step="0.01"
                                                         placeholder="0.00"
                                                         autocomplete="off"
+                                                        :disabled="!row.recordable"
                                                         :aria-label="`${category.name} del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
                                                         :data-capture-column="`offering-${category.id}`"
                                                         :class="[cellInputClass, 'pl-6']"
@@ -842,6 +883,7 @@ const cellInputClass =
                                                     step="0.01"
                                                     placeholder="0.00"
                                                     autocomplete="off"
+                                                    :disabled="!row.recordable"
                                                     :aria-label="`Ofrenda total del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
                                                     data-capture-column="offering-total"
                                                     :class="[cellInputClass, 'pl-6']"
