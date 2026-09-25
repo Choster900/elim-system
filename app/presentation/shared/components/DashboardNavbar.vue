@@ -101,7 +101,7 @@ const navItems: DashboardMenuItem[] = [
         label: 'Finanzas',
         children: [
             {
-                label: 'Pendientes de registro',
+                label: 'Registro de ofrendas',
                 href: '/finanzas/ofrendas',
                 requiredPermission: routePermissionCodes.financeRecord,
             },
