@@ -20,8 +20,10 @@ function responseData<T>(response: ApiResponse<T>, fallbackMessage: string): T {
 export async function getPendingOccurrences(
     apiClient: AxiosInstance,
     signal?: AbortSignal,
+    options: { includeUnfinished?: boolean } = {},
 ): Promise<OccurrenceRecord[]> {
     const response = await apiClient.get<ApiResponse<OccurrenceRecord[]>>('/offerings/pendientes', {
+        params: options.includeUnfinished ? { includeUnfinished: 'true' } : undefined,
         signal,
     })
     return responseData(response.data, 'No fue posible cargar los pendientes')
