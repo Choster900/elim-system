@@ -151,8 +151,16 @@ export async function getPendingOccurrences(
         .filter((occurrence) => options.includeUnfinished || occurrence.isRecordable)
 }
 
-export function getOccurrences(scope: OccurrenceScopeFilter, filters: OccurrenceFiltersDto = {}) {
-    return repo.findOccurrences(scope, filters)
+export async function getOccurrences(
+    scope: OccurrenceScopeFilter,
+    filters: OccurrenceFiltersDto = {},
+) {
+    const now = new Date()
+    const occurrences = await repo.findOccurrences(scope, filters)
+    return occurrences.map((occurrence) => ({
+        ...occurrence,
+        isRecordable: occurrence.status === 'registrada' || hasOccurrenceEnded(occurrence, now),
+    }))
 }
 
 /// Carga una ocurrencia comprobando que caiga dentro del alcance del usuario.
