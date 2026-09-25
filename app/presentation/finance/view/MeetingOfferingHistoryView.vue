@@ -20,6 +20,7 @@ import {
 } from 'radix-vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
 import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
+import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import { formatShortIsoDate } from '~/utils/date/date-format.util'
 import { useMeetingHistoryQuery } from '../composables/useOccurrenceQueries'
 import type { OccurrenceRecord } from '../interfaces/occurrence.interface'
@@ -38,7 +39,61 @@ const meetingId = computed(() => {
 const historyQuery = useMeetingHistoryQuery(meetingId)
 
 const occurrences = computed(() => historyQuery.data.value ?? [])
-const recorded = computed(() => occurrences.value.filter((item) => item.status === 'registrada'))
+type PeriodPreset = 'month' | 'quarter' | 'year' | 'custom'
+
+const periodPreset = ref<PeriodPreset>('quarter')
+const customRange = ref<DatePickerRange>({ start: null, end: null })
+const periodOptions: { value: PeriodPreset; label: string }[] = [
+    { value: 'month', label: 'Mes actual' },
+    { value: 'quarter', label: 'Trimestre actual' },
+    { value: 'year', label: 'Año actual' },
+    { value: 'custom', label: 'Personalizado' },
+]
+
+function currentBusinessDate() {
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/El_Salvador',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        })
+            .formatToParts(new Date())
+            .filter((part) => part.type !== 'literal')
+            .map((part) => [part.type, part.value]),
+    )
+    return {
+        year: Number(parts.year),
+        month: Number(parts.month),
+        date: `${parts.year}-${parts.month}-${parts.day}`,
+    }
+}
+
+const activeRange = computed(() => {
+    if (periodPreset.value === 'custom') {
+        return { from: customRange.value.start, to: customRange.value.end }
+    }
+
+    const today = currentBusinessDate()
+    if (periodPreset.value === 'month') {
+        return { from: `${today.year}-${String(today.month).padStart(2, '0')}-01`, to: today.date }
+    }
+    if (periodPreset.value === 'year') return { from: `${today.year}-01-01`, to: today.date }
+
+    const quarterMonth = Math.floor((today.month - 1) / 3) * 3 + 1
+    return { from: `${today.year}-${String(quarterMonth).padStart(2, '0')}-01`, to: today.date }
+})
+
+const visibleOccurrences = computed(() =>
+    occurrences.value.filter(
+        (item) =>
+            (!activeRange.value.from || item.date >= activeRange.value.from) &&
+            (!activeRange.value.to || item.date <= activeRange.value.to),
+    ),
+)
+const recorded = computed(() =>
+    visibleOccurrences.value.filter((item) => item.status === 'registrada'),
+)
 const meeting = computed(() => occurrences.value[0] ?? null)
 const meetingTitle = computed(() => meeting.value?.meetingTitle ?? 'Reunión')
 const selectedOccurrence = ref<OccurrenceRecord | null>(null)
@@ -76,7 +131,7 @@ const stats = computed(() => {
         total,
         attendance,
         count,
-        pending: occurrences.value.length - count,
+        pending: visibleOccurrences.value.length - count,
         averageOffering: count > 0 ? total / count : 0,
         averageAttendance: count > 0 ? Math.round(attendance / count) : 0,
         trend:
@@ -166,10 +221,19 @@ function openOccurrenceDetail(occurrence: OccurrenceRecord) {
 }
 
 function recordOccurrence(occurrence: OccurrenceRecord) {
+    if (occurrence.isRecordable === false) return
     return navigateTo({
         path: `/finanzas/ofrendas/registrar/${occurrence.meetingId}`,
         query: { occurrence: String(occurrence.id) },
     })
+}
+
+function isOccurrenceRecordable(occurrence: OccurrenceRecord) {
+    return occurrence.isRecordable !== false
+}
+
+function availableAfter(occurrence: OccurrenceRecord) {
+    return `Disponible después de las ${occurrence.endTime}`
 }
 </script>
 
@@ -241,6 +305,51 @@ function recordOccurrence(occurrence: OccurrenceRecord) {
                             </span>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <section
+                class="mt-6 rounded-xl border border-outline-variant bg-surface-container-low p-4"
+            >
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <p
+                            class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                        >
+                            Período del historial
+                        </p>
+                        <p class="mt-1 text-sm text-on-surface-variant">
+                            Filtra los indicadores, gráficos y registros de esta reunión.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button
+                            v-for="option in periodOptions"
+                            :key="option.value"
+                            type="button"
+                            class="rounded-lg border px-3 py-2 text-xs font-semibold transition-colors"
+                            :class="
+                                periodPreset === option.value
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-outline-variant text-on-surface-variant hover:border-primary/50 hover:text-on-surface'
+                            "
+                            @click="periodPreset = option.value"
+                        >
+                            {{ option.label }}
+                        </button>
+                    </div>
+                </div>
+                <div v-if="periodPreset === 'custom'" class="mt-4 max-w-sm">
+                    <label
+                        class="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                    >
+                        Rango personalizado
+                    </label>
+                    <UiDatePicker
+                        v-model="customRange"
+                        mode="range"
+                        placeholder="Selecciona un rango"
+                    />
                 </div>
             </section>
 
@@ -384,9 +493,21 @@ function recordOccurrence(occurrence: OccurrenceRecord) {
 
             <!-- Detalle -->
             <section class="mt-8">
-                <h2 class="mb-4 font-display text-xl font-semibold text-on-surface">
-                    Registro por fecha
-                </h2>
+                <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                        <h2 class="font-display text-xl font-semibold text-on-surface">
+                            Registro por fecha
+                        </h2>
+                        <p class="mt-1 text-xs text-on-surface-variant">
+                            {{ visibleOccurrences.length }}
+                            {{
+                                visibleOccurrences.length === 1
+                                    ? 'fecha en el período'
+                                    : 'fechas en el período'
+                            }}
+                        </p>
+                    </div>
+                </div>
                 <div class="overflow-x-auto rounded-xl border border-outline-variant">
                     <table class="w-full min-w-[840px] border-collapse text-sm">
                         <thead>
@@ -423,7 +544,7 @@ function recordOccurrence(occurrence: OccurrenceRecord) {
                         </thead>
                         <tbody>
                             <tr
-                                v-for="item in occurrences"
+                                v-for="item in visibleOccurrences"
                                 :key="item.id"
                                 class="border-t border-outline-variant"
                             >
@@ -513,6 +634,14 @@ function recordOccurrence(occurrence: OccurrenceRecord) {
                                     >
                                         Ver detalle
                                     </UiButton>
+                                </td>
+                            </tr>
+                            <tr v-if="visibleOccurrences.length === 0">
+                                <td
+                                    colspan="6"
+                                    class="px-4 py-12 text-center text-sm text-on-surface-variant"
+                                >
+                                    No hay registros para el período seleccionado.
                                 </td>
                             </tr>
                         </tbody>
@@ -695,10 +824,25 @@ function recordOccurrence(occurrence: OccurrenceRecord) {
                                 "
                                 type="button"
                                 class="mr-auto"
+                                :disabled="!isOccurrenceRecordable(selectedOccurrence)"
                                 @click="recordOccurrence(selectedOccurrence)"
                             >
-                                Agregar asistencia y ofrenda
+                                {{
+                                    isOccurrenceRecordable(selectedOccurrence)
+                                        ? 'Agregar asistencia y ofrenda'
+                                        : availableAfter(selectedOccurrence)
+                                }}
                             </UiButton>
+                            <p
+                                v-if="
+                                    selectedOccurrence.status === 'pendiente' &&
+                                    !isOccurrenceRecordable(selectedOccurrence)
+                                "
+                                class="mr-auto flex items-center gap-1.5 text-xs text-on-surface-variant"
+                            >
+                                <CalendarClock class="size-3.5 text-secondary" />
+                                La asistencia y la ofrenda se habilitan al finalizar la reunión.
+                            </p>
                             <DialogClose as-child>
                                 <UiButton type="button" variant="outline">Cerrar</UiButton>
                             </DialogClose>
