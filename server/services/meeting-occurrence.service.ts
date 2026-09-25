@@ -139,10 +139,16 @@ export async function resyncMeetingOccurrences(meetingId: number) {
     return syncOccurrences({ meetingIds: [meetingId] })
 }
 
-export async function getPendingOccurrences(scope: OccurrenceScopeFilter, now = new Date()) {
+export async function getPendingOccurrences(
+    scope: OccurrenceScopeFilter,
+    now = new Date(),
+    options: { includeUnfinished?: boolean } = {},
+) {
     await syncOccurrences({}, now)
     const occurrences = await repo.findPendingOccurrences(scope)
-    return occurrences.filter((occurrence) => hasOccurrenceEnded(occurrence, now))
+    return occurrences
+        .map((occurrence) => ({ ...occurrence, isRecordable: hasOccurrenceEnded(occurrence, now) }))
+        .filter((occurrence) => options.includeUnfinished || occurrence.isRecordable)
 }
 
 export function getOccurrences(scope: OccurrenceScopeFilter, filters: OccurrenceFiltersDto = {}) {
