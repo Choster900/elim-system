@@ -231,23 +231,6 @@ async function disableFactor() {
             </div>
         </div>
 
-        <div class="space-y-3">
-            <div
-                v-if="errorMessage"
-                role="alert"
-                class="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-            >
-                {{ errorMessage }}
-            </div>
-            <div
-                v-if="successMessage"
-                role="status"
-                class="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300"
-            >
-                {{ successMessage }}
-            </div>
-        </div>
-
         <TerritoryAssignment
             class="mt-5"
             variant="card"
@@ -312,6 +295,23 @@ async function disableFactor() {
                             <p class="mt-1 text-sm text-on-surface-variant">
                                 Confirma tu identidad después de iniciar sesión.
                             </p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div
+                            v-if="errorMessage"
+                            role="alert"
+                            class="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                        >
+                            {{ errorMessage }}
+                        </div>
+                        <div
+                            v-if="successMessage"
+                            role="status"
+                            class="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300"
+                        >
+                            {{ successMessage }}
                         </div>
                     </div>
 
