@@ -8,8 +8,10 @@ export interface AppEnv {
     JWT_SECRET: string
     PORT?: number
     NUXT_PUBLIC_APP_NAME: string
-    NUXT_PUBLIC_GOOGLE_MAPS_API_KEY: string
-    NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID: string
+    NUXT_PUBLIC_MAP_PROVIDER: 'carto-dark' | 'carto-light' | 'openstreetmap' | 'custom'
+    NUXT_PUBLIC_MAP_TILE_URL: string
+    NUXT_PUBLIC_MAP_ATTRIBUTION: string
+    NUXT_PUBLIC_MAP_API_KEY: string
     NODE_ENV: 'development' | 'production' | 'test'
     APP_BASE_URL: string
     SMTP_HOST: string
@@ -26,19 +28,18 @@ const envSchema = Joi.object<AppEnv>({
     DATABASE_URL: Joi.string()
         .uri({ scheme: ['postgres', 'postgresql'] })
         .required(),
-    // Solo la usa el CLI de Prisma (migrate, diff, studio) a través de prisma.config.ts.
-    // En Supabase debe apuntar a la conexión directa o al session pooler, nunca al
-    // pooler en modo transacción, que no admite DDL.
     DIRECT_DATABASE_URL: Joi.string()
         .uri({ scheme: ['postgres', 'postgresql'] })
         .optional(),
     JWT_SECRET: Joi.string().min(32).required(),
     PORT: Joi.number().integer().min(1).max(65535).optional(),
     NUXT_PUBLIC_APP_NAME: Joi.string().min(1).required(),
-    // Es pública porque el navegador carga Maps JavaScript API. La seguridad
-    // depende de restringirla por dominio y por API en Google Cloud.
-    NUXT_PUBLIC_GOOGLE_MAPS_API_KEY: Joi.string().allow('').default(''),
-    NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID: Joi.string().allow('').default(''),
+    NUXT_PUBLIC_MAP_PROVIDER: Joi.string()
+        .valid('carto-dark', 'carto-light', 'openstreetmap', 'custom')
+        .default('carto-light'),
+    NUXT_PUBLIC_MAP_TILE_URL: Joi.string().allow('').default(''),
+    NUXT_PUBLIC_MAP_ATTRIBUTION: Joi.string().allow('').default(''),
+    NUXT_PUBLIC_MAP_API_KEY: Joi.string().allow('').default(''),
     NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
     APP_BASE_URL: Joi.string().uri().default('http://127.0.0.1:3000'),
     SMTP_HOST: Joi.string().min(1).default('127.0.0.1'),
