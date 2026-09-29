@@ -3,6 +3,7 @@ import {
     ArrowLeft,
     CalendarClock,
     ChevronRight,
+    Compass,
     FilterX,
     History,
     MapPin,
@@ -14,6 +15,10 @@ import {
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
 import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
+import AppTour from '~/presentation/shared/components/AppTour.vue'
+import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
+import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { formatLocalIsoDate, formatShortIsoDate } from '~/utils/date/date-format.util'
 import { useOccurrencesQuery } from '../composables/useOccurrenceQueries'
 import type { OccurrenceFilters, OccurrenceRecord } from '../interfaces/occurrence.interface'
@@ -38,6 +43,71 @@ const filters = computed<OccurrenceFilters>(() => ({
 }))
 
 const historyQuery = useOccurrencesQuery(filters)
+const authStore = useAuthStore()
+const isTourOpen = ref(false)
+const isClientReady = ref(false)
+const { hasSeen, markSeen } = useTourProgress('offering-history', 1)
+
+const tourSteps: TourStep[] = [
+    {
+        id: 'history-heading',
+        target: '[data-tour="offerings-history-heading"]',
+        title: 'Historial de ofrendas',
+        description:
+            'Aquí consultas todas las fechas ya registradas y sus resultados dentro de tu alcance.',
+    },
+    {
+        id: 'history-filters',
+        target: '[data-tour="offerings-history-filters"]',
+        title: 'Filtra lo que quieres analizar',
+        description:
+            'Combina territorio, reunión, fechas y búsqueda de texto para acotar el historial.',
+    },
+    {
+        id: 'history-stats',
+        target: '[data-tour="offerings-history-stats"]',
+        title: 'Métricas del resultado',
+        description:
+            'Los indicadores se recalculan con los filtros activos para mostrar recaudación, promedio y asistencia.',
+    },
+    {
+        id: 'history-trends',
+        target: '[data-tour="offerings-history-trends"]',
+        title: 'Tendencias por fecha',
+        description:
+            'Compara cómo evolucionan las ofrendas y la asistencia en las últimas fechas visibles.',
+    },
+    {
+        id: 'history-breakdowns',
+        target: '[data-tour="offerings-history-breakdowns"]',
+        title: 'Origen de las ofrendas',
+        description:
+            'Identifica qué reuniones y sectores acumulan más ofrendas en el período seleccionado.',
+    },
+    {
+        id: 'history-detail',
+        target: '[data-tour="offerings-history-detail"]',
+        title: 'Detalle de cada captura',
+        description:
+            'La tabla reúne fecha, reunión, territorio, asistencia, ofrenda y quién realizó la captura. Haz clic en una fila para abrir su historial.',
+    },
+]
+
+function startTour() {
+    isTourOpen.value = true
+}
+
+function endTour() {
+    isTourOpen.value = false
+    if (authStore.user?.id) markSeen(authStore.user.id)
+}
+
+function startFirstVisitTour() {
+    const userId = authStore.user?.id
+    if (isClientReady.value && !historyQuery.isPending.value && userId && !hasSeen(userId)) {
+        startTour()
+    }
+}
 
 const occurrences = computed(() => historyQuery.data.value ?? [])
 
@@ -101,6 +171,13 @@ watch(selectedDistrict, () => {
 watch(selectedZone, () => {
     selectedSector.value = null
 })
+
+onMounted(() => {
+    isClientReady.value = true
+    startFirstVisitTour()
+})
+
+watch([() => authStore.user?.id, () => historyQuery.isPending.value], startFirstVisitTour)
 
 const hasFilters = computed(
     () =>
@@ -303,15 +380,41 @@ const filterLabelClass =
 
 <template>
     <main class="mx-auto w-full max-w-[1600px] px-4 pb-24 pt-24 sm:px-6 lg:px-8">
-        <button
-            type="button"
-            class="mb-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
-            @click="navigateTo('/finanzas/ofrendas')"
-        >
-            <ArrowLeft class="size-4" /> Volver a pendientes
-        </button>
+        <div class="mb-6 flex items-center gap-3">
+            <button
+                type="button"
+                class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
+                @click="navigateTo('/finanzas/ofrendas')"
+            >
+                <ArrowLeft class="size-4" /> Volver a pendientes
+            </button>
+            <div class="group relative">
+                <button
+                    type="button"
+                    class="flex size-8 items-center justify-center rounded-full border border-primary/30 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"
+                    aria-label="Iniciar recorrido guiado del historial de ofrendas"
+                    aria-describedby="offerings-history-tour-hint"
+                    @click="startTour"
+                >
+                    <Compass class="size-3.5" />
+                </button>
+                <div
+                    id="offerings-history-tour-hint"
+                    role="tooltip"
+                    class="pointer-events-none absolute left-0 top-full z-50 mt-2 w-60 translate-y-1 rounded-xl border border-outline-variant bg-surface p-3 text-left opacity-0 shadow-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+                >
+                    <span
+                        class="absolute -top-1 left-3 size-2 rotate-45 border-l border-t border-outline-variant bg-surface"
+                    />
+                    <p class="text-xs font-semibold text-on-surface">Recorrido guiado</p>
+                    <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                        Aprende a filtrar y analizar las ofrendas ya registradas.
+                    </p>
+                </div>
+            </div>
+        </div>
 
-        <section class="border-b border-outline-variant pb-8">
+        <section data-tour="offerings-history-heading" class="border-b border-outline-variant pb-8">
             <p class="text-xs font-semibold uppercase tracking-[0.4em] text-on-surface-variant">
                 Finanzas · Historial
             </p>
@@ -324,7 +427,10 @@ const filterLabelClass =
         </section>
 
         <!-- Filtros: territorio en cascada, rango de fechas y búsqueda -->
-        <section class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4">
+        <section
+            data-tour="offerings-history-filters"
+            class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4"
+        >
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <div>
                     <span :class="filterLabelClass">Distrito</span>
@@ -436,7 +542,10 @@ const filterLabelClass =
 
         <template v-else>
             <!-- Cifras de cabecera -->
-            <section class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section
+                data-tour="offerings-history-stats"
+                class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            >
                 <UiCard class="p-5">
                     <p
                         class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
@@ -494,7 +603,7 @@ const filterLabelClass =
             </section>
 
             <!-- Tendencia: dos medidas de escala distinta, dos gráficos -->
-            <section class="mt-6 grid gap-4 xl:grid-cols-2">
+            <section data-tour="offerings-history-trends" class="mt-6 grid gap-4 xl:grid-cols-2">
                 <UiCard class="p-6">
                     <div class="mb-5 flex items-center gap-2">
                         <TrendingUp class="size-4 text-primary" />
@@ -527,7 +636,10 @@ const filterLabelClass =
             </section>
 
             <!-- De dónde viene -->
-            <section class="mt-4 grid gap-4 xl:grid-cols-2">
+            <section
+                data-tour="offerings-history-breakdowns"
+                class="mt-4 grid gap-4 xl:grid-cols-2"
+            >
                 <UiCard class="p-6">
                     <h2 class="mb-5 text-sm font-semibold text-on-surface">Por reunión</h2>
                     <RankedBarList
@@ -562,7 +674,7 @@ const filterLabelClass =
             </section>
 
             <!-- Detalle -->
-            <section class="mt-8">
+            <section data-tour="offerings-history-detail" class="mt-8">
                 <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <h2 class="font-display text-2xl font-semibold text-on-surface">
@@ -918,5 +1030,6 @@ const filterLabelClass =
                 </div>
             </section>
         </template>
+        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </main>
 </template>
