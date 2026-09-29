@@ -240,8 +240,8 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         sortable: true,
         filterable: true,
         filterType: 'select',
-        filterOptions: activeOptions.map((o) => ({ value: o.value, label: o.label })),
-        accessor: (row) => row.isActive,
+        filterOptions: activeOptions.map((o) => ({ value: String(o.value), label: o.label })),
+        accessor: (row) => String(row.isActive),
         width: '140px',
     },
     {
