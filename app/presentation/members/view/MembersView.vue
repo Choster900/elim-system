@@ -6,6 +6,7 @@ import {
     Eye,
     FileDown,
     FileSpreadsheet,
+    HelpCircle,
     Mail,
     MoreVertical,
     Pencil,
@@ -37,6 +38,9 @@ import DataTable, {
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import AppTour from '~/presentation/shared/components/AppTour.vue'
+import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
+import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { formatShortIsoDate } from '~/utils/date/date-format.util'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatInitials } from '~/utils/string/text-format.util'
@@ -103,6 +107,82 @@ const loading = computed(() => membersQuery.isPending.value)
 const saving = computed(() => updateMemberMutation.isPending.value)
 const canCreate = computed(() => authStore.hasPermission('members.create'))
 const canImportExport = computed(() => authStore.hasPermission('members.import_export'))
+const showTourButton = import.meta.dev
+const isTourOpen = ref(false)
+const isClientReady = ref(false)
+const { hasSeen, markSeen } = useTourProgress('members', 1)
+
+const tourSteps: TourStep[] = [
+    {
+        id: 'directory',
+        target: '[data-tour="members-heading"]',
+        title: 'Directorio de miembros',
+        description:
+            'Aquí administras los datos de contacto, roles, estado y territorio de las personas de la comunidad.',
+    },
+    {
+        id: 'create-member',
+        target: '[data-tour="members-create"]',
+        title: 'Agrega un miembro',
+        description:
+            'Usa Nuevo miembro para capturar sus datos personales, contacto, roles y asignación territorial.',
+    },
+    {
+        id: 'download-template',
+        target: '[data-tour="members-template"]',
+        title: 'Descarga la plantilla',
+        description:
+            'La plantilla Excel incluye las columnas y catálogos válidos. Complétala para registrar varios miembros en una sola carga.',
+    },
+    {
+        id: 'import-members',
+        target: '[data-tour="members-import"]',
+        title: 'Importa desde Excel',
+        description:
+            'Selecciona el archivo completado para revisar sus filas antes de guardar. El sistema muestra los errores y permite descargar las filas que debes corregir.',
+    },
+    {
+        id: 'export-members',
+        target: '[data-tour="members-export"]',
+        title: 'Exporta el directorio',
+        description: 'Descarga los miembros actuales a Excel para consultar o trabajar los datos.',
+    },
+    {
+        id: 'find-members',
+        target: '[data-tour="members-table"]',
+        title: 'Busca y edita registros',
+        description:
+            'Busca por nombre, código, documento o teléfono y usa los filtros de columna. Haz clic en el nombre para abrir la ficha del miembro.',
+    },
+    {
+        id: 'member-row-actions',
+        target: '[data-tour="member-row-actions"]',
+        title: 'Acciones de cada miembro',
+        description:
+            'En Ver ficha completa consulta todos sus datos; en Editar actualiza su información. También puedes marcarlo como activo, inactivo, visitante, trasladado o fallecido (el estado actual no aparece como opción). Eliminar borra el registro permanentemente; úsalo solo cuando realmente quieras quitarlo del directorio.',
+    },
+]
+
+function startTour() {
+    isTourOpen.value = true
+}
+
+function endTour() {
+    isTourOpen.value = false
+    if (authStore.user?.id) markSeen(authStore.user.id)
+}
+
+function startFirstVisitTour() {
+    const userId = authStore.user?.id
+    if (isClientReady.value && !loading.value && userId && !hasSeen(userId)) startTour()
+}
+
+onMounted(() => {
+    isClientReady.value = true
+    startFirstVisitTour()
+})
+
+watch([() => authStore.user?.id, loading], startFirstVisitTour)
 
 if (import.meta.server) {
     onServerPrefetch(() =>
@@ -461,7 +541,10 @@ async function downloadPendingMembers() {
                 <p class="text-xs font-semibold uppercase tracking-[0.4em] text-on-surface-variant">
                     Comunidad · Directorio pastoral
                 </p>
-                <h1 class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl">
+                <h1
+                    data-tour="members-heading"
+                    class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl"
+                >
                     Miembros
                 </h1>
                 <p class="mt-3 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
@@ -472,6 +555,9 @@ async function downloadPendingMembers() {
             </div>
 
             <div class="flex flex-wrap gap-2">
+                <UiButton v-if="showTourButton" variant="outline" type="button" @click="startTour">
+                    <HelpCircle class="size-4" /> Recorrido
+                </UiButton>
                 <input
                     v-if="canImportExport"
                     ref="importInput"
@@ -487,6 +573,7 @@ async function downloadPendingMembers() {
                     :loading="downloadingTemplate"
                     :disabled="catalogsQuery.isPending.value"
                     @click="downloadTemplate"
+                    data-tour="members-template"
                 >
                     <FileDown class="size-4" /> Plantilla
                 </UiButton>
@@ -497,6 +584,7 @@ async function downloadPendingMembers() {
                     :loading="parsingFile"
                     :disabled="catalogsQuery.isPending.value"
                     @click="pickImportFile"
+                    data-tour="members-import"
                 >
                     <Upload class="size-4" /> Importar
                 </UiButton>
@@ -507,6 +595,7 @@ async function downloadPendingMembers() {
                     :loading="exporting"
                     :disabled="!members.length || catalogsQuery.isPending.value"
                     @click="exportExcel"
+                    data-tour="members-export"
                 >
                     <Download class="size-4" /> Exportar
                 </UiButton>
@@ -515,6 +604,7 @@ async function downloadPendingMembers() {
                     to="/comunidad/miembros/nuevo"
                     class="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     data-testid="create-member-link"
+                    data-tour="members-create"
                 >
                     <Plus class="size-4" /> Nuevo miembro
                 </NuxtLink>
@@ -584,7 +674,7 @@ async function downloadPendingMembers() {
             </UiCard>
         </section>
 
-        <section class="mt-8">
+        <section data-tour="members-table" class="mt-8">
             <DataTable
                 :rows="sortedMembers"
                 :columns="columns"
@@ -710,6 +800,7 @@ async function downloadPendingMembers() {
                         <DropdownMenuTrigger
                             class="flex size-9 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
                             aria-label="Acciones del miembro"
+                            data-tour="member-row-actions"
                         >
                             <MoreVertical class="size-4" />
                         </DropdownMenuTrigger>
@@ -973,5 +1064,6 @@ async function downloadPendingMembers() {
                 </DialogContent>
             </DialogPortal>
         </DialogRoot>
+        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </main>
 </template>
