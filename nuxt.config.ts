@@ -47,8 +47,10 @@ export default defineNuxtConfig({
         jwtSecret: env.JWT_SECRET,
         public: {
             appName: env.NUXT_PUBLIC_APP_NAME,
-            googleMapsApiKey: env.NUXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-            googleMapsMapId: env.NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID,
+            mapProvider: env.NUXT_PUBLIC_MAP_PROVIDER,
+            mapTileUrl: env.NUXT_PUBLIC_MAP_TILE_URL,
+            mapAttribution: env.NUXT_PUBLIC_MAP_ATTRIBUTION,
+            mapApiKey: env.NUXT_PUBLIC_MAP_API_KEY,
         },
     },
     alias: {
