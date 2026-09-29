@@ -23,6 +23,8 @@ import {
     DialogTitle,
 } from 'radix-vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
+import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
 import {
     useMeetingLeadersQuery,
     useMeetingSectorsQuery,
@@ -58,6 +60,7 @@ defineOptions({ name: 'MeetingFormView' })
 
 const route = useRoute()
 const toast = useAppToast()
+const { provider: mapProvider } = useMapProvider()
 
 const meetingId = computed(() => {
     const raw = route.params.id as string | undefined
@@ -321,14 +324,10 @@ async function createMap(generation: number) {
 
     map = L.map(container, {
         zoomControl: true,
-        attributionControl: false,
         scrollWheelZoom: false,
     })
     map.zoomControl.setPosition('topright')
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 20,
-    }).addTo(map)
+    addLeafletRasterLayer(L, map, mapProvider.value)
     map.on('click', (e) => setPosition(e.latlng.lat, e.latlng.lng))
     if (form.position) map.setView(form.position, 15)
     else {
