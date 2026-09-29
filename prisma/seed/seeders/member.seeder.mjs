@@ -5,6 +5,7 @@ const COMMUNITY_ROLE_SEEDS = [
     ['MEMBER', 'Miembro', 'Persona que forma parte de la comunidad.'],
     ['PASTOR', 'Pastor', 'Responsable pastoral de la comunidad.'],
     ['LEADER', 'Líder', 'Miembro autorizado para conducir reuniones.'],
+    ['COORDINATOR', 'Coordinador', 'Miembro responsable de coordinar una zona.'],
     ['HOST', 'Anfitrión', 'Miembro que recibe reuniones en su hogar o local.'],
     [
         'SUPERVISOR',
@@ -65,6 +66,8 @@ const COMMUNITY_SUPERVISOR_CODES = new Set([
     'MIE-0014',
     'MIE-0015',
 ])
+
+const COMMUNITY_COORDINATOR_CODES = new Set(['MIE-0002', 'MIE-0005', 'MIE-0006', 'MIE-0008'])
 
 export const MEMBER_SEEDS = [
     {
@@ -364,8 +367,11 @@ export async function seedMembers(prisma) {
         ),
     )
     const leaderRole = communityRoles.find((role) => role.code === 'LEADER')
+    const coordinatorRole = communityRoles.find((role) => role.code === 'COORDINATOR')
     const supervisorRole = communityRoles.find((role) => role.code === 'SUPERVISOR')
-    if (!leaderRole || !supervisorRole) throw new Error('Community role catalog was not created.')
+    if (!leaderRole || !coordinatorRole || !supervisorRole) {
+        throw new Error('Community role catalog was not created.')
+    }
 
     const members = await prisma.$transaction(
         MEMBER_SEEDS.map((seed) => {
@@ -392,6 +398,28 @@ export async function seedMembers(prisma) {
                     create: {
                         memberId: member.id,
                         roleId: leaderRole.id,
+                    },
+                    update: {
+                        endedAt: null,
+                    },
+                }),
+            ),
+    )
+
+    await prisma.$transaction(
+        members
+            .filter((member) => COMMUNITY_COORDINATOR_CODES.has(member.code))
+            .map((member) =>
+                prisma.memberCommunityRole.upsert({
+                    where: {
+                        memberId_roleId: {
+                            memberId: member.id,
+                            roleId: coordinatorRole.id,
+                        },
+                    },
+                    create: {
+                        memberId: member.id,
+                        roleId: coordinatorRole.id,
                     },
                     update: {
                         endedAt: null,
