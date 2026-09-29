@@ -11,6 +11,7 @@ export type MemberCommunityRole =
     | 'MEMBER'
     | 'PASTOR'
     | 'LEADER'
+    | 'COORDINATOR'
     | 'HOST'
     | 'SUPERVISOR'
     | 'DEACON'
