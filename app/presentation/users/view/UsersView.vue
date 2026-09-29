@@ -4,6 +4,7 @@ import {
     CheckCircle2,
     Clock3,
     Edit3,
+    HelpCircle,
     KeyRound,
     LockKeyhole,
     Mail,
@@ -30,6 +31,9 @@ import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import AppTour from '~/presentation/shared/components/AppTour.vue'
+import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
+import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatInitials } from '~/utils/string/text-format.util'
 import UserFormDrawer from '../components/UserFormDrawer.vue'
@@ -73,6 +77,7 @@ const canCreate = computed(() => authStore.hasPermission(routePermissionCodes.us
 const canUpdate = computed(() => authStore.hasPermission(routePermissionCodes.usersUpdate))
 const canBlock = computed(() => authStore.hasPermission(routePermissionCodes.usersBlock))
 const hasActions = computed(() => canUpdate.value || canBlock.value)
+const showTourButton = import.meta.dev
 
 const formOpen = ref(false)
 const saveError = ref('')
@@ -80,6 +85,68 @@ const editingUser = ref<SystemUser | null>(null)
 const resetTarget = ref<SystemUser | null>(null)
 const resetRequirePasswordChange = ref(true)
 const resetExpiresInHours = ref(24)
+const isTourOpen = ref(false)
+const isClientReady = ref(false)
+const { hasSeen, markSeen } = useTourProgress('users', 1)
+
+const tourSteps: TourStep[] = [
+    {
+        id: 'navigation',
+        target: '[data-tour="access-navigation"]',
+        title: 'Administración de acceso',
+        description:
+            'Aquí se separan las cuentas de usuario, los roles reutilizables y los permisos disponibles.',
+    },
+    {
+        id: 'role-templates',
+        target: '[data-tour="access-roles"]',
+        title: 'Crea plantillas de acceso',
+        description:
+            'Abre Roles para crear perfiles reutilizables, por ejemplo administrador, tesorero o líder. Después podrás asignarlos a cualquier usuario.',
+    },
+    {
+        id: 'new-user',
+        target: '[data-tour="users-create"]',
+        title: 'Asigna acceso a un miembro',
+        description:
+            'Selecciona Asignar acceso, vincula un miembro, completa su usuario y correo, y elige uno o más roles de acceso.',
+    },
+    {
+        id: 'invitation',
+        target: '[data-tour="users-summary"]',
+        title: 'Invitación segura',
+        description:
+            'Al crear la cuenta se envía una contraseña temporal y un enlace de un solo uso al correo indicado. Puedes controlar su vigencia y exigir un cambio de contraseña.',
+    },
+    {
+        id: 'manage-users',
+        target: '[data-tour="users-table"]',
+        title: 'Edita y protege las cuentas',
+        description:
+            'Busca y filtra cuentas aquí. En el menú de tres puntos de cada fila puedes editar, restablecer y reenviar el acceso, o bloquear y habilitar la cuenta.',
+    },
+]
+
+function startTour() {
+    isTourOpen.value = true
+}
+
+function endTour() {
+    isTourOpen.value = false
+    if (authStore.user?.id) markSeen(authStore.user.id)
+}
+
+function startFirstVisitTour() {
+    const userId = authStore.user?.id
+    if (isClientReady.value && userId && !hasSeen(userId)) startTour()
+}
+
+onMounted(() => {
+    isClientReady.value = true
+    startFirstVisitTour()
+})
+
+watch(() => authStore.user?.id, startFirstVisitTour)
 
 const stats = computed(() => ({
     total: users.value.length,
@@ -298,7 +365,7 @@ function retryQueries() {
             </UiButton>
         </div>
 
-        <section class="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section data-tour="users-summary" class="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <UiCard class="p-5">
                 <UsersRound class="mb-3 size-6 text-primary" />
                 <p
@@ -349,7 +416,7 @@ function retryQueries() {
             </UiCard>
         </section>
 
-        <section class="mt-8">
+        <section data-tour="users-table" class="mt-8">
             <DataTable
                 :rows="users"
                 :columns="columns"
@@ -368,9 +435,25 @@ function retryQueries() {
                 </template>
 
                 <template v-if="canCreate" #toolbar-end>
-                    <UiButton variant="outline" size="sm" type="button" @click="openCreate">
-                        <UserCog class="size-4" /> Asignar acceso
-                    </UiButton>
+                    <div class="flex items-center gap-2">
+                        <button
+                            v-if="showTourButton"
+                            type="button"
+                            class="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-outline-variant px-2.5 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                            @click="startTour"
+                        >
+                            <HelpCircle class="size-3.5" /> Recorrido
+                        </button>
+                        <UiButton
+                            data-tour="users-create"
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            @click="openCreate"
+                        >
+                            <UserCog class="size-4" /> Asignar acceso
+                        </UiButton>
+                    </div>
                 </template>
 
                 <template #cell-member="{ row }">
@@ -611,5 +694,7 @@ function retryQueries() {
                 </div>
             </section>
         </template>
+
+        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </component>
 </template>
