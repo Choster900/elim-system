@@ -5,12 +5,16 @@ import {
     CheckCircle2,
     ChevronDown,
     ClipboardList,
+    Compass,
     Eye,
     History,
 } from '@lucide/vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import MeetingDetailDrawer from '~/presentation/meetings/components/MeetingDetailDrawer.vue'
+import AppTour from '~/presentation/shared/components/AppTour.vue'
+import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
+import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { formatShortIsoDate } from '~/utils/date/date-format.util'
 import {
     usePendingMeetingDetailQuery,
@@ -33,6 +37,70 @@ const authStore = useAuthStore()
 const pendingQuery = usePendingOccurrencesQuery({ autoRefresh: true })
 
 const canRecord = computed(() => authStore.hasPermission(routePermissionCodes.financeRecord))
+const isTourOpen = ref(false)
+const isClientReady = ref(false)
+const { hasSeen, markSeen } = useTourProgress('offering-pending', 1)
+
+const tourSteps: TourStep[] = [
+    {
+        id: 'pending-heading',
+        target: '[data-tour="offerings-pending-heading"]',
+        title: 'Ofrendas pendientes',
+        description:
+            'Esta bandeja reúne las fechas realizadas que todavía necesitan registrar asistencia y ofrenda.',
+    },
+    {
+        id: 'pending-stats',
+        target: '[data-tour="offerings-pending-stats"]',
+        title: 'Prioriza el registro',
+        description:
+            'Revisa cuántas fechas y reuniones faltan, además de la antigüedad del pendiente más atrasado.',
+    },
+    {
+        id: 'pending-filters',
+        target: '[data-tour="offerings-pending-filters"]',
+        title: 'Acota tu territorio',
+        description:
+            'Si tienes más de una zona o sector, usa estos filtros para concentrarte en el grupo que atenderás.',
+    },
+    {
+        id: 'pending-list',
+        target: '[data-tour="offerings-pending-list"]',
+        title: 'Pendientes por reunión',
+        description:
+            'Cada tarjeta agrupa las fechas sin capturar de una reunión y muestra cuál es la más antigua.',
+    },
+    {
+        id: 'pending-actions',
+        target: '[data-tour="offerings-pending-actions"]',
+        title: 'Consulta o registra',
+        description:
+            'Abre el detalle para revisar la reunión o usa Registrar para capturar asistencia y ofrendas de sus fechas pendientes.',
+    },
+    {
+        id: 'pending-history',
+        target: '[data-tour="offerings-pending-history"]',
+        title: 'Consulta el historial',
+        description:
+            'Cuando una fecha ya está registrada, encuéntrala en el historial con sus tendencias y totales.',
+    },
+]
+
+function startTour() {
+    isTourOpen.value = true
+}
+
+function endTour() {
+    isTourOpen.value = false
+    if (authStore.user?.id) markSeen(authStore.user.id)
+}
+
+function startFirstVisitTour() {
+    const userId = authStore.user?.id
+    if (isClientReady.value && !pendingQuery.isPending.value && userId && !hasSeen(userId)) {
+        startTour()
+    }
+}
 
 const selectedZone = ref<number | null>(null)
 const selectedSector = ref<number | null>(null)
@@ -144,11 +212,19 @@ function closeMeetingDetail() {
 watch(selectedZone, () => {
     selectedSector.value = null
 })
+
+onMounted(() => {
+    isClientReady.value = true
+    startFirstVisitTour()
+})
+
+watch([() => authStore.user?.id, () => pendingQuery.isPending.value], startFirstVisitTour)
 </script>
 
 <template>
     <main class="mx-auto w-full max-w-system px-6 pb-20 pt-24 lg:px-10">
         <section
+            data-tour="offerings-pending-heading"
             class="flex flex-col gap-6 border-b border-outline-variant pb-10 md:flex-row md:items-end md:justify-between"
         >
             <div class="w-full sm:w-72">
@@ -168,7 +244,32 @@ watch(selectedZone, () => {
             </div>
 
             <div v-if="!personalScope" class="flex flex-wrap gap-2">
+                <div class="group relative">
+                    <button
+                        type="button"
+                        class="flex size-9 items-center justify-center rounded-full border border-primary/30 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"
+                        aria-label="Iniciar recorrido guiado de ofrendas pendientes"
+                        aria-describedby="offerings-pending-tour-hint"
+                        @click="startTour"
+                    >
+                        <Compass class="size-4" />
+                    </button>
+                    <div
+                        id="offerings-pending-tour-hint"
+                        role="tooltip"
+                        class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-60 translate-y-1 rounded-xl border border-outline-variant bg-surface p-3 text-left opacity-0 shadow-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+                    >
+                        <span
+                            class="absolute -top-1 right-3 size-2 rotate-45 border-l border-t border-outline-variant bg-surface"
+                        />
+                        <p class="text-xs font-semibold text-on-surface">Recorrido guiado</p>
+                        <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                            Aprende a ubicar, priorizar y registrar las ofrendas pendientes.
+                        </p>
+                    </div>
+                </div>
                 <UiButton
+                    data-tour="offerings-pending-history"
                     variant="outline"
                     type="button"
                     class="h-11 rounded px-5 text-xs uppercase tracking-wider"
@@ -179,7 +280,7 @@ watch(selectedZone, () => {
             </div>
         </section>
 
-        <section class="mt-10 grid gap-4 md:grid-cols-3">
+        <section data-tour="offerings-pending-stats" class="mt-10 grid gap-4 md:grid-cols-3">
             <UiCard class="p-6">
                 <CalendarClock class="mb-4 size-6 text-primary" />
                 <p
@@ -225,6 +326,7 @@ watch(selectedZone, () => {
 
         <section
             v-if="!personalScope && zoneOptions.length > 1"
+            data-tour="offerings-pending-filters"
             class="mt-8 flex flex-wrap items-end gap-3"
         >
             <div class="w-full sm:w-72">
@@ -262,7 +364,7 @@ watch(selectedZone, () => {
             </div>
         </section>
 
-        <section class="mt-8">
+        <section data-tour="offerings-pending-list" class="mt-8">
             <div
                 v-if="pendingQuery.isPending.value"
                 class="rounded-lg border border-outline-variant bg-surface-container-low px-6 py-12 text-center text-sm text-on-surface-variant"
@@ -346,7 +448,10 @@ watch(selectedZone, () => {
                                     la más antigua
                                 </p>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div
+                                data-tour="offerings-pending-actions"
+                                class="flex items-center gap-2"
+                            >
                                 <button
                                     type="button"
                                     class="flex size-10 items-center justify-center rounded border border-outline-variant text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
@@ -402,5 +507,6 @@ watch(selectedZone, () => {
             "
             @close="closeMeetingDetail"
         />
+        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </main>
 </template>
