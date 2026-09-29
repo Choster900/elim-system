@@ -18,6 +18,8 @@ import {
     DialogRoot,
     DialogTitle,
 } from 'radix-vue'
+import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
+import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
 import type { MeetingRecord } from '../interfaces/meeting.interface'
 import {
     formatMeetingPreviewDate,
@@ -35,6 +37,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ (event: 'close'): void }>()
+const { provider: mapProvider } = useMapProvider()
 
 const mapEl = ref<HTMLElement | null>(null)
 let map: import('leaflet').Map | null = null
@@ -46,7 +49,7 @@ const hasCoordinates = computed(
 )
 const directionsUrl = computed(() => {
     if (!hasCoordinates.value || !props.meeting) return null
-    return `https://www.google.com/maps/dir/?api=1&destination=${props.meeting.latitude},${props.meeting.longitude}`
+    return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${props.meeting.latitude}%2C${props.meeting.longitude}`
 })
 
 function statusLabel(meeting: MeetingRecord) {
@@ -72,12 +75,9 @@ async function initializeMap() {
 
     destroyMap()
     const coordinates: [number, number] = [props.meeting.latitude!, props.meeting.longitude!]
-    map = L.map(container, { zoomControl: true, attributionControl: false, scrollWheelZoom: false })
+    map = L.map(container, { zoomControl: true, scrollWheelZoom: false })
     map.zoomControl.setPosition('topright')
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 20,
-    }).addTo(map)
+    addLeafletRasterLayer(L, map, mapProvider.value)
     L.marker(coordinates).addTo(map)
     map.setView(coordinates, 15)
 }
