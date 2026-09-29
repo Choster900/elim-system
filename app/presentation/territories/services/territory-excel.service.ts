@@ -2,6 +2,7 @@ import type { AxiosInstance } from 'axios'
 import type {
     TerritoryHierarchy,
     TerritoryInput,
+    TerritoryLeaderOption,
     TerritoryLevel,
     TerritorySupervisorOption,
 } from '../interfaces/territory.interface'
@@ -13,31 +14,31 @@ type ExcelOutputCell = ExcelValue | Record<string, unknown>
 const DISTRICT_HEADERS = [
     'Referencia *',
     'Nombre *',
-    'Responsable',
+    'Pastor',
     'Descripción',
     'Color',
     'Estado',
-    'Polígono *',
+    'Polígono',
 ] as const
 const ZONE_HEADERS = [
     'Referencia *',
     'Distrito *',
     'Nombre *',
-    'Responsable',
+    'Coordinador',
     'Descripción',
     'Color',
     'Estado',
-    'Polígono *',
+    'Polígono',
 ] as const
 const SECTOR_HEADERS = [
     'Referencia *',
     'Zona *',
     'Nombre *',
-    'Supervisor *',
+    'Supervisor',
     'Descripción',
     'Color',
     'Estado',
-    'Polígono *',
+    'Polígono',
 ] as const
 
 const LEVEL_SHEET: Record<TerritoryLevel, string> = {
@@ -94,6 +95,12 @@ interface WorkbookFailureReasons {
     districts: string[]
     zones: string[]
     sectors: string[]
+}
+
+export interface TerritoryRoleCatalogs {
+    leaders: TerritoryLeaderOption[]
+    coordinators: TerritoryLeaderOption[]
+    supervisors: TerritorySupervisorOption[]
 }
 
 function headerCell(value: string, warning = false) {
@@ -211,9 +218,9 @@ function instructionsSheet() {
             'DISTRITO-NORTE o DIS-001',
         ],
         [
-            'Supervisor',
-            'Solo en sectores',
-            'Escribe un código de la pestaña Supervisores. Debe ser un usuario activo con rol SUPERVISOR.',
+            'Pastor / Coordinador / Supervisor',
+            'No',
+            'Escribe el código de un miembro que aparezca en la pestaña correspondiente: Pastores para Distritos, Coordinadores para Zonas y Supervisores para Sectores.',
             'MIE-0012',
         ],
         [
@@ -225,8 +232,8 @@ function instructionsSheet() {
         ['Estado', 'No', 'Admite Activo o Inactivo. Si queda vacío se usará Activo.', 'Activo'],
         [
             'Polígono',
-            'Sí',
-            'Escribe al menos tres puntos como latitud,longitud separados por |. Puedes copiar más puntos para delimitar mejor el área.',
+            'No',
+            'Si deseas delimitar el área desde la importación, escribe al menos tres puntos como latitud,longitud separados por |. También puedes dejarlo vacío y definirlo después al editar el territorio.',
             '13.704,-89.204 | 13.711,-89.192 | 13.696,-89.188',
         ],
         [
@@ -246,19 +253,19 @@ function instructionsSheet() {
     }
 }
 
-function supervisorsSheet(supervisors: TerritorySupervisorOption[]) {
-    const rows = supervisors.map((supervisor) => [
-        supervisor.code,
-        supervisor.fullName,
-        supervisor.email,
-        supervisor.phone,
-    ])
+function roleCatalogSheet(
+    sheet: string,
+    title: string,
+    columnLabel: string,
+    members: TerritoryLeaderOption[] | TerritorySupervisorOption[],
+) {
+    const rows = members.map((member) => [member.code, member.fullName, member.email, member.phone])
 
     return {
         data: [
             [
                 {
-                    value: 'Supervisores disponibles para sectores',
+                    value: title,
                     fontWeight: 'bold',
                     fontSize: 17,
                     textColor: '#FFFFFF',
@@ -271,7 +278,7 @@ function supervisorsSheet(supervisors: TerritorySupervisorOption[]) {
             ],
             [
                 {
-                    value: 'Copia el código del supervisor en la columna Supervisor de la pestaña Sectores.',
+                    value: `Copia el código del miembro en la columna ${columnLabel}.`,
                     textColor: '#655D58',
                     backgroundColor: '#F7EFE3',
                     columnSpan: 4,
@@ -284,7 +291,7 @@ function supervisorsSheet(supervisors: TerritorySupervisorOption[]) {
             ['Código', 'Nombre', 'Correo', 'Teléfono'].map((header) => titleCell(header)),
             ...rows.map((row, index) => row.map((value) => bodyCell(value, index % 2 === 1))),
         ] as never[][],
-        sheet: 'Supervisores',
+        sheet,
         columns: [{ width: 22 }, { width: 42 }, { width: 34 }, { width: 22 }],
         stickyRowsCount: 3,
         showGridLines: false,
@@ -293,7 +300,7 @@ function supervisorsSheet(supervisors: TerritorySupervisorOption[]) {
 
 async function writeTerritoryWorkbook(
     rows: WorkbookRows,
-    supervisors: TerritorySupervisorOption[],
+    roleCatalogs: TerritoryRoleCatalogs,
     filename: string,
     failureReasons?: WorkbookFailureReasons,
 ) {
@@ -323,22 +330,45 @@ async function writeTerritoryWorkbook(
                 [24, 24, 34, 24, 44, 16, 16, 74],
                 failureReasons?.sectors,
             ),
-            supervisorsSheet(supervisors),
+            roleCatalogSheet(
+                'Pastores',
+                'Pastores disponibles para distritos',
+                'Pastor de la pestaña Distritos',
+                roleCatalogs.leaders,
+            ),
+            roleCatalogSheet(
+                'Coordinadores',
+                'Coordinadores disponibles para zonas',
+                'Coordinador de la pestaña Zonas',
+                roleCatalogs.coordinators,
+            ),
+            roleCatalogSheet(
+                'Supervisores',
+                'Supervisores disponibles para sectores',
+                'Supervisor de la pestaña Sectores',
+                roleCatalogs.supervisors,
+            ),
         ],
         { fontFamily: 'Arial', fontSize: 10 },
     ).toFile(filename)
 }
 
-function hierarchyRows(hierarchy: TerritoryHierarchy, supervisors: TerritorySupervisorOption[]) {
+function hierarchyRows(hierarchy: TerritoryHierarchy, roleCatalogs: TerritoryRoleCatalogs) {
     const districtById = new Map(hierarchy.districts.map((district) => [district.id, district]))
     const zoneById = new Map(hierarchy.zones.map((zone) => [zone.id, zone]))
-    const supervisorById = new Map(supervisors.map((supervisor) => [supervisor.id, supervisor]))
+    const leaderById = new Map(roleCatalogs.leaders.map((leader) => [leader.id, leader]))
+    const coordinatorById = new Map(
+        roleCatalogs.coordinators.map((coordinator) => [coordinator.id, coordinator]),
+    )
+    const supervisorById = new Map(
+        roleCatalogs.supervisors.map((supervisor) => [supervisor.id, supervisor]),
+    )
 
     return {
         districts: hierarchy.districts.map((district) => [
             district.code,
             district.name,
-            district.leaderName,
+            district.leaderId ? (leaderById.get(district.leaderId)?.code ?? '') : '',
             district.description,
             district.color,
             district.isActive ? 'Activo' : 'Inactivo',
@@ -348,7 +378,7 @@ function hierarchyRows(hierarchy: TerritoryHierarchy, supervisors: TerritorySupe
             zone.code,
             districtById.get(zone.districtId)?.code ?? '',
             zone.name,
-            zone.leaderName,
+            zone.leaderId ? (coordinatorById.get(zone.leaderId)?.code ?? '') : '',
             zone.description,
             zone.color,
             zone.isActive ? 'Activo' : 'Inactivo',
@@ -369,19 +399,19 @@ function hierarchyRows(hierarchy: TerritoryHierarchy, supervisors: TerritorySupe
 
 export function exportTerritoriesWorkbook(
     hierarchy: TerritoryHierarchy,
-    supervisors: TerritorySupervisorOption[],
+    roleCatalogs: TerritoryRoleCatalogs,
 ) {
     return writeTerritoryWorkbook(
-        hierarchyRows(hierarchy, supervisors),
-        supervisors,
+        hierarchyRows(hierarchy, roleCatalogs),
+        roleCatalogs,
         `territorios-${new Date().toISOString().slice(0, 10)}.xlsx`,
     )
 }
 
-export function downloadTerritoryTemplate(supervisors: TerritorySupervisorOption[]) {
+export function downloadTerritoryTemplate(roleCatalogs: TerritoryRoleCatalogs) {
     return writeTerritoryWorkbook(
         { districts: [], zones: [], sectors: [] },
-        supervisors,
+        roleCatalogs,
         'plantilla-importacion-territorial.xlsx',
     )
 }
@@ -421,10 +451,7 @@ function parseColor(value: ExcelValue, level: TerritoryLevel, issues: string[]) 
 
 function parsePolygon(value: ExcelValue, issues: string[]): TerritoryInput['polygon'] {
     const source = text(value)
-    if (!source) {
-        issues.push('Polígono: es obligatorio y requiere al menos tres puntos.')
-        return []
-    }
+    if (!source) return []
 
     let rawPoints: unknown[]
     try {
@@ -462,29 +489,28 @@ function validateText(value: string, field: string, max: number, issues: string[
     if (value.length > max) issues.push(`${field}: no puede superar ${max} caracteres.`)
 }
 
-function findSupervisor(
+function findRoleMember(
     value: ExcelValue,
-    supervisors: TerritorySupervisorOption[],
+    roleLabel: string,
+    sheet: string,
+    members: TerritoryLeaderOption[] | TerritorySupervisorOption[],
     issues: string[],
 ) {
     const input = normalize(text(value))
-    if (!input) {
-        issues.push('Supervisor: es obligatorio en los sectores.')
-        return null
-    }
-    const matches = supervisors.filter(
-        (supervisor) =>
-            normalize(supervisor.code) === input || normalize(supervisor.fullName) === input,
+    if (!input) return null
+
+    const matches = members.filter(
+        (member) => normalize(member.code) === input || normalize(member.fullName) === input,
     )
     if (matches.length !== 1) {
         issues.push(
             matches.length
-                ? 'Supervisor: el nombre es ambiguo; utiliza el código del catálogo.'
-                : `Supervisor: “${text(value)}” no existe en la pestaña Supervisores.`,
+                ? `${roleLabel}: el nombre es ambiguo; utiliza el código del catálogo.`
+                : `${roleLabel}: “${text(value)}” no existe en la pestaña ${sheet}.`,
         )
         return null
     }
-    return matches[0]!.id
+    return matches[0]!
 }
 
 async function readTerritorySheet(
@@ -492,7 +518,7 @@ async function readTerritorySheet(
     sheet: string,
     headers: readonly string[],
     level: TerritoryLevel,
-    supervisors: TerritorySupervisorOption[],
+    roleCatalogs: TerritoryRoleCatalogs,
 ) {
     const { readSheet } = await import('read-excel-file/browser')
     const excelRows = (await readSheet(file, sheet)) as ExcelValue[][]
@@ -520,7 +546,6 @@ async function readTerritorySheet(
         const reference = text(value(row, 'Referencia *'))
         const name = text(value(row, 'Nombre *'))
         const description = text(value(row, 'Descripción'))
-        const leaderName = level === 'sector' ? '' : text(value(row, 'Responsable'))
         const parentReference =
             level === 'zona'
                 ? text(value(row, 'Distrito *'))
@@ -531,15 +556,34 @@ async function readTerritorySheet(
         validateText(reference, 'Referencia', 100, issues, 1)
         validateText(name, 'Nombre', 100, issues, 2)
         validateText(description, 'Descripción', 300, issues)
-        validateText(leaderName, 'Responsable', 100, issues)
         if (level !== 'distrito' && !parentReference) {
             issues.push(`${level === 'zona' ? 'Distrito' : 'Zona'}: es obligatorio.`)
         }
 
-        const supervisorId =
-            level === 'sector'
-                ? findSupervisor(value(row, 'Supervisor *'), supervisors, issues)
-                : null
+        const assignedMember =
+            level === 'distrito'
+                ? findRoleMember(
+                      value(row, 'Pastor'),
+                      'Pastor',
+                      'Pastores',
+                      roleCatalogs.leaders,
+                      issues,
+                  )
+                : level === 'zona'
+                  ? findRoleMember(
+                        value(row, 'Coordinador'),
+                        'Coordinador',
+                        'Coordinadores',
+                        roleCatalogs.coordinators,
+                        issues,
+                    )
+                  : findRoleMember(
+                        value(row, 'Supervisor'),
+                        'Supervisor',
+                        'Supervisores',
+                        roleCatalogs.supervisors,
+                        issues,
+                    )
 
         return [
             {
@@ -550,12 +594,13 @@ async function readTerritorySheet(
                 input: {
                     name,
                     code: '',
-                    leaderName,
+                    leaderId: level === 'sector' ? undefined : (assignedMember?.id ?? null),
+                    leaderName: level === 'sector' ? '' : (assignedMember?.fullName ?? ''),
                     description,
                     color: parseColor(value(row, 'Color'), level, issues),
-                    polygon: parsePolygon(value(row, 'Polígono *'), issues),
+                    polygon: parsePolygon(value(row, 'Polígono'), issues),
                     isActive: parseStatus(value(row, 'Estado'), issues),
-                    supervisorId,
+                    supervisorId: level === 'sector' ? (assignedMember?.id ?? null) : null,
                 },
                 rawValues: headers.map((header) => value(row, header)),
                 issues,
@@ -635,7 +680,7 @@ function validateRelationships(preview: TerritoryImportPreview, hierarchy: Terri
 export async function parseTerritoriesWorkbook(
     file: File,
     hierarchy: TerritoryHierarchy,
-    supervisors: TerritorySupervisorOption[],
+    roleCatalogs: TerritoryRoleCatalogs,
 ): Promise<TerritoryImportPreview> {
     if (file.size > 5 * 1024 * 1024) {
         return {
@@ -660,7 +705,7 @@ export async function parseTerritoriesWorkbook(
 
     for (const [target, sheet, headers, level] of sheets) {
         try {
-            const rows = await readTerritorySheet(file, sheet, headers, level, supervisors)
+            const rows = await readTerritorySheet(file, sheet, headers, level, roleCatalogs)
             if (target === 'distritos') preview.districts = rows
             if (target === 'zones') preview.zones = rows
             if (target === 'sectors') preview.sectors = rows
@@ -792,7 +837,7 @@ export async function importTerritories(
 export function downloadTerritoryImportFailures(
     preview: TerritoryImportPreview,
     failures: TerritoryImportFailure[],
-    supervisors: TerritorySupervisorOption[],
+    roleCatalogs: TerritoryRoleCatalogs,
     result?: TerritoryImportResult | null,
 ) {
     const failureByRow = new Map(
@@ -822,7 +867,7 @@ export function downloadTerritoryImportFailures(
             zones: zones.map((row) => replaceParent(row, result?.resolvedDistrictCodes)),
             sectors: sectors.map((row) => replaceParent(row, result?.resolvedZoneCodes)),
         },
-        supervisors,
+        roleCatalogs,
         `territorios-pendientes-${new Date().toISOString().slice(0, 10)}.xlsx`,
         {
             districts: districts.map(
