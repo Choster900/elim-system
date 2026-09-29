@@ -6,8 +6,8 @@ import {
     CalendarPlus,
     CircleDollarSign,
     Clock3,
+    Compass,
     HandCoins,
-    HelpCircle,
     MapPin,
     RefreshCw,
     TrendingDown,
@@ -42,7 +42,6 @@ const dashboardQuery = useDashboardQuery(selectedPeriod, selectedDistrictId)
 const summary = computed(() => dashboardQuery.data.value ?? null)
 const isLoading = computed(() => dashboardQuery.isPending.value)
 const isRefreshing = computed(() => dashboardQuery.isFetching.value && !isLoading.value)
-const showTourButton = import.meta.dev
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
 const { hasSeen, markSeen } = useTourProgress('dashboard', 1)
@@ -320,15 +319,31 @@ function openMeeting(id: number) {
                 data-tour="dashboard-period"
                 class="flex flex-col gap-3 sm:flex-row sm:items-center"
             >
-                <button
-                    v-if="showTourButton"
-                    type="button"
-                    class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-outline-variant px-3 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    :disabled="!summary"
-                    @click="startTour"
-                >
-                    <HelpCircle class="size-4" /> Ver recorrido
-                </button>
+                <div class="group relative">
+                    <button
+                        type="button"
+                        class="flex size-10 items-center justify-center rounded-full border border-primary/40 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
+                        aria-label="Iniciar recorrido guiado del dashboard"
+                        aria-describedby="dashboard-tour-hint"
+                        :disabled="!summary"
+                        @click="startTour"
+                    >
+                        <Compass class="size-4" />
+                    </button>
+                    <div
+                        id="dashboard-tour-hint"
+                        role="tooltip"
+                        class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-60 translate-y-1 rounded-xl border border-outline-variant bg-surface p-3 text-left opacity-0 shadow-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+                    >
+                        <span
+                            class="absolute -top-1 right-3 size-2 rotate-45 border-l border-t border-outline-variant bg-surface"
+                        />
+                        <p class="text-xs font-semibold text-on-surface">Recorrido guiado</p>
+                        <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                            Conoce los indicadores, filtros y acciones rápidas del dashboard.
+                        </p>
+                    </div>
+                </div>
                 <div class="inline-flex rounded-lg border border-outline-variant bg-surface p-1">
                     <button
                         v-for="period in periodOptions"
