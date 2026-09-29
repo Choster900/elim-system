@@ -24,6 +24,7 @@ export const MEMBER_ROLE_CODES = [
     'MEMBER',
     'PASTOR',
     'LEADER',
+    'COORDINATOR',
     'HOST',
     'SUPERVISOR',
     'DEACON',
