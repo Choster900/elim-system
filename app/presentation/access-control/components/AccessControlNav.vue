@@ -44,6 +44,7 @@ const visibleItems = computed(() =>
     <nav
         class="grid overflow-hidden rounded-lg border border-outline-variant bg-surface-container sm:grid-cols-3"
         aria-label="Administración de acceso"
+        data-tour="access-navigation"
     >
         <button
             v-for="item in visibleItems"
@@ -54,6 +55,7 @@ const visibleItems = computed(() =>
                 modelValue === item.value ? 'bg-primary/10 text-primary' : 'text-on-surface-variant'
             "
             :aria-current="modelValue === item.value ? 'page' : undefined"
+            :data-tour="item.value === 'roles' ? 'access-roles' : undefined"
             @click="emit('update:modelValue', item.value)"
         >
             <component :is="item.icon" class="size-5 shrink-0" />
