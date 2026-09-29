@@ -24,6 +24,7 @@ const territories = {
     hierarchy: ['territories', 'hierarchy'] as const,
     sectorOptions: ['territories', 'sector-options'] as const,
     leaders: ['territories', 'leaders'] as const,
+    coordinators: ['territories', 'coordinators'] as const,
     supervisors: ['territories', 'supervisors'] as const,
 }
 
