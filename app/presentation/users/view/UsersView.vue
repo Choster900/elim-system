@@ -3,8 +3,8 @@ import {
     Ban,
     CheckCircle2,
     Clock3,
+    Compass,
     Edit3,
-    HelpCircle,
     KeyRound,
     LockKeyhole,
     Mail,
@@ -77,8 +77,6 @@ const canCreate = computed(() => authStore.hasPermission(routePermissionCodes.us
 const canUpdate = computed(() => authStore.hasPermission(routePermissionCodes.usersUpdate))
 const canBlock = computed(() => authStore.hasPermission(routePermissionCodes.usersBlock))
 const hasActions = computed(() => canUpdate.value || canBlock.value)
-const showTourButton = import.meta.dev
-
 const formOpen = ref(false)
 const saveError = ref('')
 const editingUser = ref<SystemUser | null>(null)
@@ -434,17 +432,38 @@ function retryQueries() {
                     </span>
                 </template>
 
-                <template v-if="canCreate" #toolbar-end>
+                <template #toolbar-end>
                     <div class="flex items-center gap-2">
-                        <button
-                            v-if="showTourButton"
-                            type="button"
-                            class="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-outline-variant px-2.5 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
-                            @click="startTour"
-                        >
-                            <HelpCircle class="size-3.5" /> Recorrido
-                        </button>
+                        <div class="group relative">
+                            <UiButton
+                                variant="outline"
+                                size="icon"
+                                type="button"
+                                class="size-9 rounded-full border-primary/40 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md active:translate-y-0"
+                                aria-label="Iniciar recorrido guiado de usuarios"
+                                aria-describedby="users-tour-hint"
+                                @click="startTour"
+                            >
+                                <Compass class="size-4" />
+                            </UiButton>
+                            <div
+                                id="users-tour-hint"
+                                role="tooltip"
+                                class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-60 translate-y-1 rounded-xl border border-outline-variant bg-surface p-3 text-left opacity-0 shadow-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+                            >
+                                <span
+                                    class="absolute -top-1 right-3 size-2 rotate-45 border-l border-t border-outline-variant bg-surface"
+                                />
+                                <p class="text-xs font-semibold text-on-surface">
+                                    Recorrido guiado
+                                </p>
+                                <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                                    Aprende a asignar accesos, roles y permisos a los usuarios.
+                                </p>
+                            </div>
+                        </div>
                         <UiButton
+                            v-if="canCreate"
                             data-tour="users-create"
                             variant="outline"
                             size="sm"
