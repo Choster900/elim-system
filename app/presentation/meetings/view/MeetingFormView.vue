@@ -850,7 +850,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     id="meeting-title"
                                     v-model="form.title"
                                     type="text"
-                                    placeholder="Ej. Reunión de líderes de jóvenes"
                                     :class="[
                                         inputClass,
                                         'mt-1',
@@ -871,8 +870,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :options="meetingTypes"
                                         option-value="id"
                                         option-label="name"
-                                        placeholder="Selecciona un tipo"
-                                        search-placeholder="Buscar tipo..."
                                     />
                                 </div>
                             </div>
@@ -884,7 +881,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 id="meeting-desc"
                                 v-model="form.description"
                                 rows="3"
-                                placeholder="Propósito, agenda principal, o cualquier contexto relevante."
                                 :class="[
                                     'mt-1',
                                     inputClass,
@@ -914,7 +910,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     <UiDatePicker
                                         v-model="form.date"
                                         mode="single"
-                                        placeholder="Selecciona fecha"
                                         :invalid="!!formErrors.date"
                                     />
                                 </div>
@@ -957,7 +952,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     <UiSearchSelect
                                         v-model="form.frequency"
                                         :options="frequencyOptions"
-                                        placeholder="Selecciona frecuencia"
                                         :searchable="false"
                                     />
                                 </div>
@@ -974,7 +968,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     <UiSearchSelect
                                         v-model="form.monthlyMode"
                                         :options="monthlyModeOptions"
-                                        placeholder="Selecciona el modo"
                                         :searchable="false"
                                     />
                                 </div>
@@ -996,7 +989,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         <UiSearchSelect
                                             v-model="form.weekOrdinal"
                                             :options="weekOrdinalOptions"
-                                            placeholder="Posición"
                                             :searchable="false"
                                         />
                                     </div>
@@ -1007,7 +999,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         <UiSearchSelect
                                             v-model="form.weekday"
                                             :options="weekdayOptions"
-                                            placeholder="Día"
                                             :searchable="false"
                                         />
                                     </div>
@@ -1026,7 +1017,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         id="meeting-location"
                                         v-model="form.location"
                                         type="text"
-                                        placeholder="Salón principal, casa de familia, dirección..."
                                         :class="[inputClass, 'pl-9']"
                                     />
                                 </div>
@@ -1037,7 +1027,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     <UiDatePicker
                                         v-model="form.recurrenceEndDate"
                                         mode="single"
-                                        placeholder="Sin fecha de finalización"
                                         :invalid="!!formErrors.recurrenceEndDate"
                                     />
                                 </div>
@@ -1157,8 +1146,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         option-value="id"
                                         option-label="name"
                                         option-description="code"
-                                        placeholder="Selecciona un sector"
-                                        search-placeholder="Buscar sector por nombre o código..."
                                         :invalid="!!formErrors.sectorId"
                                     />
                                 </div>
@@ -1176,8 +1163,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         option-label="fullName"
                                         option-description="documentNumber"
                                         :search-fields="['code', 'email', 'phone']"
-                                        placeholder="Selecciona un líder"
-                                        search-placeholder="Buscar líder por nombre, DUI, código, correo o teléfono..."
                                         :invalid="!!formErrors.leaderId"
                                     />
                                 </div>
@@ -1224,8 +1209,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         :search-fields="['code', 'email', 'phone']"
                                         multiple
                                         clearable
-                                        placeholder="Añade supervisores"
-                                        search-placeholder="Buscar supervisor por nombre, DUI, código, correo o teléfono..."
                                     />
                                 </div>
                             </div>
@@ -1376,7 +1359,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                                 maxlength="7"
                                                 spellcheck="false"
                                                 autocomplete="off"
-                                                placeholder="#E9C176"
                                                 class="h-10 min-w-0 flex-1 rounded border border-outline-variant bg-surface px-3 font-mono text-sm uppercase text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                                                 :aria-invalid="!!colorError"
                                                 @keydown.enter.prevent="applyCustomColor"
@@ -1406,7 +1388,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 id="meeting-notes"
                                 v-model="form.notes"
                                 rows="2"
-                                placeholder="Detalles operativos, recordatorios, requisitos especiales..."
                                 :class="[
                                     'mt-1',
                                     inputClass,
