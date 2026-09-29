@@ -1,13 +1,12 @@
 import type { MemberGender, MemberMaritalStatus, MemberStatus } from '@prisma/client'
 
 export interface MemberBaseDto {
-    code?: string
     firstName: string
     middleName: string | null
     lastName: string
     secondLastName: string | null
     preferredName: string | null
-    documentNumber: string
+    documentNumber: string | null
     birthDate: string | null
     gender: MemberGender
     maritalStatus: MemberMaritalStatus
@@ -22,7 +21,7 @@ export interface MemberBaseDto {
     status: MemberStatus
     roles: string[]
     ministries: string[]
-    joinedAt: string | null
+    joinedAt?: string | null
     conversionDate: string | null
     baptismDate: string | null
     sector: string | null
