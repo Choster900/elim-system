@@ -12,7 +12,10 @@ const pointSchema = Joi.array()
     .ordered(Joi.number().min(-90).max(90).required(), Joi.number().min(-180).max(180).required())
     .length(2)
 
-const polygonSchema = Joi.array().items(pointSchema).min(3).max(500)
+const polygonSchema = Joi.alternatives().try(
+    Joi.array().length(0),
+    Joi.array().items(pointSchema).min(3).max(500),
+)
 
 const baseFields = {
     name: Joi.string().trim().min(2).max(100),
@@ -32,7 +35,7 @@ const requiredBaseFields = {
     leaderName: baseFields.leaderName.default(null),
     description: baseFields.description.default(null),
     color: baseFields.color.required(),
-    polygon: baseFields.polygon.required(),
+    polygon: baseFields.polygon.default([]),
     isActive: baseFields.isActive.default(true),
 }
 
