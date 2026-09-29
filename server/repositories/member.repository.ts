@@ -176,9 +176,8 @@ export function findMemberByDocument(documentNumber: string, excludedMemberId?: 
     })
 }
 
-export function findMemberMatches(code?: string, documentNumber?: string | null) {
+export function findMemberMatches(documentNumber?: string | null) {
     const filters: Prisma.MemberWhereInput[] = []
-    if (code) filters.push({ code })
     if (documentNumber) {
         filters.push({ documentNumber: { equals: documentNumber, mode: 'insensitive' } })
     }
@@ -227,30 +226,25 @@ export async function createMember(
     relations: Required<Pick<ResolvedMemberRelations, 'roleIds' | 'ministryIds'>> &
         Pick<ResolvedMemberRelations, 'territorySectorId'>,
 ) {
-    const requestedCode = dto.code?.trim().toUpperCase()
-
     for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
             const member = await prisma.$transaction(
                 async (transaction) => {
-                    const codes = requestedCode
-                        ? []
-                        : await transaction.member.findMany({
-                              where: { code: { startsWith: 'MIE-' } },
-                              select: { code: true },
-                          })
-                    const code =
-                        requestedCode ??
-                        nextSequentialCode(
-                            'MIE',
-                            codes.map((item) => item.code),
-                            4,
-                        )
+                    const codes = await transaction.member.findMany({
+                        where: { code: { startsWith: 'MIE-' } },
+                        select: { code: true },
+                    })
+                    const code = nextSequentialCode(
+                        'MIE',
+                        codes.map((item) => item.code),
+                        4,
+                    )
 
                     return transaction.member.create({
                         data: {
                             ...scalarData(dto),
                             code,
+                            ...(dto.joinedAt === undefined ? { joinedAt: new Date() } : {}),
                             ...(relations.territorySectorId
                                 ? {
                                       territorySector: {
