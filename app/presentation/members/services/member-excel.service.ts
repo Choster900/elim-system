@@ -6,14 +6,12 @@ import type {
     MemberGender,
     MemberInput,
     MemberMaritalStatus,
-    MemberStatus,
 } from '../interfaces/member.interface'
 import { isValidDui, normalizeDui } from '#shared/utils/dui.util'
 import {
     getMemberGenderLabel,
     getMemberMaritalStatusLabel,
     getMemberRoleLabel,
-    getMemberStatusLabel,
 } from '../utils/member-format.util'
 
 type ExcelValue = string | number | boolean | Date | null | undefined
@@ -36,42 +34,30 @@ export interface MemberRetryFailure {
     reasons: string[]
 }
 
-const HEADERS = [
-    'Código',
+const TEMPLATE_HEADERS = [
     'Nombres *',
     'Segundo nombre',
     'Apellidos *',
     'Segundo apellido',
-    'Nombre preferido',
     'Documento',
     'Fecha nacimiento',
-    'Género',
+    'Género *',
     'Estado civil',
     'Teléfono',
-    'Teléfono alterno',
     'Correo',
-    'Dirección',
-    'País',
-    'Departamento',
     'Municipio',
     'Ocupación',
-    'Estado',
     'Roles',
-    'Ministerios',
-    'Fecha ingreso',
     'Fecha conversión',
     'Fecha bautismo',
     'Sector',
-    'Grupo pequeño',
-    'Contacto emergencia',
-    'Teléfono emergencia',
-    'Notas',
 ] as const
 
-const COLUMN_WIDTHS = [
-    14, 20, 18, 20, 18, 18, 18, 16, 16, 18, 16, 18, 26, 32, 20, 22, 24, 22, 14, 30, 28, 16, 16, 16,
-    18, 22, 24, 20, 36,
-].map((width) => ({ width }))
+const TEMPLATE_COLUMN_WIDTHS = [20, 18, 20, 18, 18, 16, 16, 18, 16, 26, 28, 22, 30, 16, 16, 18].map(
+    (width) => ({ width }),
+)
+const EXPORT_HEADERS = ['Código', ...TEMPLATE_HEADERS]
+const EXPORT_COLUMN_WIDTHS = [{ width: 14 }, ...TEMPLATE_COLUMN_WIDTHS]
 
 const headerStyle = (value: string, warning = false) => ({
     value,
@@ -102,30 +88,18 @@ function memberRow(member: Member): ExcelOutputCell[] {
         member.middleName,
         member.lastName,
         member.secondLastName,
-        member.preferredName,
         member.documentNumber,
         dateCell(member.birthDate),
         getMemberGenderLabel(member.gender),
         getMemberMaritalStatusLabel(member.maritalStatus),
         member.phone,
-        member.alternatePhone,
         member.email,
-        member.address,
-        member.countryCode ?? member.country,
-        member.departmentCode ?? member.department,
         member.municipalityCode ?? member.municipality,
         member.occupation,
-        getMemberStatusLabel(member.status),
         member.roles.map(getMemberRoleLabel).join('; '),
-        member.ministries.join('; '),
-        dateCell(member.joinedAt),
         dateCell(member.conversionDate),
         dateCell(member.baptismDate),
         member.sectorCode ?? member.sector,
-        member.smallGroup,
-        member.emergencyContactName,
-        member.emergencyContactPhone,
-        member.notes,
     ]
 }
 
@@ -157,7 +131,7 @@ function instructionsData(catalogs: MemberCatalogs) {
         ],
         [
             {
-                value: 'No cambies los encabezados de “Miembros”. Cada catálogo tiene su propia pestaña; separa múltiples roles o ministerios con punto y coma.',
+                value: 'No cambies los encabezados de “Miembros”. Cada catálogo tiene su propia pestaña; separa múltiples roles con punto y coma.',
                 textColor: '#655D58',
                 columnSpan: 4,
                 wrap: true,
@@ -174,10 +148,19 @@ function instructionsData(catalogs: MemberCatalogs) {
         ],
         ['Nombres', 'Sí', 'Texto, máximo 100 caracteres', 'María Elena'],
         ['Apellidos', 'Sí', 'Texto, máximo 100 caracteres', 'González'],
-        ['Código', 'No', 'Vacío para generar MIE-####; existente para actualizar', 'MIE-0025'],
-        ['Documento', 'Sí', 'DUI salvadoreño válido y único, con formato ########-#', '01234567-8'],
-        ['Fechas', 'No', 'dd/mm/aaaa o fecha válida de Excel', '14/08/2026'],
-        ['Estado', 'No', catalogs.statuses.map((option) => option.label).join(', '), 'Activo'],
+        [
+            'Estado',
+            'Automático',
+            'Todos los miembros importados se registran como Activo.',
+            'Activo',
+        ],
+        ['Documento', 'No', 'DUI válido y único, con formato ########-#', '01234567-8'],
+        [
+            'Fechas de conversión y bautismo',
+            'No',
+            'Opcionales. Usa dd/mm/aaaa o una fecha válida de Excel.',
+            '14/08/2026',
+        ],
         ['Género', 'Sí', 'FEMALE o MALE. Consulta la hoja Géneros.', 'FEMALE'],
         [
             'Estado civil',
@@ -191,22 +174,11 @@ function instructionsData(catalogs: MemberCatalogs) {
             'Nombres o códigos de la hoja Roles, separados por ;',
             'MEMBER; SUPERVISOR',
         ],
-        [
-            'Ministerios',
-            'No',
-            'Nombres o códigos de la hoja Ministerios, separados por ;',
-            'Jóvenes; Alabanza',
-        ],
-        [
-            'Residencia',
-            'No',
-            'Usa País, Departamento y Municipio respetando la jerarquía de sus hojas.',
-            'SV; SV-SS; SV-SS-CENTRO',
-        ],
+        ['Municipio', 'No', 'Escribe el código o nombre de la hoja Municipios.', 'SV-SS-CENTRO'],
         [
             'Sector',
             'No',
-            'Opcional. Escribe un único código de la hoja Sectores. Distrito y zona se obtienen del sector.',
+            'Opcional. Escribe un único código de la hoja Sectores. No se solicitan distrito ni zona.',
             'SEC-001',
         ],
         [
@@ -282,26 +254,7 @@ function simpleCatalogRows(options: MemberCatalogOption[]) {
 }
 
 function catalogSheets(catalogs: MemberCatalogs) {
-    const countryByCode = new Map(
-        catalogs.countries.map((country) => [country.code ?? country.value, country.label]),
-    )
-    const departmentByCode = new Map(
-        catalogs.departments.map((department) => [department.code ?? department.value, department]),
-    )
-    const districtByCode = new Map(
-        catalogs.districts.map((district) => [district.code ?? district.value, district.label]),
-    )
-    const zoneByCode = new Map(catalogs.zones.map((zone) => [zone.code ?? zone.value, zone]))
-
     return [
-        catalogSheet(
-            'Estados',
-            'Estados del miembro',
-            'Escribe el código o el nombre exactamente como aparece en esta tabla.',
-            ['Valor a escribir', 'Nombre visible'],
-            simpleCatalogRows(catalogs.statuses),
-            [24, 32],
-        ),
         catalogSheet(
             'Géneros',
             'Géneros permitidos',
@@ -319,38 +272,15 @@ function catalogSheets(catalogs: MemberCatalogs) {
             [24, 32],
         ),
         catalogSheet(
-            'Países',
-            'Países disponibles',
-            'Selecciona primero el país para identificar sus departamentos.',
-            ['Código de país', 'Nombre del país'],
-            simpleCatalogRows(catalogs.countries),
-            [24, 34],
-        ),
-        catalogSheet(
-            'Departamentos',
-            'Departamentos disponibles',
-            'Cada departamento pertenece a un país.',
-            ['Código', 'Departamento', 'Código de país', 'País'],
-            catalogs.departments.map((department) => [
-                department.code ?? department.value,
-                department.label,
-                department.countryCode,
-                countryByCode.get(department.countryCode) ?? '',
-            ]),
-            [24, 34, 24, 32],
-        ),
-        catalogSheet(
             'Municipios',
             'Municipios disponibles',
-            'Cada municipio pertenece a un departamento y a su país.',
-            ['Código', 'Municipio', 'Código de departamento', 'Departamento'],
+            'Escribe el código o el nombre exactamente como aparece en esta tabla.',
+            ['Código', 'Municipio'],
             catalogs.municipalities.map((municipality) => [
                 municipality.code ?? municipality.value,
                 municipality.label,
-                municipality.departmentCode,
-                departmentByCode.get(municipality.departmentCode)?.label ?? '',
             ]),
-            [28, 38, 30, 36],
+            [28, 38],
         ),
         catalogSheet(
             'Roles',
@@ -361,58 +291,12 @@ function catalogSheets(catalogs: MemberCatalogs) {
             [28, 36],
         ),
         catalogSheet(
-            'Ministerios',
-            'Ministerios activos',
-            'Para asignar varios ministerios sepáralos con punto y coma.',
-            ['Código', 'Nombre visible'],
-            simpleCatalogRows(catalogs.ministries),
-            [28, 36],
-        ),
-        catalogSheet(
-            'Distritos',
-            'Distritos activos',
-            'Consulta informativa: el distrito se deriva del sector y no se importa en el miembro.',
-            ['Código de distrito', 'Nombre del distrito'],
-            simpleCatalogRows(catalogs.districts),
-            [28, 40],
-        ),
-        catalogSheet(
-            'Zonas',
-            'Zonas activas',
-            'Consulta informativa: la zona se deriva del sector y no se importa en el miembro.',
-            ['Código de zona', 'Nombre de la zona', 'Código de distrito', 'Distrito'],
-            catalogs.zones.map((zone) => [
-                zone.code ?? zone.value,
-                zone.label,
-                zone.districtCode,
-                districtByCode.get(zone.districtCode) ?? '',
-            ]),
-            [24, 36, 26, 36],
-        ),
-        catalogSheet(
             'Sectores',
             'Sectores activos',
-            'Cada sector pertenece a una zona y, por medio de ella, a un distrito.',
-            [
-                'Código de sector',
-                'Nombre del sector',
-                'Código de zona',
-                'Zona',
-                'Código de distrito',
-                'Distrito',
-            ],
-            catalogs.sectors.map((sector) => {
-                const zone = zoneByCode.get(sector.zoneCode)
-                return [
-                    sector.code ?? sector.value,
-                    sector.label,
-                    sector.zoneCode,
-                    zone?.label ?? '',
-                    zone?.districtCode ?? '',
-                    zone ? (districtByCode.get(zone.districtCode) ?? '') : '',
-                ]
-            }),
-            [24, 38, 24, 34, 26, 34],
+            'La asignación territorial del miembro se realiza únicamente por sector.',
+            ['Código de sector', 'Nombre del sector'],
+            simpleCatalogRows(catalogs.sectors),
+            [24, 38],
         ),
     ]
 }
@@ -421,12 +305,17 @@ async function writeMembersWorkbook(
     rows: ExcelOutputCell[][],
     catalogs: MemberCatalogs,
     filename: string,
+    headerNames: readonly string[],
+    columnWidths: { width: number }[],
     failureReasons?: string[],
 ) {
     const { default: writeExcelFile } = await import('write-excel-file/browser')
     const headers = failureReasons
-        ? [...HEADERS.map((header) => headerStyle(header)), headerStyle('Motivo del rechazo', true)]
-        : HEADERS.map((header) => headerStyle(header))
+        ? [
+              ...headerNames.map((header) => headerStyle(header)),
+              headerStyle('Motivo del rechazo', true),
+          ]
+        : headerNames.map((header) => headerStyle(header))
     const memberRows = failureReasons
         ? rows.map((row, index) => [
               ...row,
@@ -444,7 +333,7 @@ async function writeMembersWorkbook(
             {
                 data: [headers, ...memberRows] as never[][],
                 sheet: 'Miembros',
-                columns: failureReasons ? [...COLUMN_WIDTHS, { width: 60 }] : COLUMN_WIDTHS,
+                columns: failureReasons ? [...columnWidths, { width: 60 }] : columnWidths,
                 stickyRowsCount: 1,
                 stickyColumnsCount: 2,
                 showGridLines: false,
@@ -469,11 +358,19 @@ export function exportMembersWorkbook(members: Member[], catalogs: MemberCatalog
         members.map(memberRow),
         catalogs,
         `miembros-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        EXPORT_HEADERS,
+        EXPORT_COLUMN_WIDTHS,
     )
 }
 
 export function downloadMembersTemplate(catalogs: MemberCatalogs) {
-    return writeMembersWorkbook([], catalogs, 'plantilla-importacion-miembros.xlsx')
+    return writeMembersWorkbook(
+        [],
+        catalogs,
+        'plantilla-importacion-miembros.xlsx',
+        TEMPLATE_HEADERS,
+        TEMPLATE_COLUMN_WIDTHS,
+    )
 }
 
 export function downloadMemberImportFailures(
@@ -488,6 +385,8 @@ export function downloadMemberImportFailures(
         failedRows.map((row) => row.rawValues),
         catalogs,
         `miembros-pendientes-${date}.xlsx`,
+        TEMPLATE_HEADERS,
+        TEMPLATE_COLUMN_WIDTHS,
         failedRows.map((row) => failureByRow.get(row.rowNumber)?.join(' | ') ?? ''),
     )
 }
@@ -576,7 +475,7 @@ function isoDate(value: ExcelValue, field: string, issues: string[]) {
 
 function resolveTerritory(
     row: ExcelValue[],
-    value: (row: ExcelValue[], name: (typeof HEADERS)[number]) => ExcelValue,
+    value: (row: ExcelValue[], name: (typeof TEMPLATE_HEADERS)[number]) => ExcelValue,
     catalogs: MemberCatalogs,
     issues: string[],
 ) {
@@ -587,53 +486,19 @@ function resolveTerritory(
 
 function resolveResidence(
     row: ExcelValue[],
-    value: (row: ExcelValue[], name: (typeof HEADERS)[number]) => ExcelValue,
+    value: (row: ExcelValue[], name: (typeof TEMPLATE_HEADERS)[number]) => ExcelValue,
     catalogs: MemberCatalogs,
     issues: string[],
 ) {
-    let country = resolveOption(value(row, 'País'), catalogs.countries, undefined, 'País', issues)
-    let department = resolveOption(
-        value(row, 'Departamento'),
-        catalogs.departments,
-        undefined,
-        'Departamento',
-        issues,
+    return (
+        resolveOption(
+            value(row, 'Municipio'),
+            catalogs.municipalities,
+            undefined,
+            'Municipio',
+            issues,
+        ) ?? null
     )
-    const municipality = resolveOption(
-        value(row, 'Municipio'),
-        catalogs.municipalities,
-        undefined,
-        'Municipio',
-        issues,
-    )
-    const municipalityOption = catalogs.municipalities.find(
-        (option) => option.value === municipality,
-    )
-
-    if (municipalityOption) {
-        if (department && municipalityOption.departmentCode !== department) {
-            issues.push(
-                `Municipio: ${municipalityOption.label} no pertenece al departamento seleccionado.`,
-            )
-        }
-        department = municipalityOption.departmentCode
-    }
-
-    const departmentOption = catalogs.departments.find((option) => option.value === department)
-    if (departmentOption) {
-        if (country && departmentOption.countryCode !== country) {
-            issues.push(
-                `Departamento: ${departmentOption.label} no pertenece al país seleccionado.`,
-            )
-        }
-        country = departmentOption.countryCode
-    }
-
-    return {
-        country: country ?? null,
-        department: department ?? null,
-        municipality: municipality ?? null,
-    }
 }
 
 export async function parseMembersWorkbook(
@@ -651,9 +516,9 @@ export async function parseMembersWorkbook(
     const headerIndexes = new Map(
         excelRows[0]!.map((cell, index) => [normalize(text(cell)), index]),
     )
-    const column = (name: (typeof HEADERS)[number]) => headerIndexes.get(normalize(name))
-    const missing = ['Nombres *', 'Apellidos *', 'Documento'].filter(
-        (name) => column(name as (typeof HEADERS)[number]) == null,
+    const column = (name: (typeof TEMPLATE_HEADERS)[number]) => headerIndexes.get(normalize(name))
+    const missing = ['Nombres *', 'Apellidos *', 'Género *'].filter(
+        (name) => column(name as (typeof TEMPLATE_HEADERS)[number]) == null,
     )
     if (missing.length) {
         return {
@@ -662,12 +527,11 @@ export async function parseMembersWorkbook(
         }
     }
 
-    const value = (row: ExcelValue[], name: (typeof HEADERS)[number]) => {
+    const value = (row: ExcelValue[], name: (typeof TEMPLATE_HEADERS)[number]) => {
         const index = column(name)
         return index == null ? null : row[index]
     }
     const rows: MemberWorkbookImportRow[] = []
-    const seenCodes = new Set<string>()
     const seenDocuments = new Set<string>()
 
     excelRows.slice(1).forEach((row, index) => {
@@ -678,20 +542,16 @@ export async function parseMembersWorkbook(
 
         const firstName = text(value(row, 'Nombres *'))
         const lastName = text(value(row, 'Apellidos *'))
-        const code = text(value(row, 'Código')).toUpperCase()
         const documentNumber = normalizeDui(text(value(row, 'Documento')))
         if (!firstName) issues.push('Nombres: es obligatorio.')
         if (!lastName) issues.push('Apellidos: es obligatorio.')
-        if (!documentNumber) issues.push('Documento: es obligatorio.')
-        else if (!isValidDui(documentNumber)) {
+        if (documentNumber && !isValidDui(documentNumber)) {
             issues.push('Documento: el DUI no es válido o no cumple el formato ########-#.')
         }
-        if (code && seenCodes.has(code)) issues.push(`Código duplicado en el archivo: ${code}.`)
         const normalizedDocument = documentNumber.toUpperCase()
         if (documentNumber && seenDocuments.has(normalizedDocument)) {
             issues.push(`Documento duplicado en el archivo: ${documentNumber}.`)
         }
-        if (code) seenCodes.add(code)
         if (documentNumber) seenDocuments.add(normalizedDocument)
 
         const email = text(value(row, 'Correo'))
@@ -699,20 +559,18 @@ export async function parseMembersWorkbook(
             issues.push(`Correo: “${email}” no es válido.`)
         }
         const sector = resolveTerritory(row, value, catalogs, issues)
-        const residence = resolveResidence(row, value, catalogs, issues)
+        const municipality = resolveResidence(row, value, catalogs, issues)
         const roles = resolveCatalogList(value(row, 'Roles'), catalogs.roles, 'Roles', issues)
 
         const member: MemberInput = {
-            code: code || undefined,
             firstName,
             middleName: text(value(row, 'Segundo nombre')) || null,
             lastName,
             secondLastName: text(value(row, 'Segundo apellido')) || null,
-            preferredName: text(value(row, 'Nombre preferido')) || null,
-            documentNumber,
+            documentNumber: documentNumber || null,
             birthDate: isoDate(value(row, 'Fecha nacimiento'), 'Fecha de nacimiento', issues),
             gender: resolveOption(
-                value(row, 'Género'),
+                value(row, 'Género *'),
                 catalogs.genders,
                 undefined,
                 'Género',
@@ -727,41 +585,21 @@ export async function parseMembersWorkbook(
                 issues,
             ) as MemberMaritalStatus,
             phone: text(value(row, 'Teléfono')) || null,
-            alternatePhone: text(value(row, 'Teléfono alterno')) || null,
             email: email || null,
-            address: text(value(row, 'Dirección')) || null,
-            country: residence.country,
-            municipality: residence.municipality,
-            department: residence.department,
+            municipality,
             occupation: text(value(row, 'Ocupación')) || null,
-            status: resolveOption(
-                value(row, 'Estado'),
-                catalogs.statuses,
-                'ACTIVE',
-                'Estado',
-                issues,
-            ) as MemberStatus,
+            status: 'ACTIVE',
             roles: (roles.length ? roles : ['MEMBER']) as MemberCommunityRole[],
-            ministries: resolveCatalogList(
-                value(row, 'Ministerios'),
-                catalogs.ministries,
-                'Ministerios',
-                issues,
-            ),
-            joinedAt: isoDate(value(row, 'Fecha ingreso'), 'Fecha de ingreso', issues),
+            ministries: [],
             conversionDate: isoDate(value(row, 'Fecha conversión'), 'Fecha de conversión', issues),
             baptismDate: isoDate(value(row, 'Fecha bautismo'), 'Fecha de bautismo', issues),
             sector,
-            smallGroup: text(value(row, 'Grupo pequeño')) || null,
-            emergencyContactName: text(value(row, 'Contacto emergencia')) || null,
-            emergencyContactPhone: text(value(row, 'Teléfono emergencia')) || null,
-            notes: text(value(row, 'Notas')) || null,
         }
 
         rows.push({
             rowNumber,
             member,
-            rawValues: HEADERS.map((header) => value(row, header)),
+            rawValues: TEMPLATE_HEADERS.map((header) => value(row, header)),
             issues,
         })
     })
