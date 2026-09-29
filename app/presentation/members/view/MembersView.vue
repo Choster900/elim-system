@@ -6,7 +6,8 @@ import {
     Eye,
     FileDown,
     FileSpreadsheet,
-    HelpCircle,
+    Compass,
+    LoaderCircle,
     Mail,
     MoreVertical,
     Pencil,
@@ -107,7 +108,6 @@ const loading = computed(() => membersQuery.isPending.value)
 const saving = computed(() => updateMemberMutation.isPending.value)
 const canCreate = computed(() => authStore.hasPermission('members.create'))
 const canImportExport = computed(() => authStore.hasPermission('members.import_export'))
-const showTourButton = import.meta.dev
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
 const { hasSeen, markSeen } = useTourProgress('members', 1)
@@ -128,18 +128,11 @@ const tourSteps: TourStep[] = [
             'Usa Nuevo miembro para capturar sus datos personales, contacto, roles y asignación territorial.',
     },
     {
-        id: 'download-template',
-        target: '[data-tour="members-template"]',
-        title: 'Descarga la plantilla',
-        description:
-            'La plantilla Excel incluye las columnas y catálogos válidos. Complétala para registrar varios miembros en una sola carga.',
-    },
-    {
         id: 'import-members',
         target: '[data-tour="members-import"]',
-        title: 'Importa desde Excel',
+        title: 'Carga masiva desde Excel',
         description:
-            'Selecciona el archivo completado para revisar sus filas antes de guardar. El sistema muestra los errores y permite descargar las filas que debes corregir.',
+            'Abre Carga masiva para descargar la plantilla o arrastrar el archivo. Antes de guardar verás las filas válidas y los errores; al confirmar se importarán las correctas y podrás descargar las pendientes.',
     },
     {
         id: 'export-members',
@@ -410,6 +403,7 @@ async function downloadTemplate() {
 
 const importInput = ref<HTMLInputElement | null>(null)
 const importOpen = ref(false)
+const isImportDropActive = ref(false)
 const importing = computed(() => importMembersMutation.isPending.value)
 const parsingFile = ref(false)
 const importFileName = ref('')
@@ -442,11 +436,19 @@ function pickImportFile() {
     importInput.value?.click()
 }
 
-async function onImportFile(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    input.value = ''
-    if (!file) return
+function resetImportPreview() {
+    importFileName.value = ''
+    importPreview.value = { rows: [], fileErrors: [] }
+    importResult.value = null
+    retryFailures.value = []
+}
+
+function openImportModal() {
+    resetImportPreview()
+    importOpen.value = true
+}
+
+async function processImportFile(file: File) {
     if (!memberCatalogs.value) {
         toast.error('No fue posible cargar los catálogos para validar el archivo')
         return
@@ -460,10 +462,24 @@ async function onImportFile(event: Event) {
         importPreview.value = await parseMembersWorkbook(file, memberCatalogs.value)
         importOpen.value = true
     } catch {
+        resetImportPreview()
         toast.error('No pudimos leer el archivo. Verifica que sea un Excel .xlsx válido.')
     } finally {
         parsingFile.value = false
     }
+}
+
+async function onImportFile(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (file) await processImportFile(file)
+}
+
+async function onImportDrop(event: DragEvent) {
+    isImportDropActive.value = false
+    const file = event.dataTransfer?.files?.[0]
+    if (file) await processImportFile(file)
 }
 
 async function confirmImport() {
@@ -534,9 +550,7 @@ async function downloadPendingMembers() {
 
 <template>
     <main class="mx-auto w-full max-w-system px-6 pb-20 pt-24 lg:px-10">
-        <section
-            class="flex flex-col gap-6 border-b border-outline-variant pb-9 xl:flex-row xl:items-end xl:justify-between"
-        >
+        <section class="border-b border-outline-variant pb-9">
             <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.4em] text-on-surface-variant">
                     Comunidad · Directorio pastoral
@@ -552,62 +566,6 @@ async function downloadPendingMembers() {
                     directorio no concede acceso al sistema; las cuentas de usuario se gestionarán
                     en un flujo separado.
                 </p>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-                <UiButton v-if="showTourButton" variant="outline" type="button" @click="startTour">
-                    <HelpCircle class="size-4" /> Recorrido
-                </UiButton>
-                <input
-                    v-if="canImportExport"
-                    ref="importInput"
-                    type="file"
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    class="hidden"
-                    @change="onImportFile"
-                />
-                <UiButton
-                    v-if="canImportExport"
-                    variant="outline"
-                    type="button"
-                    :loading="downloadingTemplate"
-                    :disabled="catalogsQuery.isPending.value"
-                    @click="downloadTemplate"
-                    data-tour="members-template"
-                >
-                    <FileDown class="size-4" /> Plantilla
-                </UiButton>
-                <UiButton
-                    v-if="canImportExport"
-                    variant="outline"
-                    type="button"
-                    :loading="parsingFile"
-                    :disabled="catalogsQuery.isPending.value"
-                    @click="pickImportFile"
-                    data-tour="members-import"
-                >
-                    <Upload class="size-4" /> Importar
-                </UiButton>
-                <UiButton
-                    v-if="canImportExport"
-                    variant="outline"
-                    type="button"
-                    :loading="exporting"
-                    :disabled="!members.length || catalogsQuery.isPending.value"
-                    @click="exportExcel"
-                    data-tour="members-export"
-                >
-                    <Download class="size-4" /> Exportar
-                </UiButton>
-                <NuxtLink
-                    v-if="canCreate"
-                    to="/comunidad/miembros/nuevo"
-                    class="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    data-testid="create-member-link"
-                    data-tour="members-create"
-                >
-                    <Plus class="size-4" /> Nuevo miembro
-                </NuxtLink>
             </div>
         </section>
 
@@ -690,6 +648,80 @@ async function downloadPendingMembers() {
                     <span class="hidden text-xs text-on-surface-variant md:inline"
                         >{{ total }} resultado(s)</span
                     >
+                </template>
+
+                <template #toolbar-end>
+                    <div class="flex flex-wrap items-center justify-end gap-2">
+                        <div class="group relative">
+                            <UiButton
+                                variant="outline"
+                                size="icon"
+                                type="button"
+                                class="size-9 rounded-full border-primary/40 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md active:translate-y-0"
+                                aria-label="Iniciar recorrido guiado de miembros"
+                                aria-describedby="members-tour-hint"
+                                @click="startTour"
+                            >
+                                <Compass class="size-4" />
+                            </UiButton>
+                            <div
+                                id="members-tour-hint"
+                                role="tooltip"
+                                class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-60 translate-y-1 rounded-xl border border-outline-variant bg-surface p-3 text-left opacity-0 shadow-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+                            >
+                                <span
+                                    class="absolute -top-1 right-3 size-2 rotate-45 border-l border-t border-outline-variant bg-surface"
+                                />
+                                <p class="text-xs font-semibold text-on-surface">
+                                    Recorrido guiado
+                                </p>
+                                <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                                    Aprende a registrar, filtrar y administrar los miembros de la
+                                    comunidad.
+                                </p>
+                            </div>
+                        </div>
+                        <input
+                            v-if="canImportExport"
+                            ref="importInput"
+                            type="file"
+                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            class="hidden"
+                            @change="onImportFile"
+                        />
+                        <UiButton
+                            v-if="canImportExport"
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            :disabled="catalogsQuery.isPending.value"
+                            data-tour="members-import"
+                            @click="openImportModal"
+                        >
+                            <Upload class="size-4" /> Carga masiva
+                        </UiButton>
+                        <UiButton
+                            v-if="canImportExport"
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            :loading="exporting"
+                            :disabled="!members.length || catalogsQuery.isPending.value"
+                            data-tour="members-export"
+                            @click="exportExcel"
+                        >
+                            <Download class="size-4" /> Exportar
+                        </UiButton>
+                        <NuxtLink
+                            v-if="canCreate"
+                            to="/comunidad/miembros/nuevo"
+                            class="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            data-testid="create-member-link"
+                            data-tour="members-create"
+                        >
+                            <Plus class="size-4" /> Nuevo miembro
+                        </NuxtLink>
+                    </div>
                 </template>
 
                 <template #cell-member="{ row }">
@@ -911,23 +943,114 @@ async function downloadPendingMembers() {
             <DialogPortal>
                 <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
                 <DialogContent
-                    class="fixed left-1/2 top-1/2 z-[71] max-h-[85vh] w-[94vw] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none"
+                    class="fixed left-1/2 top-1/2 z-[71] max-h-[88vh] w-[96vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none sm:p-7"
                 >
                     <div class="flex items-start gap-4">
                         <div
-                            class="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"
                         >
-                            <FileSpreadsheet class="size-5" />
+                            <FileSpreadsheet class="size-6" />
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <DialogTitle class="font-display text-xl font-semibold text-on-surface">
-                                Importar miembros desde Excel </DialogTitle
-                            ><DialogDescription class="mt-1 text-sm text-on-surface-variant">
-                                {{ importFileName }}
+                                Carga masiva de miembros
+                            </DialogTitle>
+                            <DialogDescription
+                                class="mt-1 truncate text-sm text-on-surface-variant"
+                            >
+                                {{
+                                    importFileName ||
+                                    'Descarga la plantilla o sube un archivo de Excel .xlsx'
+                                }}
                             </DialogDescription>
                         </div>
                     </div>
-                    <div v-if="importResult" class="mt-6 grid grid-cols-3 gap-3">
+
+                    <div v-if="!importFileName || parsingFile" class="mt-6 space-y-5">
+                        <div
+                            class="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                            <div>
+                                <p class="text-sm font-semibold text-on-surface">
+                                    ¿Ya tienes el archivo listo?
+                                </p>
+                                <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                                    Descarga la plantilla si necesitas las columnas y los catálogos
+                                    actualizados.
+                                </p>
+                            </div>
+                            <div class="flex shrink-0 flex-wrap gap-2">
+                                <UiButton
+                                    variant="outline"
+                                    type="button"
+                                    class="border-primary/40 bg-surface hover:bg-primary hover:text-primary-foreground"
+                                    :loading="downloadingTemplate"
+                                    @click="downloadTemplate"
+                                >
+                                    <FileDown class="size-4" /> Descargar plantilla
+                                </UiButton>
+                                <UiButton
+                                    type="button"
+                                    class="shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
+                                    :loading="parsingFile"
+                                    :disabled="parsingFile"
+                                    @click="pickImportFile"
+                                >
+                                    <Upload class="size-4" /> Importar
+                                </UiButton>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="group flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:bg-primary/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:py-12"
+                            :class="
+                                isImportDropActive
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-primary/60 hover:bg-primary/5'
+                            "
+                            :disabled="parsingFile"
+                            @click="pickImportFile"
+                            @dragenter.prevent="isImportDropActive = true"
+                            @dragover.prevent="isImportDropActive = true"
+                            @dragleave.self.prevent="isImportDropActive = false"
+                            @drop.prevent="onImportDrop"
+                        >
+                            <span
+                                class="flex size-14 items-center justify-center rounded-2xl bg-surface text-primary shadow-sm transition-transform duration-200 group-hover:scale-110"
+                            >
+                                <Upload v-if="!parsingFile" class="size-6" />
+                                <LoaderCircle v-else class="size-6 animate-spin" />
+                            </span>
+                            <span class="mt-4 text-sm font-semibold text-on-surface">
+                                {{
+                                    parsingFile
+                                        ? 'Analizando el archivo…'
+                                        : 'Arrastra aquí tu archivo de Excel'
+                                }}
+                            </span>
+                            <span class="mt-1 text-xs leading-5">
+                                {{
+                                    parsingFile
+                                        ? importFileName
+                                        : 'o haz clic para seleccionar un archivo .xlsx'
+                                }}
+                            </span>
+                        </button>
+
+                        <p class="text-center text-xs leading-5 text-on-surface-variant">
+                            Revisaremos el archivo antes de guardar. Las filas válidas se podrán
+                            importar aunque otras tengan errores.
+                        </p>
+
+                        <div class="flex justify-end">
+                            <DialogClose as-child>
+                                <UiButton variant="outline" type="button">Cancelar</UiButton>
+                            </DialogClose>
+                        </div>
+                    </div>
+
+                    <div v-else-if="importResult" class="mt-6 grid grid-cols-3 gap-3">
                         <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-4">
                             <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                 Creados
@@ -953,7 +1076,7 @@ async function downloadPendingMembers() {
                             </p>
                         </div>
                     </div>
-                    <div v-else class="mt-6 grid grid-cols-2 gap-3">
+                    <div v-else-if="importFileName" class="mt-6 grid grid-cols-2 gap-3">
                         <div class="rounded border border-outline-variant bg-surface-container p-4">
                             <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                 Registros válidos
@@ -1003,13 +1126,13 @@ async function downloadPendingMembers() {
                         </ul>
                     </div>
                     <p
-                        v-else-if="!importResult"
+                        v-else-if="importFileName && !importResult"
                         class="mt-4 rounded border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
                     >
-                        Los registros que coincidan por
-                        <strong class="text-on-surface">código o documento</strong> serán
-                        actualizados. Los demás serán creados con un código automático cuando sea
-                        necesario.
+                        Los registros con un
+                        <strong class="text-on-surface">documento existente</strong> serán
+                        actualizados. Los demás se crearán con un código generado automáticamente
+                        por el sistema.
                     </p>
                     <p
                         v-if="!importResult && invalidImportRows.length && validImportRows.length"
@@ -1026,7 +1149,10 @@ async function downloadPendingMembers() {
                         Los miembros creados o actualizados ya no aparecen en el archivo de
                         pendientes. Puedes corregir ese archivo y subirlo nuevamente.
                     </p>
-                    <div class="mt-6 flex flex-wrap justify-end gap-2">
+                    <div
+                        v-if="importFileName && !parsingFile"
+                        class="mt-6 flex flex-wrap justify-end gap-2"
+                    >
                         <DialogClose as-child>
                             <UiButton variant="outline" type="button">
                                 {{ importResult ? 'Cerrar' : 'Cancelar' }}
