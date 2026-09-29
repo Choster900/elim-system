@@ -31,6 +31,7 @@ export const memberRoleOptions: { value: MemberCommunityRole; label: string }[] 
     { value: 'MEMBER', label: 'Miembro' },
     { value: 'PASTOR', label: 'Pastor/a' },
     { value: 'LEADER', label: 'Líder' },
+    { value: 'COORDINATOR', label: 'Coordinador/a' },
     { value: 'HOST', label: 'Anfitrión/a' },
     { value: 'SUPERVISOR', label: 'Supervisor/a' },
     { value: 'DEACON', label: 'Diácono/a' },
