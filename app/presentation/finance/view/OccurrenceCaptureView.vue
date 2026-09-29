@@ -5,6 +5,7 @@ import {
     Check,
     CircleDot,
     Clock,
+    Compass,
     HandCoins,
     Loader2,
     MapPin,
@@ -12,6 +13,10 @@ import {
     Users,
 } from '@lucide/vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import AppTour from '~/presentation/shared/components/AppTour.vue'
+import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
+import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatLocalIsoDate } from '~/utils/date/date-format.util'
 import { useRecordOccurrencesBulkMutation } from '../composables/useOccurrenceMutations'
@@ -41,6 +46,7 @@ interface CaptureRow {
 
 const route = useRoute()
 const toast = useAppToast()
+const authStore = useAuthStore()
 const pendingQuery = usePendingOccurrencesQuery({ includeUnfinished: true })
 const categoriesQuery = useOfferingCategoriesQuery()
 const attendanceTypesQuery = useAttendanceTypesQuery()
@@ -98,6 +104,56 @@ const isLoading = computed(
         attendanceTypesQuery.isPending.value,
 )
 const isSaving = computed(() => bulkMutation.isPending.value)
+const isTourOpen = ref(false)
+const isClientReady = ref(false)
+const { hasSeen, markSeen } = useTourProgress('offering-capture', 1)
+
+const tourSteps: TourStep[] = [
+    {
+        id: 'capture-heading',
+        target: '[data-tour="offering-capture-heading"]',
+        title: 'Captura para esta reunión',
+        description:
+            'Confirma la reunión, el territorio y el número de fechas disponibles antes de registrar.',
+    },
+    {
+        id: 'capture-summary',
+        target: '[data-tour="offering-capture-summary"]',
+        title: 'Total en preparación',
+        description:
+            'Este resumen acumula las fechas seleccionadas, asistencia y ofrenda mientras completas la matriz.',
+    },
+    {
+        id: 'capture-matrix',
+        target: '[data-tour="offering-capture-matrix"]',
+        title: 'Matriz de captura',
+        description:
+            'Marca las fechas a registrar y escribe la asistencia y cada categoría de ofrenda. Al editar una celda, la fecha se selecciona automáticamente.',
+    },
+    {
+        id: 'capture-save',
+        target: '[data-tour="offering-capture-summary"]',
+        title: 'Registra las fechas',
+        description:
+            'Cuando cada fecha seleccionada tenga asistencia, usa este botón para guardar el lote y volver a los pendientes.',
+    },
+]
+
+function startTour() {
+    isTourOpen.value = true
+}
+
+function endTour() {
+    isTourOpen.value = false
+    if (authStore.user?.id) markSeen(authStore.user.id)
+}
+
+function startFirstVisitTour() {
+    const userId = authStore.user?.id
+    if (isClientReady.value && !isLoading.value && meeting.value && userId && !hasSeen(userId)) {
+        startTour()
+    }
+}
 
 const rows = ref<CaptureRow[]>([])
 const formError = ref<string | null>(null)
@@ -118,6 +174,11 @@ function buildRows() {
 }
 
 watch([occurrences, categories, attendanceTypes], buildRows, { immediate: true })
+onMounted(() => {
+    isClientReady.value = true
+    startFirstVisitTour()
+})
+watch([() => authStore.user?.id, isLoading, meeting], startFirstVisitTour)
 
 const selectedRows = computed(() => rows.value.filter((row) => row.selected))
 const allSelected = computed(
@@ -338,13 +399,39 @@ const cellInputClass =
 
 <template>
     <main class="mx-auto w-full max-w-[1800px] px-4 pb-32 pt-24 sm:px-6 lg:px-8">
-        <button
-            type="button"
-            class="mb-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
-            @click="navigateTo('/finanzas/ofrendas')"
-        >
-            <ArrowLeft class="size-4" /> Volver a pendientes
-        </button>
+        <div class="mb-6 flex items-center gap-3">
+            <button
+                type="button"
+                class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
+                @click="navigateTo('/finanzas/ofrendas')"
+            >
+                <ArrowLeft class="size-4" /> Volver a pendientes
+            </button>
+            <div class="group relative">
+                <button
+                    type="button"
+                    class="flex size-8 items-center justify-center rounded-full border border-primary/30 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"
+                    aria-label="Iniciar recorrido guiado de captura de ofrendas"
+                    aria-describedby="offering-capture-tour-hint"
+                    @click="startTour"
+                >
+                    <Compass class="size-3.5" />
+                </button>
+                <div
+                    id="offering-capture-tour-hint"
+                    role="tooltip"
+                    class="pointer-events-none absolute left-0 top-full z-50 mt-2 w-60 translate-y-1 rounded-xl border border-outline-variant bg-surface p-3 text-left opacity-0 shadow-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+                >
+                    <span
+                        class="absolute -top-1 left-3 size-2 rotate-45 border-l border-t border-outline-variant bg-surface"
+                    />
+                    <p class="text-xs font-semibold text-on-surface">Recorrido guiado</p>
+                    <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                        Aprende a completar la asistencia y las ofrendas de cada fecha.
+                    </p>
+                </div>
+            </div>
+        </div>
 
         <div
             v-if="isLoading"
@@ -373,7 +460,10 @@ const cellInputClass =
 
         <template v-else>
             <!-- Identidad de la reunión -->
-            <section class="border-b border-outline-variant pb-8">
+            <section
+                data-tour="offering-capture-heading"
+                class="border-b border-outline-variant pb-8"
+            >
                 <div class="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                     <div class="flex min-w-0 gap-4">
                         <span
@@ -471,6 +561,7 @@ const cellInputClass =
             </p>
 
             <section
+                data-tour="offering-capture-summary"
                 class="mt-6 overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-sm"
             >
                 <div
@@ -539,7 +630,7 @@ const cellInputClass =
             </section>
 
             <div class="mt-8 min-w-0">
-                <section class="min-w-0">
+                <section data-tour="offering-capture-matrix" class="min-w-0">
                     <div
                         class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
                     >
@@ -980,5 +1071,6 @@ const cellInputClass =
                 </section>
             </div>
         </template>
+        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </main>
 </template>
