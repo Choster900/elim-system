@@ -3,7 +3,8 @@
 Plantilla profesional para Nuxt con TypeScript, Tailwind, Pinia, TanStack Query, Prisma y PostgreSQL, lista para escalar en frontend y backend.
 
 Para publicar el proyecto, consulta la [guía de despliegue seguro en Vercel](./README-VERCEL.md).
-Para configurar Google Maps, consulta [README-GOOGLE-MAPS.md](./README-GOOGLE-MAPS.md).
+Los mapas de reuniones y territorios usan Leaflet con teselas públicas de CARTO, sin API key
+ni cuenta de facturación. Consulta [README-MAPS.md](./README-MAPS.md).
 
 ## 1) Descripción del proyecto
 
