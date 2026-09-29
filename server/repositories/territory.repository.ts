@@ -260,6 +260,10 @@ export async function findTerritoryLeaders() {
     return findActiveCommunityRoleMembers('LEADER')
 }
 
+export async function findZoneCoordinators() {
+    return findActiveCommunityRoleMembers('COORDINATOR')
+}
+
 async function findActiveCommunityRoleMembers(roleCode: string) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
@@ -298,4 +302,9 @@ export async function findSectorSupervisorById(id: number) {
 export async function findTerritoryLeaderById(id: number) {
     const leaders = await findTerritoryLeaders()
     return leaders.find((leader) => leader.id === id) ?? null
+}
+
+export async function findZoneCoordinatorById(id: number) {
+    const coordinators = await findZoneCoordinators()
+    return coordinators.find((coordinator) => coordinator.id === id) ?? null
 }
