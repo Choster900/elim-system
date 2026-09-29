@@ -46,6 +46,20 @@ async function requireTerritoryLeader(leaderId: number) {
     })
 }
 
+async function requireZoneCoordinator(coordinatorId: number) {
+    const coordinator = await repo.findZoneCoordinatorById(coordinatorId)
+    if (coordinator) return coordinator
+
+    throw createError({
+        statusCode: 400,
+        message: 'El miembro seleccionado no pertenece al catálogo de coordinadores',
+        data: {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            fields: { leaderId: ['Selecciona un coordinador activo'] },
+        },
+    })
+}
+
 async function withTerritoryLeaderName<
     TDto extends { leaderId?: number | null; leaderName?: string | null },
 >(dto: TDto): Promise<TDto> {
@@ -54,6 +68,16 @@ async function withTerritoryLeaderName<
 
     const leader = await requireTerritoryLeader(dto.leaderId)
     return { ...dto, leaderName: leader.fullName }
+}
+
+async function withZoneCoordinatorName<
+    TDto extends { leaderId?: number | null; leaderName?: string | null },
+>(dto: TDto): Promise<TDto> {
+    if (dto.leaderId === undefined) return dto
+    if (dto.leaderId === null) return { ...dto, leaderName: null }
+
+    const coordinator = await requireZoneCoordinator(dto.leaderId)
+    return { ...dto, leaderName: coordinator.fullName }
 }
 
 export function getTerritoryHierarchy() {
@@ -88,13 +112,13 @@ export async function getZoneById(id: number) {
 
 export async function createZone(dto: CreateZoneDto) {
     await getDistrictById(dto.districtId)
-    return repo.createZone(await withTerritoryLeaderName(dto))
+    return repo.createZone(await withZoneCoordinatorName(dto))
 }
 
 export async function updateZone(id: number, dto: UpdateZoneDto) {
     await getZoneById(id)
     if (dto.districtId !== undefined) await getDistrictById(dto.districtId)
-    return repo.updateZone(id, await withTerritoryLeaderName(dto))
+    return repo.updateZone(id, await withZoneCoordinatorName(dto))
 }
 
 export async function deleteZone(id: number) {
@@ -135,4 +159,8 @@ export function getSectorSupervisors() {
 
 export function getTerritoryLeaders() {
     return repo.findTerritoryLeaders()
+}
+
+export function getZoneCoordinators() {
+    return repo.findZoneCoordinators()
 }
