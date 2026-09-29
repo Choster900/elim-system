@@ -20,6 +20,26 @@ export type MemberCommunityRole =
     | 'WORSHIP'
     | 'YOUTH_LEADER'
     | 'CHILDREN_LEADER'
+    | 'ELDER'
+    | 'SUPPORT_COMMITTEE'
+    | 'ASSOCIATE_PASTOR'
+    | 'EVANGELIST'
+    | 'MISSIONARY'
+    | 'WORSHIP_LEADER'
+    | 'SMALL_GROUP_LEADER'
+    | 'DISCIPLESHIP_LEADER'
+    | 'INTERCESSOR'
+    | 'COUNSELOR'
+    | 'USHER'
+    | 'HOSPITALITY'
+    | 'MEDIA_TECHNICIAN'
+    | 'SOUND_TECHNICIAN'
+    | 'MISSIONS_LEADER'
+    | 'EVANGELISM_LEADER'
+    | 'TREASURER'
+    | 'SECRETARY'
+    | 'ADMINISTRATOR'
+    | 'AUDITOR'
 
 export interface Member extends Record<string, unknown> {
     id: number
@@ -65,13 +85,12 @@ export interface Member extends Record<string, unknown> {
 }
 
 export interface MemberInput {
-    code?: string
     firstName: string
     middleName?: string | null
     lastName: string
     secondLastName?: string | null
     preferredName?: string | null
-    documentNumber: string
+    documentNumber?: string | null
     birthDate?: string | null
     gender?: MemberGender
     maritalStatus?: MemberMaritalStatus
