@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
     AlertTriangle,
+    Compass,
     Download,
     ExternalLink,
     FileDown,
@@ -31,6 +32,9 @@ import type { MeetingRecord } from '~/presentation/meetings/interfaces/meeting.i
 import { getMeetingFrequencyLabel } from '~/presentation/meetings/utils/meeting-format.util'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
+import AppTour from '~/presentation/shared/components/AppTour.vue'
+import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
+import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
 import AssignMeetingDrawer from '~/presentation/territories/components/AssignMeetingDrawer.vue'
 import TerritoryFormDrawer from '~/presentation/territories/components/TerritoryFormDrawer.vue'
@@ -99,6 +103,10 @@ const authStore = useAuthStore()
 const canManage = computed(() => authStore.hasPermission('territories.manage'))
 const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
 const canManageOfferings = computed(() => authStore.hasPermission('finance.manage'))
+const showTourButton = import.meta.dev
+const isTourOpen = ref(false)
+const isClientReady = ref(false)
+const { hasSeen, markSeen } = useTourProgress('territories', 2)
 const hierarchyQuery = useTerritoryHierarchyQuery()
 const leadersQuery = useTerritoryLeadersQuery()
 const coordinatorsQuery = useZoneCoordinatorsQuery()
@@ -117,6 +125,11 @@ const meetings = computed(() => meetingsQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
 const coordinators = computed(() => coordinatorsQuery.data.value ?? [])
 const supervisors = computed(() => supervisorsQuery.data.value ?? [])
+const territoryRoleCatalogs = computed(() => ({
+    leaders: leaders.value,
+    coordinators: coordinators.value,
+    supervisors: supervisors.value,
+}))
 const catalogLoading = computed(
     () => hierarchyQuery.isPending.value || meetingsQuery.isPending.value,
 )
@@ -141,6 +154,88 @@ const catalogError = computed(() => {
     }
     return ''
 })
+
+const tourSteps: TourStep[] = [
+    {
+        id: 'territory-overview',
+        target: '[data-tour="territories-summary"]',
+        title: 'Organiza el territorio por niveles',
+        description:
+            'Este catálogo se construye en un orden fijo: un distrito contiene zonas, cada zona contiene sectores y cada sector reúne sus reuniones. Crea o selecciona cada nivel antes de pasar al siguiente para que la información quede en el lugar correcto.',
+    },
+    {
+        id: 'territory-import',
+        target: '[data-tour="territories-import"]',
+        title: 'Carga masiva desde Excel',
+        description:
+            'Abre Carga masiva para descargar la plantilla o arrastrar tu archivo Excel. Antes de guardar verás los registros válidos y los errores; al confirmar, se crearán primero los que estén correctos y podrás descargar los pendientes para corregirlos.',
+    },
+    {
+        id: 'territory-columns',
+        target: '[data-tour="territories-hierarchy"]',
+        title: 'Navega de izquierda a derecha',
+        description:
+            'Haz clic en un distrito para mostrar sus zonas; después elige una zona para ver sus sectores y elige un sector para ver sus reuniones. Las columnas de la derecha siempre dependen de la selección anterior, por eso no podrás agregar una zona sin seleccionar un distrito ni un sector sin seleccionar una zona.',
+    },
+    {
+        id: 'add-district',
+        target: '[data-tour="territories-district-add"]',
+        title: '1. Agrega el distrito',
+        description:
+            'Usa + en Distritos para crear la unidad principal. Completa su nombre y pastor; el área en el mapa es opcional y puedes definirla después. El sistema genera el código al guardar. Después selecciona el distrito en la primera columna para agregar sus zonas.',
+    },
+    {
+        id: 'add-zone',
+        target: '[data-tour="territories-zona-column"]',
+        title: '2. Agrega las zonas del distrito',
+        description:
+            'Primero selecciona el distrito al que pertenecerá la zona. Luego usa + en esta columna y completa los datos de la zona. La zona quedará ligada al distrito seleccionado, así que verifica esa selección antes de guardar.',
+    },
+    {
+        id: 'add-sector',
+        target: '[data-tour="territories-sector-column"]',
+        title: '3. Agrega los sectores de la zona',
+        description:
+            'Selecciona una zona para habilitar la creación de sectores. Usa + en Sectores y registra los datos solicitados. Cada sector pertenece únicamente a la zona seleccionada; al guardar aparecerá en esta tercera columna.',
+    },
+    {
+        id: 'add-meeting',
+        target: '[data-tour="territories-reunion-column"]',
+        title: '4. Asigna una reunión al sector',
+        description:
+            'Selecciona un sector y usa + en Reuniones. Allí puedes asignar una reunión que ya exista en el catálogo. Si todavía no existe, el panel ofrece Crear nueva reunión en el catálogo; después vuelve aquí y asígnala al sector correspondiente.',
+    },
+]
+
+function startTour() {
+    isTourOpen.value = true
+}
+
+function endTour() {
+    isTourOpen.value = false
+    if (authStore.user?.id) markSeen(authStore.user.id)
+}
+
+function startFirstVisitTour() {
+    const userId = authStore.user?.id
+    if (
+        isClientReady.value &&
+        !catalogLoading.value &&
+        !!hierarchyQuery.data.value &&
+        !catalogError.value &&
+        userId &&
+        !hasSeen(userId)
+    ) {
+        startTour()
+    }
+}
+
+onMounted(() => {
+    isClientReady.value = true
+    startFirstVisitTour()
+})
+
+watch([() => authStore.user?.id, catalogLoading, catalogError], startFirstVisitTour)
 const supervisorCatalogError = computed(() =>
     supervisorsQuery.error.value
         ? requestErrorMessage(
@@ -301,6 +396,7 @@ const downloadingTemplate = ref(false)
 const parsingImportFile = ref(false)
 const importInput = ref<HTMLInputElement | null>(null)
 const importOpen = ref(false)
+const isImportDropActive = ref(false)
 const importFileName = ref('')
 const importPreview = ref<TerritoryImportPreview>({
     districts: [],
@@ -349,7 +445,7 @@ async function exportExcel() {
     }
     exporting.value = true
     try {
-        await exportTerritoriesWorkbook(hierarchy, supervisors.value)
+        await exportTerritoriesWorkbook(hierarchy, territoryRoleCatalogs.value)
         toast.success('Jerarquía territorial exportada a Excel')
     } catch {
         toast.error('No fue posible generar el archivo territorial.')
@@ -361,7 +457,7 @@ async function exportExcel() {
 async function downloadTemplate() {
     downloadingTemplate.value = true
     try {
-        await downloadTerritoryTemplate(supervisors.value)
+        await downloadTerritoryTemplate(territoryRoleCatalogs.value)
         toast.success('Plantilla territorial descargada')
     } catch {
         toast.error('No fue posible generar la plantilla territorial.')
@@ -370,15 +466,28 @@ async function downloadTemplate() {
     }
 }
 
+function resetImportPreview() {
+    importFileName.value = ''
+    importPreview.value = {
+        districts: [],
+        zones: [],
+        sectors: [],
+        fileErrors: [],
+    }
+    importResult.value = null
+    retryImportFailures.value = []
+}
+
+function openImportModal() {
+    resetImportPreview()
+    importOpen.value = true
+}
+
 function pickImportFile() {
     importInput.value?.click()
 }
 
-async function onImportFile(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    input.value = ''
-    if (!file) return
+async function processImportFile(file: File) {
     const hierarchy = hierarchyQuery.data.value
     if (!hierarchy) {
         toast.error('No fue posible cargar la jerarquía para validar el archivo.')
@@ -390,13 +499,31 @@ async function onImportFile(event: Event) {
     importResult.value = null
     retryImportFailures.value = []
     try {
-        importPreview.value = await parseTerritoriesWorkbook(file, hierarchy, supervisors.value)
+        importPreview.value = await parseTerritoriesWorkbook(
+            file,
+            hierarchy,
+            territoryRoleCatalogs.value,
+        )
         importOpen.value = true
     } catch {
+        resetImportPreview()
         toast.error('No pudimos leer el archivo. Verifica que sea un Excel .xlsx válido.')
     } finally {
         parsingImportFile.value = false
     }
+}
+
+async function onImportFile(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (file) await processImportFile(file)
+}
+
+async function onImportDrop(event: DragEvent) {
+    isImportDropActive.value = false
+    const file = event.dataTransfer?.files?.[0]
+    if (file) await processImportFile(file)
 }
 
 function previewFailures(): TerritoryImportFailure[] {
@@ -418,7 +545,7 @@ async function downloadPendingTerritories() {
         await downloadTerritoryImportFailures(
             importPreview.value,
             failures,
-            supervisors.value,
+            territoryRoleCatalogs.value,
             importResult.value,
         )
         toast.success('Archivo de territorios pendientes descargado')
@@ -448,7 +575,7 @@ async function confirmTerritoryImport() {
             await downloadTerritoryImportFailures(
                 importPreview.value,
                 failures,
-                supervisors.value,
+                territoryRoleCatalogs.value,
                 result,
             )
             toast.warning(
@@ -521,6 +648,7 @@ function fmtTime(time: string) {
     return `${hour12}:${String(min ?? 0).padStart(2, '0')} ${period}`
 }
 function centroid(polygon: Polygon): LatLng {
+    if (!polygon.length) return EL_SALVADOR_CENTER
     const sum = polygon.reduce((acc, [lat, lng]) => [acc[0] + lat, acc[1] + lng], [0, 0])
     return [sum[0]! / polygon.length, sum[1]! / polygon.length]
 }
@@ -1408,6 +1536,7 @@ onBeforeUnmount(() => {
     <div class="flex h-screen flex-col bg-surface-container-lowest pt-[72px]">
         <!-- Toolbar: breadcrumb, totals, search -->
         <div
+            data-tour="territories-summary"
             class="flex flex-none flex-col gap-3 border-b border-outline-variant bg-surface-container px-6 py-3.5 lg:flex-row lg:items-center lg:px-10"
         >
             <div>
@@ -1457,6 +1586,33 @@ onBeforeUnmount(() => {
                     >
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                    <div v-if="showTourButton" class="group relative">
+                        <UiButton
+                            variant="outline"
+                            size="icon"
+                            type="button"
+                            class="size-9 rounded-full border-primary/40 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md active:translate-y-0"
+                            aria-label="Iniciar recorrido guiado"
+                            aria-describedby="territories-tour-hint"
+                            @click="startTour"
+                        >
+                            <Compass class="size-4" />
+                        </UiButton>
+                        <div
+                            id="territories-tour-hint"
+                            role="tooltip"
+                            class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-60 translate-y-1 rounded-xl border border-outline-variant bg-surface p-3 text-left opacity-0 shadow-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+                        >
+                            <span
+                                class="absolute -top-1 right-3 size-2 rotate-45 border-l border-t border-outline-variant bg-surface"
+                            />
+                            <p class="text-xs font-semibold text-on-surface">Recorrido guiado</p>
+                            <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                                Te muestra cómo crear y organizar distritos, zonas, sectores y
+                                reuniones.
+                            </p>
+                        </div>
+                    </div>
                     <input
                         v-if="canManage"
                         ref="importInput"
@@ -1470,24 +1626,17 @@ onBeforeUnmount(() => {
                         variant="outline"
                         size="sm"
                         type="button"
-                        :loading="downloadingTemplate"
-                        :disabled="supervisorsQuery.isPending.value"
-                        @click="downloadTemplate"
-                    >
-                        <FileDown class="size-4" />
-                        Plantilla
-                    </UiButton>
-                    <UiButton
-                        v-if="canManage"
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        :loading="parsingImportFile"
-                        :disabled="catalogLoading"
-                        @click="pickImportFile"
+                        data-tour="territories-import"
+                        :disabled="
+                            catalogLoading ||
+                            leadersQuery.isPending.value ||
+                            coordinatorsQuery.isPending.value ||
+                            supervisorsQuery.isPending.value
+                        "
+                        @click="openImportModal"
                     >
                         <Upload class="size-4" />
-                        Importar
+                        Carga masiva
                     </UiButton>
                     <UiButton
                         variant="outline"
@@ -1609,10 +1758,15 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Miller columns -->
-        <main v-else class="flex min-h-0 flex-1 overflow-x-auto bg-surface">
+        <main
+            v-else
+            data-tour="territories-hierarchy"
+            class="flex min-h-0 flex-1 overflow-x-auto bg-surface"
+        >
             <section
                 v-for="col in columns"
                 :key="col.level"
+                :data-tour="`territories-${col.level}-column`"
                 class="flex min-w-[240px] flex-1 flex-col border-r border-outline-variant last:border-r-0"
             >
                 <header
@@ -1634,6 +1788,9 @@ onBeforeUnmount(() => {
                     <button
                         v-if="col.canAdd"
                         type="button"
+                        :data-tour="
+                            col.level === 'distrito' ? 'territories-district-add' : undefined
+                        "
                         class="flex size-7 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
                         :title="col.addTitle"
                         :aria-label="col.addTitle"
@@ -1905,17 +2062,115 @@ onBeforeUnmount(() => {
                         </div>
                         <div class="min-w-0">
                             <DialogTitle class="font-display text-xl font-semibold text-on-surface">
-                                Importar distritos, zonas y sectores
+                                Carga masiva de territorios
                             </DialogTitle>
                             <DialogDescription
                                 class="mt-1 truncate text-sm text-on-surface-variant"
                             >
-                                {{ importFileName }}
+                                {{
+                                    importFileName ||
+                                    'Descarga la plantilla o sube un archivo de Excel .xlsx'
+                                }}
                             </DialogDescription>
                         </div>
                     </div>
 
-                    <div v-if="importResult" class="mt-6 grid gap-3 sm:grid-cols-4">
+                    <div v-if="!importFileName || parsingImportFile" class="mt-6 space-y-5">
+                        <div
+                            class="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                            <div>
+                                <p class="text-sm font-semibold text-on-surface">
+                                    ¿Ya tienes el archivo listo?
+                                </p>
+                                <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                                    Descarga la plantilla si necesitas la estructura y los catálogos
+                                    actualizados.
+                                </p>
+                            </div>
+                            <div class="flex shrink-0 flex-wrap gap-2">
+                                <UiButton
+                                    variant="outline"
+                                    type="button"
+                                    class="border-primary/40 bg-surface hover:bg-primary hover:text-primary-foreground"
+                                    :loading="downloadingTemplate"
+                                    @click="downloadTemplate"
+                                >
+                                    <FileDown class="size-4" />
+                                    Descargar plantilla
+                                </UiButton>
+                                <UiButton
+                                    type="button"
+                                    class="shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
+                                    :loading="parsingImportFile"
+                                    :disabled="parsingImportFile"
+                                    @click="pickImportFile"
+                                >
+                                    <Upload class="size-4" />
+                                    Importar
+                                </UiButton>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="group flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:bg-primary/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:py-12"
+                            :class="
+                                isImportDropActive
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-primary/60 hover:bg-primary/5'
+                            "
+                            :disabled="parsingImportFile"
+                            @click="pickImportFile"
+                            @dragenter.prevent="isImportDropActive = true"
+                            @dragover.prevent="isImportDropActive = true"
+                            @dragleave.self.prevent="isImportDropActive = false"
+                            @drop.prevent="onImportDrop"
+                        >
+                            <span
+                                class="flex size-14 items-center justify-center rounded-2xl bg-surface text-primary shadow-sm transition-transform duration-200 group-hover:scale-110"
+                            >
+                                <Upload v-if="!parsingImportFile" class="size-6" />
+                                <LoaderCircle v-else class="size-6 animate-spin" />
+                            </span>
+                            <span class="mt-4 text-sm font-semibold text-on-surface">
+                                {{
+                                    parsingImportFile
+                                        ? 'Analizando el archivo…'
+                                        : 'Arrastra aquí tu archivo de Excel'
+                                }}
+                            </span>
+                            <span class="mt-1 text-xs leading-5">
+                                {{
+                                    parsingImportFile
+                                        ? importFileName
+                                        : 'o haz clic para seleccionar un archivo .xlsx'
+                                }}
+                            </span>
+                        </button>
+
+                        <p class="text-center text-xs leading-5 text-on-surface-variant">
+                            Revisaremos el archivo antes de guardar. Las filas válidas se podrán
+                            importar aunque otras tengan errores.
+                        </p>
+
+                        <div class="flex justify-end">
+                            <DialogClose as-child>
+                                <UiButton
+                                    variant="outline"
+                                    type="button"
+                                    class="bg-surface hover:bg-surface-container"
+                                >
+                                    Cancelar
+                                </UiButton>
+                            </DialogClose>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="importFileName && !parsingImportFile && importResult"
+                        class="mt-6 grid gap-3 sm:grid-cols-4"
+                    >
                         <div class="rounded-xl border border-primary/25 bg-primary/5 p-4">
                             <p
                                 class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
@@ -1972,7 +2227,10 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <div v-else class="mt-6 grid gap-3 sm:grid-cols-4">
+                    <div
+                        v-else-if="importFileName && !parsingImportFile"
+                        class="mt-6 grid gap-3 sm:grid-cols-4"
+                    >
                         <div
                             v-for="summary in [
                                 {
@@ -2029,7 +2287,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div
-                        v-if="importErrors.length"
+                        v-if="importFileName && !parsingImportFile && importErrors.length"
                         class="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
                     >
                         <p class="text-xs font-semibold text-destructive">
@@ -2049,13 +2307,23 @@ onBeforeUnmount(() => {
                     </div>
 
                     <p
-                        v-else-if="!importResult"
+                        v-else-if="importFileName && !parsingImportFile && !importResult"
                         class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
                     >
                         Se crearán primero los distritos, después las zonas y finalmente los
-                        sectores. Las reuniones no se modifican. Las referencias de la plantilla
-                        solo sirven para enlazar las filas y el sistema generará los códigos
-                        definitivos.
+                        sectores. Usa el código del miembro de las pestañas Pastores, Coordinadores
+                        o Supervisores para asignar cada responsable. Las reuniones no se modifican.
+                        Las referencias de la plantilla solo sirven para enlazar las filas y el
+                        sistema generará los códigos definitivos.
+                    </p>
+
+                    <p
+                        v-if="!importResult && invalidImportRows.length && validImportRows.length"
+                        class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                    >
+                        Se importarán primero los {{ validImportRows.length }} registros válidos.
+                        Las {{ invalidImportRows.length }} filas con errores quedarán pendientes
+                        para corregirlas y descargarlas en un nuevo Excel.
                     </p>
 
                     <p
@@ -2066,9 +2334,16 @@ onBeforeUnmount(() => {
                         pendientes. Corrige ese archivo y vuelve a importarlo.
                     </p>
 
-                    <div class="mt-6 flex flex-wrap justify-end gap-2">
+                    <div
+                        v-if="importFileName && !parsingImportFile"
+                        class="mt-6 flex flex-wrap justify-end gap-2"
+                    >
                         <DialogClose as-child>
-                            <UiButton variant="outline" type="button">
+                            <UiButton
+                                variant="outline"
+                                type="button"
+                                class="bg-surface hover:bg-surface-container"
+                            >
                                 {{ importResult ? 'Cerrar' : 'Cancelar' }}
                             </UiButton>
                         </DialogClose>
@@ -2081,6 +2356,7 @@ onBeforeUnmount(() => {
                             "
                             variant="outline"
                             type="button"
+                            class="bg-surface hover:bg-surface-container"
                             :loading="downloadingFailures"
                             @click="downloadPendingTerritories"
                         >
@@ -2189,6 +2465,8 @@ onBeforeUnmount(() => {
             @assign="assignMeeting"
             @go="goToMeeting"
         />
+
+        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </div>
 </template>
 
