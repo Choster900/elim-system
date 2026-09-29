@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { AlertTriangle, Eraser, LoaderCircle, LocateFixed, RefreshCw, Undo2, X } from '@lucide/vue'
+import {
+    AlertTriangle,
+    Eraser,
+    Expand,
+    LoaderCircle,
+    LocateFixed,
+    Minimize,
+    RefreshCw,
+    Undo2,
+    X,
+} from '@lucide/vue'
+import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
+import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
 import type {
     LatLng,
     Polygon,
@@ -36,6 +48,7 @@ const emit = defineEmits<{
 }>()
 
 const DEFAULT_CENTER: LatLng = [13.8, -89.4]
+const { provider: mapProvider } = useMapProvider()
 
 const form = reactive({
     name: '',
@@ -54,26 +67,23 @@ const polygonError = ref(false)
 const leaderTouched = ref(false)
 const isLocating = ref(false)
 const locationError = ref('')
+const mapError = ref('')
+const mapReady = ref(false)
+const isMapExpanded = ref(false)
 
 const mapEl = ref<HTMLElement | null>(null)
+const mapPanelEl = ref<HTMLElement | null>(null)
+const expandMapButton = ref<HTMLButtonElement | null>(null)
+const collapseMapButton = ref<HTMLButtonElement | null>(null)
 let map: import('leaflet').Map | null = null
 let L: typeof import('leaflet') | null = null
-let polygonLayer: import('leaflet').Polygon | null = null
+let polygonLayer: import('leaflet').Polyline | import('leaflet').Polygon | null = null
 let vertexMarkers: import('leaflet').CircleMarker[] = []
 let userLocationMarker: import('leaflet').CircleMarker | null = null
 let mapGeneration = 0
 let isUnmounted = false
-
-function defaultBox(center: LatLng): LatLng[] {
-    const [lat, lng] = center
-    const d = 0.02
-    return [
-        [lat + d, lng - d],
-        [lat + d, lng + d],
-        [lat - d, lng + d],
-        [lat - d, lng - d],
-    ]
-}
+let mapResizeObserver: ResizeObserver | null = null
+let resizeFrame: number | null = null
 
 function resetForm() {
     nameError.value = false
@@ -82,6 +92,7 @@ function resetForm() {
     leaderTouched.value = false
     isLocating.value = false
     locationError.value = ''
+    mapError.value = ''
     if (props.mode === 'edit' && props.entity) {
         form.name = props.entity.name
         form.code = props.entity.code
@@ -101,63 +112,130 @@ function resetForm() {
         form.color = props.palette[0] ?? '#e9c176'
         form.isActive = true
         form.supervisorId = null
-        tempPolygon.value = defaultBox(props.parentCentroid ?? DEFAULT_CENTER)
+        tempPolygon.value = []
     }
 }
 
 function removeMap() {
-    if (map) {
-        map.remove()
-        map = null
-    }
+    mapReady.value = false
+    mapResizeObserver?.disconnect()
+    mapResizeObserver = null
+    if (resizeFrame !== null) cancelAnimationFrame(resizeFrame)
+    resizeFrame = null
+    const current = map
+    map = null
     polygonLayer = null
     vertexMarkers = []
     userLocationMarker = null
+    current?.remove()
 }
 
 function destroyMap() {
     mapGeneration += 1
+    isLocating.value = false
     removeMap()
+}
+
+function closeDrawer() {
+    if (props.saving) return
+    emit('close')
+}
+
+function handleKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented || !props.open) return
+    if (isMapExpanded.value && event.key === 'Tab') {
+        const controls = mapPanelEl.value?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), a[href], [tabindex="0"]',
+        )
+        const first = controls?.[0]
+        const last = controls?.[controls.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last?.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first?.focus()
+        }
+        return
+    }
+    if (event.key !== 'Escape') return
+    if (document.querySelector('[role="listbox"], [role="menu"], [role="alertdialog"]')) return
+    if (isMapExpanded.value) {
+        isMapExpanded.value = false
+        return
+    }
+    closeDrawer()
+}
+
+function toggleMapExpanded() {
+    isMapExpanded.value = !isMapExpanded.value
+}
+
+function scheduleMapResize() {
+    if (resizeFrame !== null) cancelAnimationFrame(resizeFrame)
+    const current = map
+    resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = null
+        if (!isUnmounted && props.open && current && map === current && mapEl.value?.isConnected) {
+            current.invalidateSize({ animate: false, debounceMoveend: true })
+        }
+    })
 }
 
 function renderPolygon(fit: boolean) {
     if (!map || !L) return
-    if (polygonLayer) {
+    const pts = tempPolygon.value
+    if (fit && pts.length >= 2) {
+        map.fitBounds(L.latLngBounds(pts), { padding: [26, 26], maxZoom: 16, animate: false })
+    }
+
+    const closed = pts.length >= 3
+    if (polygonLayer && (pts.length < 2 || closed !== polygonLayer instanceof L.Polygon)) {
         polygonLayer.remove()
         polygonLayer = null
     }
-    vertexMarkers.forEach((m) => m.remove())
-    vertexMarkers = []
-
-    const pts = tempPolygon.value
     if (pts.length >= 2) {
-        polygonLayer = L.polygon(pts, {
+        const style = {
             color: form.color,
-            weight: 2,
+            weight: 3,
             fillColor: form.color,
             fillOpacity: 0.16,
             dashArray: '5 5',
-        }).addTo(map)
+            interactive: false,
+        }
+        if (polygonLayer) {
+            polygonLayer.setLatLngs(pts).setStyle(style)
+        } else {
+            polygonLayer = (closed ? L.polygon(pts, style) : L.polyline(pts, style)).addTo(map)
+        }
     }
-    pts.forEach((pt) => {
-        vertexMarkers.push(
-            L!
-                .circleMarker(pt, {
-                    radius: 5,
-                    color: '#fff',
-                    weight: 2,
-                    fillColor: form.color,
-                    fillOpacity: 1,
-                })
-                .addTo(map!),
-        )
+    while (vertexMarkers.length > pts.length) vertexMarkers.pop()?.remove()
+    pts.forEach((pt, index) => {
+        const marker = vertexMarkers[index]
+        if (marker) {
+            marker.setLatLng(pt).setStyle({ fillColor: form.color })
+        } else {
+            vertexMarkers.push(
+                L!
+                    .circleMarker(pt, {
+                        radius: 7,
+                        color: '#1d1b18',
+                        weight: 3,
+                        fillColor: form.color,
+                        fillOpacity: 1,
+                        interactive: false,
+                        className: 'territory-vertex',
+                    })
+                    .addTo(map!),
+            )
+        }
+        vertexMarkers[index]?.bringToFront()
     })
-
-    if (fit && pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [26, 26] })
-    else if (fit) map.setView(props.parentCentroid ?? DEFAULT_CENTER, 11)
 }
 
 function addVertex(pt: LatLng) {
+    if (!props.open || !mapReady.value) return
+    polygonError.value = false
     tempPolygon.value = [...tempPolygon.value, pt]
     renderPolygon(false)
 }
@@ -168,10 +246,12 @@ function undoVertex() {
 }
 function clearPolygon() {
     tempPolygon.value = []
+    polygonError.value = false
     renderPolygon(false)
 }
 
 function locateCurrentPosition() {
+    if (!mapReady.value || isLocating.value) return
     locationError.value = ''
 
     if (!import.meta.client || !navigator.geolocation) {
@@ -180,8 +260,10 @@ function locateCurrentPosition() {
     }
 
     isLocating.value = true
+    const generation = mapGeneration
     navigator.geolocation.getCurrentPosition(
         ({ coords }) => {
+            if (isUnmounted || !props.open || generation !== mapGeneration) return
             isLocating.value = false
             if (!map || !L) return
 
@@ -202,6 +284,7 @@ function locateCurrentPosition() {
             map.setView(currentPosition, Math.max(map.getZoom(), 16))
         },
         (error) => {
+            if (isUnmounted || !props.open || generation !== mapGeneration) return
             isLocating.value = false
             locationError.value =
                 error.code === error.PERMISSION_DENIED
@@ -218,48 +301,47 @@ function locateCurrentPosition() {
 
 async function initMap() {
     if (!import.meta.client || isUnmounted || !props.open) return
+    destroyMap()
+    mapError.value = ''
     const generation = ++mapGeneration
-    if (!L) {
-        const leafletModule = await import('leaflet')
-        L = leafletModule.default ?? leafletModule
-    }
-
-    await nextTick()
-    const container = mapEl.value
-    if (
-        isUnmounted ||
-        generation !== mapGeneration ||
-        !props.open ||
-        !container?.isConnected ||
-        !L
-    ) {
-        return
-    }
-
-    removeMap()
-    map = L.map(container, {
-        zoomControl: true,
-        attributionControl: false,
-        scrollWheelZoom: false,
-    })
-    map.zoomControl.setPosition('topright')
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 20,
-    }).addTo(map)
-    map.on('click', (e) => addVertex([e.latlng.lat, e.latlng.lng]))
-    renderPolygon(true)
-    const current = map
-    setTimeout(() => {
-        if (
-            !isUnmounted &&
-            generation === mapGeneration &&
-            map === current &&
-            container.isConnected
-        ) {
-            current.invalidateSize()
+    try {
+        if (!L) {
+            const leafletModule = await import('leaflet')
+            L = leafletModule.default ?? leafletModule
         }
-    }, 80)
+
+        await nextTick()
+        const container = mapEl.value
+        if (
+            isUnmounted ||
+            generation !== mapGeneration ||
+            !props.open ||
+            !container?.isConnected ||
+            !L
+        ) {
+            return
+        }
+
+        map = L.map(container, {
+            zoomControl: true,
+            scrollWheelZoom: false,
+            doubleClickZoom: false,
+        })
+        // Initialize the viewport before adding raster or vector layers.
+        map.setView(props.parentCentroid ?? DEFAULT_CENTER, 11)
+        map.zoomControl.setPosition('topright')
+        addLeafletRasterLayer(L, map, mapProvider.value)
+        map.on('click', (e) => addVertex([e.latlng.lat, e.latlng.lng]))
+        renderPolygon(true)
+        mapReady.value = true
+        mapResizeObserver = new ResizeObserver(scheduleMapResize)
+        mapResizeObserver.observe(container)
+    } catch (error) {
+        if (isUnmounted || !props.open || generation !== mapGeneration) return
+        mapError.value = 'No fue posible cargar el mapa. Intenta cargarlo de nuevo.'
+        console.error('No fue posible inicializar el mapa de cobertura.', error)
+        destroyMap()
+    }
 }
 
 watch(
@@ -268,20 +350,43 @@ watch(
 )
 
 watch(
+    isMapExpanded,
+    async (expanded) => {
+        await nextTick()
+        if (isUnmounted || !props.open) return
+        scheduleMapResize()
+        const button = expanded ? collapseMapButton.value : expandMapButton.value
+        button?.focus({ preventScroll: true })
+    },
+    { flush: 'post' },
+)
+
+watch(
     () => props.open,
     (isOpen) => {
         if (isOpen) {
             resetForm()
-            nextTick(() => initMap())
+            void initMap()
         } else {
+            isMapExpanded.value = false
             destroyMap()
         }
     },
+    { flush: 'post' },
 )
 
 onBeforeUnmount(() => {
     isUnmounted = true
+    window.removeEventListener('keydown', handleKeydown)
     destroyMap()
+})
+
+onMounted(() => {
+    window.addEventListener('keydown', handleKeydown)
+    if (props.open) {
+        resetForm()
+        void initMap()
+    }
 })
 
 function save() {
@@ -294,12 +399,7 @@ function save() {
         return
     }
     const polygon: Polygon = tempPolygon.value.map((p) => [...p] as LatLng)
-    const leaderId =
-        props.level === 'sector'
-            ? undefined
-            : leaderTouched.value || form.leaderId
-              ? form.leaderId
-              : undefined
+    const leaderId = props.level === 'sector' || !leaderTouched.value ? undefined : form.leaderId
     emit('save', {
         name: form.name.trim(),
         code: form.code,
@@ -360,13 +460,18 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
 
 <template>
     <template v-if="open">
-        <div class="fixed inset-0 z-[60] bg-black/50" @click="emit('close')" />
+        <div class="fixed inset-0 z-[60] bg-black/50" @click="closeDrawer" />
         <aside
             class="territory-form-drawer fixed inset-y-0 right-0 z-[61] flex w-[980px] max-w-[98vw] flex-col bg-surface-container-low shadow-2xl"
+            :inert="isMapExpanded"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="territory-form-title"
         >
             <div class="flex-none border-b border-outline-variant px-6 py-5 lg:px-7">
                 <div class="flex items-center justify-between">
                     <span
+                        id="territory-form-title"
                         class="text-[11px] font-bold uppercase tracking-[0.2em]"
                         :style="{ color: accent }"
                     >
@@ -376,7 +481,8 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                         type="button"
                         class="text-on-surface-variant hover:text-on-surface"
                         aria-label="Cerrar"
-                        @click="emit('close')"
+                        :disabled="saving"
+                        @click.stop="closeDrawer"
                     >
                         <X class="size-4" />
                     </button>
@@ -436,10 +542,10 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                                         ? 'Cargando líderes…'
                                         : leadersError
                                           ? 'Catálogo no disponible'
-                                          : `Selecciona ${leaderLabel === 'Pastor' ? 'un pastor' : 'un líder'}`
+                                          : `Selecciona ${leaderLabel === 'Pastor' ? 'un pastor' : 'un coordinador'}`
                                 "
                                 search-placeholder="Buscar por nombre o código…"
-                                empty-message="No hay líderes activos disponibles"
+                                :empty-message="`No hay ${leaderLabel.toLowerCase()}es activos disponibles`"
                                 :disabled="leadersLoading || !!leadersError"
                                 clearable
                                 :aria-label="leaderLabel"
@@ -594,9 +700,22 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                             </div>
                         </div>
                         <button
+                            ref="expandMapButton"
+                            type="button"
+                            class="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-outline-variant bg-surface px-3 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                            :aria-label="
+                                isMapExpanded ? 'Reducir mapa' : 'Ampliar mapa a pantalla completa'
+                            "
+                            @click="toggleMapExpanded"
+                        >
+                            <Minimize v-if="isMapExpanded" class="size-4" />
+                            <Expand v-else class="size-4" />
+                            {{ isMapExpanded ? 'Volver al formulario' : 'Ampliar mapa' }}
+                        </button>
+                        <button
                             type="button"
                             class="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5 text-xs font-semibold text-primary transition-colors hover:border-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-60"
-                            :disabled="isLocating"
+                            :disabled="isLocating || !mapReady"
                             @click="locateCurrentPosition"
                         >
                             <LoaderCircle v-if="isLocating" class="size-4 animate-spin" />
@@ -606,10 +725,100 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                         <p v-if="locationError" class="mb-2 text-xs text-destructive" role="alert">
                             {{ locationError }}
                         </p>
-                        <div
-                            ref="mapEl"
-                            class="territory-form-map h-[420px] min-h-[420px] w-full overflow-hidden rounded-lg border border-outline-variant bg-white xl:h-[min(58vh,560px)]"
-                        />
+                        <Teleport to="body" :disabled="!isMapExpanded">
+                            <div
+                                ref="mapPanelEl"
+                                class="territory-map-panel flex flex-col overflow-hidden border border-outline-variant bg-surface"
+                                :class="
+                                    isMapExpanded
+                                        ? 'territory-map-panel-expanded'
+                                        : 'h-[420px] min-h-[420px] rounded-lg xl:h-[min(58vh,560px)]'
+                                "
+                                :role="isMapExpanded ? 'dialog' : undefined"
+                                :aria-modal="isMapExpanded ? true : undefined"
+                                :aria-labelledby="isMapExpanded ? 'territory-map-title' : undefined"
+                            >
+                                <div
+                                    v-if="isMapExpanded"
+                                    class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-outline-variant bg-surface px-4 py-3 sm:px-6"
+                                >
+                                    <div>
+                                        <p
+                                            id="territory-map-title"
+                                            class="text-sm font-semibold text-on-surface"
+                                        >
+                                            Selecciona el área que cubre
+                                        </p>
+                                        <p class="text-xs text-on-surface-variant">
+                                            {{ tempPolygon.length }} punto(s) seleccionados · mínimo
+                                            3
+                                        </p>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-md border border-outline-variant bg-surface px-3 py-2 text-xs font-semibold text-on-surface-variant disabled:opacity-40"
+                                            :disabled="tempPolygon.length === 0"
+                                            @click="undoVertex"
+                                        >
+                                            <Undo2 class="size-3.5" /> Deshacer
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-md border border-outline-variant bg-surface px-3 py-2 text-xs font-semibold text-on-surface-variant disabled:opacity-40"
+                                            :disabled="tempPolygon.length === 0"
+                                            @click="clearPolygon"
+                                        >
+                                            <Eraser class="size-3.5" /> Limpiar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary disabled:opacity-40"
+                                            :disabled="isLocating || !mapReady"
+                                            @click="locateCurrentPosition"
+                                        >
+                                            <LocateFixed class="size-3.5" /> Mi ubicación
+                                        </button>
+                                        <button
+                                            ref="collapseMapButton"
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+                                            @click="toggleMapExpanded"
+                                        >
+                                            <Minimize class="size-3.5" /> Volver al formulario
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Leaflet owns this node's classes; resize only its parent. -->
+                                <div
+                                    ref="mapEl"
+                                    class="territory-form-map min-h-0 w-full flex-1"
+                                    aria-label="Mapa del área de cobertura"
+                                />
+                                <div
+                                    v-if="isMapExpanded"
+                                    class="shrink-0 border-t border-outline-variant bg-surface px-4 py-2 text-center text-xs text-on-surface-variant"
+                                >
+                                    <p v-if="locationError" class="text-destructive" role="alert">
+                                        {{ locationError }}
+                                    </p>
+                                    <p>
+                                        Haz clic en el mapa para agregar puntos. Presiona Esc para
+                                        volver al formulario.
+                                    </p>
+                                </div>
+                            </div>
+                        </Teleport>
+                        <div v-if="mapError" class="mt-2 text-xs text-destructive" role="alert">
+                            <p>{{ mapError }}</p>
+                            <button
+                                type="button"
+                                class="mt-1 font-semibold underline"
+                                @click="initMap"
+                            >
+                                Volver a cargar el mapa
+                            </button>
+                        </div>
                         <p class="mt-2 text-xs text-on-surface-variant">
                             Haz clic en el mapa para trazar el área. Usa Deshacer si necesitas
                             corregir el último punto.
@@ -627,7 +836,7 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                         type="button"
                         class="flex-1 rounded-lg border border-outline-variant px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high"
                         :disabled="saving"
-                        @click="emit('close')"
+                        @click.stop="closeDrawer"
                     >
                         Cancelar
                     </button>
@@ -666,9 +875,15 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
     position: relative;
     z-index: 0;
     isolation: isolate;
-}
-.territory-form-map :deep(.leaflet-container) {
     cursor: crosshair;
+}
+.territory-map-panel-expanded {
+    position: fixed;
+    z-index: 100;
+    inset: 0;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
 }
 .territory-form-map :deep(.leaflet-control-zoom) {
     margin: 8px;
