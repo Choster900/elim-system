@@ -13,12 +13,6 @@ const date = Joi.string().isoDate().allow(null)
 const shouldValidateDuiChecksum = process.env.NODE_ENV !== 'development'
 
 const fields = {
-    code: Joi.string()
-        .trim()
-        .uppercase()
-        .min(2)
-        .max(30)
-        .pattern(/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/),
     firstName: Joi.string().trim().min(2).max(100),
     middleName: optionalText(100),
     lastName: Joi.string().trim().min(2).max(100),
@@ -35,7 +29,8 @@ const fields = {
             'string.dui': shouldValidateDuiChecksum
                 ? 'El documento debe ser un DUI válido con formato 00000000-0.'
                 : 'El documento de prueba debe tener el formato 00000000-0.',
-        }),
+        })
+        .allow('', null),
     birthDate: date,
     gender: Joi.string().valid(...MEMBER_GENDER_OPTIONS.map((option) => option.value)),
     maritalStatus: Joi.string().valid(
@@ -69,13 +64,12 @@ const fields = {
 }
 
 const requiredFields = {
-    code: fields.code.optional(),
     firstName: fields.firstName.required(),
     middleName: fields.middleName.default(null),
     lastName: fields.lastName.required(),
     secondLastName: fields.secondLastName.default(null),
     preferredName: fields.preferredName.default(null),
-    documentNumber: fields.documentNumber.required(),
+    documentNumber: fields.documentNumber.default(null),
     birthDate: fields.birthDate.default(null),
     gender: fields.gender.required(),
     maritalStatus: fields.maritalStatus.default('UNSPECIFIED'),
@@ -90,7 +84,7 @@ const requiredFields = {
     status: fields.status.default('ACTIVE'),
     roles: fields.roles.default(['MEMBER']),
     ministries: fields.ministries.default([]),
-    joinedAt: fields.joinedAt.default(null),
+    joinedAt: fields.joinedAt.optional(),
     conversionDate: fields.conversionDate.default(null),
     baptismDate: fields.baptismDate.default(null),
     sector: fields.sector.default(null),
