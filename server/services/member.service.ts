@@ -21,7 +21,6 @@ import { createMemberSchema } from '../validators/member.validator'
 type MemberCatalogs = Awaited<ReturnType<typeof repo.findMemberCatalogs>>
 
 const FIELD_LABELS: Record<string, string> = {
-    code: 'Código',
     firstName: 'Nombres',
     lastName: 'Apellidos',
     documentNumber: 'Documento',
@@ -65,7 +64,11 @@ function notFound(): never {
     })
 }
 
-async function ensureUniqueDocument(documentNumber: string, excludedMemberId?: number) {
+async function ensureUniqueDocument(
+    documentNumber: string | null | undefined,
+    excludedMemberId?: number,
+) {
+    if (!documentNumber) return
     const existingMember = await repo.findMemberByDocument(documentNumber, excludedMemberId)
     if (!existingMember) return
 
@@ -188,13 +191,12 @@ function normalizeMemberDto<T extends CreateMemberDto | UpdateMemberDto>(
 ) {
     return {
         ...dto,
-        ...(dto.code === undefined ? {} : { code: dto.code.trim().toUpperCase() }),
         ...(dto.email === undefined
             ? {}
             : { email: dto.email ? dto.email.trim().toLowerCase() : null }),
         ...(dto.documentNumber === undefined
             ? {}
-            : { documentNumber: normalizeDui(dto.documentNumber) }),
+            : { documentNumber: dto.documentNumber ? normalizeDui(dto.documentNumber) : null }),
         ...(residence ? residence : {}),
         ...(territory ? { sector: territory.sector } : {}),
     } as T
@@ -312,8 +314,12 @@ export async function getMemberById(id: number) {
 export async function createMember(dto: CreateMemberDto) {
     const catalogs = await repo.findMemberCatalogs()
     const prepared = await prepareMember(dto, catalogs)
-    await ensureUniqueDocument(prepared.dto.documentNumber)
-    return repo.createMember(prepared.dto as CreateMemberDto, {
+    const member = {
+        ...(prepared.dto as CreateMemberDto),
+        joinedAt: prepared.dto.joinedAt ?? new Date().toISOString().slice(0, 10),
+    }
+    await ensureUniqueDocument(member.documentNumber)
+    return repo.createMember(member, {
         roleIds: prepared.relations.roleIds ?? [],
         ministryIds: prepared.relations.ministryIds ?? [],
         territorySectorId: prepared.relations.territorySectorId ?? null,
@@ -338,11 +344,11 @@ export async function deleteMember(id: number) {
 async function importOneMember(dto: CreateMemberDto, catalogs: MemberCatalogs) {
     const prepared = await prepareMember(dto, catalogs)
     const normalizedDto = prepared.dto as CreateMemberDto
-    const matches = await repo.findMemberMatches(normalizedDto.code, normalizedDto.documentNumber)
+    const matches = await repo.findMemberMatches(normalizedDto.documentNumber)
     if (matches.length > 1) {
         validationError({
             documentNumber: [
-                'El código y el documento pertenecen a miembros diferentes; revisa la fila.',
+                'Se encontró más de un miembro con el mismo documento; revisa la fila.',
             ],
         })
     }
@@ -370,7 +376,6 @@ export async function importMembers(dto: ImportMembersDto): Promise<MemberImport
         total: dto.rows.length,
         failures: [],
     }
-    const seenCodes = new Set<string>()
     const seenDocuments = new Set<string>()
 
     for (const row of dto.rows) {
@@ -388,15 +393,11 @@ export async function importMembers(dto: ImportMembersDto): Promise<MemberImport
         }
 
         const member = validation.value
-        const code = member.code?.trim().toUpperCase()
         const documentNumber = member.documentNumber?.trim().toUpperCase()
         const duplicateReasons: string[] = []
-        if (code && seenCodes.has(code))
-            duplicateReasons.push(`Código duplicado en el archivo: ${code}.`)
         if (documentNumber && seenDocuments.has(documentNumber)) {
             duplicateReasons.push(`Documento duplicado en el archivo: ${documentNumber}.`)
         }
-        if (code) seenCodes.add(code)
         if (documentNumber) seenDocuments.add(documentNumber)
 
         if (duplicateReasons.length) {
