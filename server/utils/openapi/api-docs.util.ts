@@ -1776,21 +1776,27 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     ],
                 },
                 Polygon: {
-                    type: 'array',
-                    minItems: 3,
-                    maxItems: 500,
-                    description: 'Closed area as [latitude, longitude] pairs.',
-                    items: {
-                        type: 'array',
-                        minItems: 2,
-                        maxItems: 2,
-                        items: { type: 'number' },
-                        example: [13.6929, -89.2182],
-                    },
+                    description:
+                        'Optional closed area as [latitude, longitude] pairs; when provided it needs at least three points.',
+                    oneOf: [
+                        { type: 'array', maxItems: 0 },
+                        {
+                            type: 'array',
+                            minItems: 3,
+                            maxItems: 500,
+                            items: {
+                                type: 'array',
+                                minItems: 2,
+                                maxItems: 2,
+                                items: { type: 'number' },
+                                example: [13.6929, -89.2182],
+                            },
+                        },
+                    ],
                 },
                 CreateDistrictDto: {
                     type: 'object',
-                    required: ['name', 'color', 'polygon'],
+                    required: ['name', 'color'],
                     properties: {
                         name: { type: 'string', minLength: 2, maxLength: 100 },
                         leaderName: { type: 'string', maxLength: 100, nullable: true },
@@ -1832,7 +1838,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
                 CreateSectorDto: {
                     type: 'object',
-                    required: ['name', 'color', 'polygon', 'zoneId'],
+                    required: ['name', 'color', 'zoneId'],
                     properties: {
                         name: { type: 'string', minLength: 2, maxLength: 100 },
                         description: { type: 'string', maxLength: 300, nullable: true },
