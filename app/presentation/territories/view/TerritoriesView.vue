@@ -30,11 +30,14 @@ import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeeting
 import type { MeetingRecord } from '~/presentation/meetings/interfaces/meeting.interface'
 import { getMeetingFrequencyLabel } from '~/presentation/meetings/utils/meeting-format.util'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
+import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
 import AssignMeetingDrawer from '~/presentation/territories/components/AssignMeetingDrawer.vue'
 import TerritoryFormDrawer from '~/presentation/territories/components/TerritoryFormDrawer.vue'
 import { useTerritoryHierarchyQuery } from '~/presentation/territories/composables/useTerritoryHierarchyQuery'
 import { useTerritoryLeadersQuery } from '~/presentation/territories/composables/useTerritoryLeadersQuery'
 import { useTerritorySupervisorsQuery } from '~/presentation/territories/composables/useTerritorySupervisorsQuery'
+import { useZoneCoordinatorsQuery } from '~/presentation/territories/composables/useZoneCoordinatorsQuery'
 import {
     useCreateTerritoryMutation,
     useDeleteTerritoryMutation,
@@ -91,12 +94,14 @@ const LEVEL_LABEL: Record<Level, string> = {
 }
 
 const toast = useAppToast()
+const { provider: mapProvider } = useMapProvider()
 const authStore = useAuthStore()
 const canManage = computed(() => authStore.hasPermission('territories.manage'))
 const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
 const canManageOfferings = computed(() => authStore.hasPermission('finance.manage'))
 const hierarchyQuery = useTerritoryHierarchyQuery()
 const leadersQuery = useTerritoryLeadersQuery()
+const coordinatorsQuery = useZoneCoordinatorsQuery()
 const supervisorsQuery = useTerritorySupervisorsQuery()
 const meetingsQuery = useMeetingsQuery()
 const createTerritoryMutation = useCreateTerritoryMutation()
@@ -110,6 +115,7 @@ const zones = computed(() => hierarchyQuery.data.value?.zones ?? [])
 const sectors = computed(() => hierarchyQuery.data.value?.sectors ?? [])
 const meetings = computed(() => meetingsQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
+const coordinators = computed(() => coordinatorsQuery.data.value ?? [])
 const supervisors = computed(() => supervisorsQuery.data.value ?? [])
 const catalogLoading = computed(
     () => hierarchyQuery.isPending.value || meetingsQuery.isPending.value,
@@ -148,6 +154,14 @@ const leaderCatalogError = computed(() =>
         ? requestErrorMessage(
               leadersQuery.error.value,
               'No fue posible cargar el catálogo de líderes.',
+          )
+        : '',
+)
+const coordinatorCatalogError = computed(() =>
+    coordinatorsQuery.error.value
+        ? requestErrorMessage(
+              coordinatorsQuery.error.value,
+              'No fue posible cargar el catálogo de coordinadores.',
           )
         : '',
 )
@@ -235,6 +249,7 @@ if (import.meta.server) {
             hierarchyQuery.suspense(),
             meetingsQuery.suspense(),
             leadersQuery.suspense(),
+            coordinatorsQuery.suspense(),
             supervisorsQuery.suspense(),
         ])
         const hierarchy = hierarchyQuery.data.value
@@ -258,6 +273,13 @@ if (import.meta.client) {
         { immediate: true },
     )
     watch(
+        coordinatorCatalogError,
+        (errorMessage) => {
+            if (errorMessage) toast.error(errorMessage)
+        },
+        { immediate: true },
+    )
+    watch(
         supervisorCatalogError,
         (errorMessage) => {
             if (errorMessage) toast.error(errorMessage)
@@ -270,6 +292,7 @@ function retryCatalog() {
     hierarchyQuery.refetch()
     meetingsQuery.refetch()
     leadersQuery.refetch()
+    coordinatorsQuery.refetch()
     supervisorsQuery.refetch()
 }
 
@@ -1325,15 +1348,11 @@ async function renderMap() {
     const accent = detail.value?.accent ?? '#e9c176'
     map = L.map(container, {
         zoomControl: true,
-        attributionControl: false,
         scrollWheelZoom: false,
         dragging: true,
     })
     map.zoomControl.setPosition('topright')
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 20,
-    }).addTo(map)
+    addLeafletRasterLayer(L, map, mapProvider.value)
 
     if (level === 'reunion') {
         const point = meetingPoint!
@@ -1346,14 +1365,14 @@ async function renderMap() {
             fillOpacity: 0.45,
         }).addTo(map)
     } else {
-        const shape = L.polygon(polygon!, {
+        map.fitBounds(L.latLngBounds(polygon!), { padding: [22, 22], maxZoom: 16 })
+        L.polygon(polygon!, {
             color: accent,
             weight: 2,
             fillColor: accent,
             fillOpacity: 0.12,
             dashArray: '5 5',
         }).addTo(map)
-        map.fitBounds(shape.getBounds(), { padding: [22, 22] })
     }
     const current = map
     setTimeout(() => {
@@ -2094,17 +2113,23 @@ onBeforeUnmount(() => {
             :palette="paletteFor(formLevel)"
             :accent="LEVEL_ACCENT[formLevel]"
             :level-label="formLevel"
-            :leader-label="formLevel === 'distrito' ? 'Pastor' : 'Líder'"
-            :leader-options="leaders"
-            :leaders-loading="leadersQuery.isPending.value"
-            :leaders-error="leaderCatalogError"
+            :leader-label="formLevel === 'distrito' ? 'Pastor' : 'Coordinador'"
+            :leader-options="formLevel === 'zona' ? coordinators : leaders"
+            :leaders-loading="
+                formLevel === 'zona'
+                    ? coordinatorsQuery.isPending.value
+                    : leadersQuery.isPending.value
+            "
+            :leaders-error="formLevel === 'zona' ? coordinatorCatalogError : leaderCatalogError"
             :supervisor-options="supervisors"
             :supervisors-loading="supervisorsQuery.isPending.value"
             :supervisors-error="supervisorCatalogError"
             :saving="hierarchySaving"
             @close="formOpen = false"
             @save="onFormSave"
-            @retry-leaders="leadersQuery.refetch()"
+            @retry-leaders="
+                formLevel === 'zona' ? coordinatorsQuery.refetch() : leadersQuery.refetch()
+            "
             @retry-supervisors="supervisorsQuery.refetch()"
         />
 
