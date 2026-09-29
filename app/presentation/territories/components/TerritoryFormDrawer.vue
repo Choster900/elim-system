@@ -63,7 +63,6 @@ const form = reactive({
 const tempPolygon = ref<LatLng[]>([])
 const nameError = ref(false)
 const supervisorError = ref(false)
-const polygonError = ref(false)
 const leaderTouched = ref(false)
 const isLocating = ref(false)
 const locationError = ref('')
@@ -88,7 +87,6 @@ let resizeFrame: number | null = null
 function resetForm() {
     nameError.value = false
     supervisorError.value = false
-    polygonError.value = false
     leaderTouched.value = false
     isLocating.value = false
     locationError.value = ''
@@ -235,18 +233,15 @@ function renderPolygon(fit: boolean) {
 
 function addVertex(pt: LatLng) {
     if (!props.open || !mapReady.value) return
-    polygonError.value = false
     tempPolygon.value = [...tempPolygon.value, pt]
     renderPolygon(false)
 }
 function undoVertex() {
     tempPolygon.value = tempPolygon.value.slice(0, -1)
-    polygonError.value = false
     renderPolygon(false)
 }
 function clearPolygon() {
     tempPolygon.value = []
-    polygonError.value = false
     renderPolygon(false)
 }
 
@@ -394,10 +389,6 @@ function save() {
         nameError.value = true
         return
     }
-    if (tempPolygon.value.length < 3) {
-        polygonError.value = true
-        return
-    }
     const polygon: Polygon = tempPolygon.value.map((p) => [...p] as LatLng)
     const leaderId = props.level === 'sector' || !leaderTouched.value ? undefined : form.leaderId
     emit('save', {
@@ -516,7 +507,7 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                             </p>
                         </div>
 
-                        <div>
+                        <div v-if="mode === 'edit'">
                             <span :class="labelClass">Código</span>
                             <div
                                 class="rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface"
@@ -677,7 +668,7 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                             <div>
                                 <span :class="labelClass">Área que cubre</span>
                                 <p class="text-xs text-on-surface-variant">
-                                    {{ tempPolygon.length }} punto(s) seleccionados · mínimo 3
+                                    {{ tempPolygon.length }} punto(s) seleccionados · opcional
                                 </p>
                             </div>
                             <div class="flex items-center gap-1.5">
@@ -750,8 +741,8 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                                             Selecciona el área que cubre
                                         </p>
                                         <p class="text-xs text-on-surface-variant">
-                                            {{ tempPolygon.length }} punto(s) seleccionados · mínimo
-                                            3
+                                            {{ tempPolygon.length }} punto(s) seleccionados ·
+                                            opcional
                                         </p>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2">
@@ -820,11 +811,8 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                             </button>
                         </div>
                         <p class="mt-2 text-xs text-on-surface-variant">
-                            Haz clic en el mapa para trazar el área. Usa Deshacer si necesitas
-                            corregir el último punto.
-                        </p>
-                        <p v-if="polygonError" class="mt-1 text-xs text-destructive" role="alert">
-                            Debes definir al menos tres puntos para el área de cobertura.
+                            El área es opcional. Haz clic en el mapa para trazarla cuando la tengas
+                            disponible; usa Deshacer si necesitas corregir el último punto.
                         </p>
                     </section>
                 </div>
