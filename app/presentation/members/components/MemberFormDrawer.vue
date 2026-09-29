@@ -18,7 +18,7 @@ import type {
 import { toInputDate } from '../utils/member-format.util'
 import { formatDuiInput, hasDuiFormat, isValidDui, normalizeDui } from '#shared/utils/dui.util'
 
-type DocumentNumberError = '' | 'required' | 'invalid'
+type DocumentNumberError = '' | 'invalid'
 type InvalidMemberField =
     | 'firstName'
     | 'lastName'
@@ -29,7 +29,6 @@ type InvalidMemberField =
     | 'occupation'
 
 interface FormState {
-    code: string
     firstName: string
     middleName: string
     lastName: string
@@ -39,18 +38,15 @@ interface FormState {
     birthDate: string | null
     gender: MemberGender | ''
     maritalStatus: MemberMaritalStatus
+    phone: string
     email: string
-    country: string
     municipality: string
-    department: string
     occupation: string
     status: MemberStatus
     roles: MemberCommunityRole[]
     joinedAt: string | null
     conversionDate: string | null
     baptismDate: string | null
-    district: string
-    zone: string
     sector: string
 }
 
@@ -72,26 +68,11 @@ const emit = defineEmits<{
 const catalogsQuery = useMemberCatalogsQuery()
 const shouldValidateDuiChecksum = !import.meta.dev
 const catalogs = computed(() => catalogsQuery.data.value)
-const countryOptions = computed(() => catalogs.value?.countries ?? [])
-const departmentOptions = computed(() =>
-    (catalogs.value?.departments ?? []).filter((item) => item.countryCode === form.country),
-)
-const municipalityOptions = computed(() =>
-    (catalogs.value?.municipalities ?? []).filter(
-        (item) => item.departmentCode === form.department,
-    ),
-)
-const districtOptions = computed(() => catalogs.value?.districts ?? [])
-const zoneOptions = computed(() =>
-    (catalogs.value?.zones ?? []).filter((item) => item.districtCode === form.district),
-)
-const sectorOptions = computed(() =>
-    (catalogs.value?.sectors ?? []).filter((item) => item.zoneCode === form.zone),
-)
+const municipalityOptions = computed(() => catalogs.value?.municipalities ?? [])
+const sectorOptions = computed(() => catalogs.value?.sectors ?? [])
 
 function emptyForm(): FormState {
     return {
-        code: '',
         firstName: '',
         middleName: '',
         lastName: '',
@@ -101,18 +82,15 @@ function emptyForm(): FormState {
         birthDate: null,
         gender: '',
         maritalStatus: 'UNSPECIFIED',
+        phone: '',
         email: '',
-        country: 'SV',
         municipality: '',
-        department: '',
         occupation: '',
         status: 'ACTIVE',
         roles: ['MEMBER'],
         joinedAt: new Date().toISOString().slice(0, 10),
         conversionDate: null,
         baptismDate: null,
-        district: '',
-        zone: '',
         sector: '',
     }
 }
@@ -162,7 +140,6 @@ function resetForm() {
     if (!props.member) return
 
     Object.assign(form, {
-        code: props.member.code,
         firstName: props.member.firstName,
         middleName: props.member.middleName ?? '',
         lastName: props.member.lastName,
@@ -172,18 +149,15 @@ function resetForm() {
         birthDate: toInputDate(props.member.birthDate),
         gender: props.member.gender,
         maritalStatus: props.member.maritalStatus,
+        phone: props.member.phone ?? '',
         email: props.member.email ?? '',
-        country: props.member.countryCode ?? 'SV',
         municipality: props.member.municipalityCode ?? '',
-        department: props.member.departmentCode ?? '',
         occupation: props.member.occupation ?? '',
         status: props.member.status,
         roles: normalizeMemberRoles(props.member.roles ?? []),
         joinedAt: toInputDate(props.member.joinedAt),
         conversionDate: toInputDate(props.member.conversionDate),
         baptismDate: toInputDate(props.member.baptismDate),
-        district: props.member.districtCode ?? '',
-        zone: props.member.zoneCode ?? '',
         sector: props.member.sectorCode ?? '',
     })
 }
@@ -203,16 +177,6 @@ watch(
         }
     },
     { deep: true },
-)
-
-watch(
-    () => form.country,
-    (countryCode) => {
-        const department = catalogs.value?.departments.find(
-            (item) => item.value === form.department,
-        )
-        if (department && department.countryCode !== countryCode) form.department = ''
-    },
 )
 
 watch(
@@ -245,41 +209,13 @@ watch(
     () => dismissServerFieldError('occupation'),
 )
 
-watch(
-    () => form.department,
-    (departmentCode) => {
-        const municipality = catalogs.value?.municipalities.find(
-            (item) => item.value === form.municipality,
-        )
-        if (municipality && municipality.departmentCode !== departmentCode) {
-            form.municipality = ''
-        }
-    },
-)
-
-watch(
-    () => form.district,
-    (districtCode) => {
-        const zone = catalogs.value?.zones.find((item) => item.value === form.zone)
-        if (zone && zone.districtCode !== districtCode) form.zone = ''
-    },
-)
-
-watch(
-    () => form.zone,
-    (zoneCode) => {
-        const sector = catalogs.value?.sectors.find((item) => item.value === form.sector)
-        if (sector && sector.zoneCode !== zoneCode) form.sector = ''
-    },
-)
-
 function optional(value: string) {
     return value.trim() || null
 }
 
 function validateDocumentNumber() {
     if (!form.documentNumber.trim()) {
-        errors.documentNumber = 'required'
+        errors.documentNumber = ''
     } else if (
         shouldValidateDuiChecksum
             ? !isValidDui(form.documentNumber)
@@ -400,14 +336,13 @@ function submit() {
         lastName: form.lastName.trim(),
         secondLastName: optional(form.secondLastName),
         preferredName: optional(form.preferredName),
-        documentNumber: normalizeDui(form.documentNumber),
+        documentNumber: optional(normalizeDui(form.documentNumber)),
         birthDate: form.birthDate,
         gender: form.gender as MemberGender,
         maritalStatus: form.maritalStatus,
+        phone: optional(form.phone),
         email: optional(form.email),
-        country: optional(form.country),
         municipality: optional(form.municipality),
-        department: optional(form.department),
         occupation: optional(form.occupation),
         status: form.status,
         roles: normalizeMemberRoles(form.roles.length ? form.roles : ['MEMBER']),
@@ -487,24 +422,6 @@ const currentYear = new Date().getFullYear()
                         acceso.
                     </p>
                     <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div>
-                            <label :class="labelClass" for="member-code">Código</label>
-                            <input
-                                id="member-code"
-                                v-model="form.code"
-                                :class="inputClass"
-                                :placeholder="member ? '' : 'Se asignará al guardar'"
-                                maxlength="30"
-                                disabled
-                            />
-                            <p class="mt-1 text-[11px] text-on-surface-variant">
-                                {{
-                                    member
-                                        ? 'Asignado automáticamente; no se puede editar.'
-                                        : 'El sistema generará un código MIE-####.'
-                                }}
-                            </p>
-                        </div>
                         <div :class="fieldShellClass('firstName')" data-member-field="firstName">
                             <label :class="labelClass" for="member-first-name">Nombres *</label>
                             <input
@@ -516,7 +433,6 @@ const currentYear = new Date().getFullYear()
                                         ? 'border-destructive'
                                         : '',
                                 ]"
-                                placeholder="María Elena"
                                 maxlength="100"
                             />
                             <p v-if="errors.firstName" class="mt-1 text-xs text-destructive">
@@ -551,7 +467,6 @@ const currentYear = new Date().getFullYear()
                                         ? 'border-destructive'
                                         : '',
                                 ]"
-                                placeholder="González"
                                 maxlength="100"
                             />
                             <p v-if="errors.lastName" class="mt-1 text-xs text-destructive">
@@ -583,7 +498,6 @@ const currentYear = new Date().getFullYear()
                                 id="member-preferred-name"
                                 v-model="form.preferredName"
                                 :class="inputClass"
-                                placeholder="Cómo desea ser llamado/a"
                                 maxlength="100"
                             />
                         </div>
@@ -591,7 +505,9 @@ const currentYear = new Date().getFullYear()
                             :class="fieldShellClass('documentNumber')"
                             data-member-field="documentNumber"
                         >
-                            <label :class="labelClass" for="member-document">Documento *</label>
+                            <label :class="labelClass" for="member-document">
+                                Documento (opcional)
+                            </label>
                             <input
                                 id="member-document"
                                 :value="form.documentNumber"
@@ -601,22 +517,14 @@ const currentYear = new Date().getFullYear()
                                         ? 'border-destructive'
                                         : '',
                                 ]"
-                                placeholder="########-#"
                                 inputmode="numeric"
                                 maxlength="10"
                                 autocomplete="off"
-                                required
                                 @input="updateDocumentNumber"
                                 @blur="validateDocumentNumber"
                             />
                             <p
-                                v-if="errors.documentNumber === 'required'"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                El documento es obligatorio.
-                            </p>
-                            <p
-                                v-else-if="errors.documentNumber === 'invalid'"
+                                v-if="errors.documentNumber === 'invalid'"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{
@@ -634,16 +542,15 @@ const currentYear = new Date().getFullYear()
                             <p v-else class="mt-1 text-[11px] text-on-surface-variant">
                                 {{
                                     shouldValidateDuiChecksum
-                                        ? 'Formato DUI: 8 dígitos, guion y dígito verificador. También debe ser único.'
+                                        ? 'Si lo registras, usa 8 dígitos, guion y dígito verificador. Debe ser único.'
                                         : 'Desarrollo: se acepta cualquier documento con formato 00000000-0.'
                                 }}
                             </p>
                         </div>
                         <div>
-                            <span :class="labelClass">Fecha de nacimiento</span>
+                            <span :class="labelClass">Fecha de nacimiento (opcional)</span>
                             <UiDatePicker
                                 v-model="form.birthDate"
-                                placeholder="Selecciona fecha"
                                 year-select
                                 :min-year="1900"
                                 :max-year="currentYear"
@@ -656,7 +563,6 @@ const currentYear = new Date().getFullYear()
                                 :options="memberGenderOptions"
                                 :searchable="false"
                                 :invalid="errors.gender || !!serverFieldMessage('gender')"
-                                placeholder="Selecciona género"
                             />
                             <p v-if="errors.gender" class="mt-1 text-xs text-destructive">
                                 Selecciona femenino o masculino.
@@ -691,7 +597,6 @@ const currentYear = new Date().getFullYear()
                                     inputClass,
                                     serverFieldMessage('occupation') ? 'border-destructive' : '',
                                 ]"
-                                placeholder="Profesión u oficio"
                                 maxlength="100"
                                 :aria-invalid="!!serverFieldMessage('occupation')"
                                 aria-describedby="member-occupation-error"
@@ -729,26 +634,19 @@ const currentYear = new Date().getFullYear()
                                 :options="memberRoleOptions"
                                 multiple
                                 :max-items="5"
-                                placeholder="Selecciona uno o más roles"
                             />
                         </div>
                         <div>
                             <span :class="labelClass">Fecha de ingreso</span>
-                            <UiDatePicker v-model="form.joinedAt" placeholder="Selecciona fecha" />
+                            <UiDatePicker v-model="form.joinedAt" />
                         </div>
                         <div>
                             <span :class="labelClass">Fecha de conversión (opcional)</span>
-                            <UiDatePicker
-                                v-model="form.conversionDate"
-                                placeholder="Selecciona fecha"
-                            />
+                            <UiDatePicker v-model="form.conversionDate" />
                         </div>
                         <div>
                             <span :class="labelClass">Fecha de bautismo (opcional)</span>
-                            <UiDatePicker
-                                v-model="form.baptismDate"
-                                placeholder="Selecciona fecha"
-                            />
+                            <UiDatePicker v-model="form.baptismDate" />
                         </div>
                         <div class="sm:col-span-2 lg:col-span-3">
                             <div class="rounded border border-primary/20 bg-primary/5 px-4 py-3">
@@ -756,44 +654,19 @@ const currentYear = new Date().getFullYear()
                                     Asignación territorial
                                 </p>
                                 <p class="mt-1 text-xs leading-relaxed text-on-surface-variant">
-                                    Distrito y zona solo ayudan a filtrar. Si no seleccionas un
-                                    sector, el miembro queda sin asignación territorial.
+                                    El miembro se asigna únicamente por sector. Si no seleccionas
+                                    uno, queda sin asignación territorial.
                                 </p>
                             </div>
-                        </div>
-                        <div>
-                            <span :class="labelClass">Distrito (opcional)</span>
-                            <UiSearchSelect
-                                v-model="form.district"
-                                :options="districtOptions"
-                                clearable
-                                placeholder="Selecciona distrito"
-                                search-placeholder="Buscar distrito..."
-                            />
-                        </div>
-                        <div>
-                            <span :class="labelClass">Zona (opcional)</span>
-                            <UiSearchSelect
-                                v-model="form.zone"
-                                :options="zoneOptions"
-                                :disabled="!form.district"
-                                clearable
-                                placeholder="Selecciona zona"
-                                search-placeholder="Buscar zona..."
-                                empty-message="Este distrito no tiene zonas activas"
-                            />
                         </div>
                         <div :class="fieldShellClass('sector')" data-member-field="sector">
                             <span :class="labelClass">Sector (opcional)</span>
                             <UiSearchSelect
                                 v-model="form.sector"
                                 :options="sectorOptions"
-                                :disabled="!form.zone"
                                 :invalid="errors.sector || !!serverFieldMessage('sector')"
                                 clearable
-                                placeholder="Selecciona sector"
-                                search-placeholder="Buscar sector..."
-                                empty-message="Esta zona no tiene sectores activos"
+                                empty-message="No hay sectores activos"
                             />
                             <p
                                 v-if="serverFieldMessage('sector')"
@@ -813,7 +686,7 @@ const currentYear = new Date().getFullYear()
                     </h3>
                     <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <div :class="fieldShellClass('email')" data-member-field="email">
-                            <label :class="labelClass" for="member-email">Correo</label>
+                            <label :class="labelClass" for="member-email">Correo (opcional)</label>
                             <input
                                 id="member-email"
                                 v-model="form.email"
@@ -824,7 +697,6 @@ const currentYear = new Date().getFullYear()
                                         ? 'border-destructive'
                                         : '',
                                 ]"
-                                placeholder="persona@correo.com"
                             />
                             <p v-if="errors.email" class="mt-1 text-xs text-destructive">
                                 Ingresa un correo válido.
@@ -837,24 +709,15 @@ const currentYear = new Date().getFullYear()
                             </p>
                         </div>
                         <div>
-                            <span :class="labelClass">País</span>
-                            <UiSearchSelect
-                                v-model="form.country"
-                                :options="countryOptions"
-                                clearable
-                                placeholder="Selecciona país"
-                                search-placeholder="Buscar país..."
-                            />
-                        </div>
-                        <div>
-                            <span :class="labelClass">Departamento</span>
-                            <UiSearchSelect
-                                v-model="form.department"
-                                :options="departmentOptions"
-                                :disabled="!form.country"
-                                clearable
-                                placeholder="Selecciona departamento"
-                                search-placeholder="Buscar departamento..."
+                            <label :class="labelClass" for="member-phone">
+                                Teléfono (opcional)
+                            </label>
+                            <input
+                                id="member-phone"
+                                v-model="form.phone"
+                                type="tel"
+                                :class="inputClass"
+                                maxlength="100"
                             />
                         </div>
                         <div>
@@ -862,11 +725,8 @@ const currentYear = new Date().getFullYear()
                             <UiSearchSelect
                                 v-model="form.municipality"
                                 :options="municipalityOptions"
-                                :disabled="!form.department"
                                 clearable
-                                placeholder="Selecciona municipio"
-                                search-placeholder="Buscar municipio..."
-                                empty-message="Este departamento no tiene municipios configurados"
+                                empty-message="No hay municipios configurados"
                             />
                         </div>
                     </div>
