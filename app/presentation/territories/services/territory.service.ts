@@ -211,6 +211,17 @@ export async function getTerritoryLeaders(
     return responseData(response.data, 'No fue posible cargar el catálogo de líderes')
 }
 
+export async function getZoneCoordinators(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<TerritoryLeaderOption[]> {
+    const response = await apiClient.get<ApiResponse<TerritoryLeaderOption[]>>(
+        '/territories/coordinators',
+        { signal },
+    )
+    return responseData(response.data, 'No fue posible cargar el catálogo de coordinadores')
+}
+
 export async function deleteTerritoryEntity(
     apiClient: AxiosInstance,
     level: TerritoryLevel,
