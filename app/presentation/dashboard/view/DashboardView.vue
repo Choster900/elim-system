@@ -42,6 +42,7 @@ const dashboardQuery = useDashboardQuery(selectedPeriod, selectedDistrictId)
 const summary = computed(() => dashboardQuery.data.value ?? null)
 const isLoading = computed(() => dashboardQuery.isPending.value)
 const isRefreshing = computed(() => dashboardQuery.isFetching.value && !isLoading.value)
+const showTourButton = import.meta.dev
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
 const { hasSeen, markSeen } = useTourProgress('dashboard', 1)
@@ -320,6 +321,7 @@ function openMeeting(id: number) {
                 class="flex flex-col gap-3 sm:flex-row sm:items-center"
             >
                 <button
+                    v-if="showTourButton"
                     type="button"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-outline-variant px-3 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     :disabled="!summary"
