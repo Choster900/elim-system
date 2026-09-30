@@ -8,10 +8,9 @@ const props = defineProps<{
 
 <template>
     <article
-        :class="cn(
-            'rounded-lg border border-outline-variant bg-card text-card-foreground',
-            props.class,
-        )"
+        :class="
+            cn('rounded-lg border border-outline-variant bg-card text-card-foreground', props.class)
+        "
     >
         <slot />
     </article>
