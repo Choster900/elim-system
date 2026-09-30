@@ -36,7 +36,9 @@ function goBack() {
 
 <template>
     <div class="relative flex min-h-screen flex-col overflow-hidden bg-background text-on-surface">
-        <header class="relative z-20 mx-auto flex w-full max-w-system items-center justify-between px-6 py-6 lg:px-10">
+        <header
+            class="relative z-20 mx-auto flex w-full max-w-system items-center justify-between px-6 py-6 lg:px-10"
+        >
             <AppBrand />
             <NuxtLink
                 to="/"
@@ -49,8 +51,12 @@ function goBack() {
 
         <main class="relative flex flex-1 items-center justify-center px-6 py-12">
             <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-                <div class="absolute inset-x-0 top-1/3 mx-auto h-[480px] max-w-[680px] rounded-full bg-primary/5 blur-3xl" />
-                <div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80" />
+                <div
+                    class="absolute inset-x-0 top-1/3 mx-auto h-[480px] max-w-[680px] rounded-full bg-primary/5 blur-3xl"
+                />
+                <div
+                    class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80"
+                />
             </div>
 
             <section class="relative z-10 w-full max-w-[640px] text-center">
@@ -58,7 +64,9 @@ function goBack() {
                     Error · {{ statusCode }}
                 </p>
 
-                <h1 class="mt-6 font-display text-[clamp(5rem,18vw,9rem)] font-semibold leading-none text-primary">
+                <h1
+                    class="mt-6 font-display text-[clamp(5rem,18vw,9rem)] font-semibold leading-none text-primary"
+                >
                     {{ statusCode }}
                 </h1>
 
@@ -96,7 +104,10 @@ function goBack() {
                     </UiButton>
                 </div>
 
-                <p v-if="!isNotFound && error?.message" class="mt-8 font-mono text-[11px] text-on-surface-variant/70">
+                <p
+                    v-if="!isNotFound && error?.message"
+                    class="mt-8 font-mono text-[11px] text-on-surface-variant/70"
+                >
                     {{ error.message }}
                 </p>
             </section>
