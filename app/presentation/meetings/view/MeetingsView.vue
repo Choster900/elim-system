@@ -39,6 +39,7 @@ import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
     useMeetingLeadersQuery,
+    useMeetingHostsQuery,
     useMeetingSectorsQuery,
     useMeetingSupervisorsQuery,
     useMeetingTypesQuery,
@@ -87,6 +88,7 @@ const meetingsQuery = useMeetingsQuery()
 const meetingTypesQuery = useMeetingTypesQuery()
 const sectorsQuery = useMeetingSectorsQuery()
 const leadersQuery = useMeetingLeadersQuery(canManage)
+const hostsQuery = useMeetingHostsQuery(canManage)
 const supervisorsQuery = useMeetingSupervisorsQuery(canManage)
 const createMeetingMutation = useCreateMeetingMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
@@ -97,18 +99,21 @@ const meetings = computed(() => meetingsQuery.data.value ?? [])
 const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
+const hosts = computed(() => hostsQuery.data.value ?? [])
 const supervisors = computed(() => supervisorsQuery.data.value ?? [])
 const importCatalogs = computed<MeetingImportCatalogs>(() => ({
     meetingTypes: meetingTypes.value,
     sectors: sectors.value,
     supervisors: supervisors.value,
     leaders: leaders.value,
+    hosts: hosts.value,
 }))
 const importCatalogsLoading = computed(
     () =>
         meetingTypesQuery.isPending.value ||
         sectorsQuery.isPending.value ||
         leadersQuery.isPending.value ||
+        hostsQuery.isPending.value ||
         supervisorsQuery.isPending.value,
 )
 const isLoading = computed(
@@ -141,6 +146,7 @@ if (import.meta.client) {
             meetingTypesQuery.error.value,
             sectorsQuery.error.value,
             leadersQuery.error.value,
+            hostsQuery.error.value,
             supervisorsQuery.error.value,
         ],
         (errors) => {
@@ -413,6 +419,7 @@ function toInput(m: MeetingRecord): MeetingInput {
         sectorId: m.sectorId,
         leaderId: m.leaderId,
         supervisorId: m.supervisorId,
+        hostId: m.hostId ?? 0,
         coSupervisorIds: [...m.coSupervisorIds],
         title: m.title,
         description: m.description,
