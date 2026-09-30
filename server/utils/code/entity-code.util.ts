@@ -1,11 +1,16 @@
-export function nextSequentialCode(prefix: string, existingCodes: string[], padding = 3) {
-    const pattern = new RegExp(`^${prefix}-(\\d+)$`)
+export function nextSequentialCode(
+    prefix: string,
+    existingCodes: string[],
+    padding = 3,
+    separator = '-',
+) {
+    const pattern = new RegExp(`^${prefix}${separator}(\\d+)$`)
     const maximum = existingCodes.reduce((current, code) => {
         const match = pattern.exec(code)
         return match ? Math.max(current, Number(match[1])) : current
     }, 0)
 
-    return `${prefix}-${String(maximum + 1).padStart(padding, '0')}`
+    return `${prefix}${separator}${String(maximum + 1).padStart(padding, '0')}`
 }
 
 function compact(value: string) {

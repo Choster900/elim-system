@@ -78,15 +78,17 @@ export async function createDistrict(dto: CreateDistrictDto) {
             return await prisma.$transaction(
                 async (transaction) => {
                     const codes = await transaction.district.findMany({
-                        where: { code: { startsWith: 'DIS-' } },
+                        where: { code: { startsWith: 'D' } },
                         select: { code: true },
                     })
                     return transaction.district.create({
                         data: {
                             ...data,
                             code: nextSequentialCode(
-                                'DIS',
+                                'D',
                                 codes.map((item) => item.code),
+                                0,
+                                '',
                             ),
                             polygon: polygon as Prisma.InputJsonValue,
                         },
@@ -132,15 +134,17 @@ export async function createZone(dto: CreateZoneDto) {
             return await prisma.$transaction(
                 async (transaction) => {
                     const codes = await transaction.zone.findMany({
-                        where: { code: { startsWith: 'ZON-' } },
+                        where: { code: { startsWith: 'Z' } },
                         select: { code: true },
                     })
                     return transaction.zone.create({
                         data: {
                             ...data,
                             code: nextSequentialCode(
-                                'ZON',
+                                'Z',
                                 codes.map((item) => item.code),
+                                0,
+                                '',
                             ),
                             polygon: polygon as Prisma.InputJsonValue,
                         },
@@ -186,15 +190,17 @@ export async function createSector(dto: CreateSectorDto, supervisorName: string 
             return await prisma.$transaction(
                 async (transaction) => {
                     const codes = await transaction.territorySector.findMany({
-                        where: { code: { startsWith: 'SEC-' } },
+                        where: { code: { startsWith: 'S' } },
                         select: { code: true },
                     })
                     return transaction.territorySector.create({
                         data: {
                             ...fields,
                             code: nextSequentialCode(
-                                'SEC',
+                                'S',
                                 codes.map((item) => item.code),
+                                0,
+                                '',
                             ),
                             polygon: polygon as Prisma.InputJsonValue,
                             zone: { connect: { id: zoneId } },

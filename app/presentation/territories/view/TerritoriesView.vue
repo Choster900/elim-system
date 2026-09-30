@@ -1160,10 +1160,7 @@ function goToMeeting(id: string) {
 function goToOfferingRegistration(id: string) {
     closeMenu()
     closeDrawer()
-    navigateTo({
-        path: '/finanzas/ofrendas/nueva',
-        query: { meetingId: id },
-    })
+    navigateTo(`/finanzas/ofrendas/registrar/${id}`)
 }
 
 // ===== entity form (create/edit) =====
