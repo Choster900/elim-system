@@ -6,6 +6,7 @@ export interface CreateMeetingDto {
     sectorId: number
     leaderId: number
     supervisorId: number
+    hostId: number
     coSupervisorIds: number[]
     title: string
     description: string | null

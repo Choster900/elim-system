@@ -33,6 +33,19 @@ async function assertMeetingLeader(memberId: number) {
     })
 }
 
+async function assertMeetingHost(memberId: number) {
+    if (await repo.isMeetingHost(memberId)) return
+
+    throw createError({
+        statusCode: 400,
+        message: 'El miembro seleccionado no tiene un rol Anfitrión activo',
+        data: {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            fields: { hostId: ['Selecciona un miembro con rol Anfitrión activo'] },
+        },
+    })
+}
+
 async function assertMeetingCoSupervisors(memberIds: number[], supervisorId: number) {
     if (memberIds.includes(supervisorId)) {
         throw createError({
@@ -140,8 +153,13 @@ export function getMeetingSupervisors() {
     return repo.findMeetingSupervisors()
 }
 
+export function getMeetingHosts() {
+    return repo.findMeetingHosts()
+}
+
 export async function createMeeting(dto: CreateMeetingDto) {
     await assertMeetingLeader(dto.leaderId)
+    await assertMeetingHost(dto.hostId)
     const supervisorId = await sectorSupervisorId(dto.sectorId)
     await assertMeetingCoSupervisors(dto.coSupervisorIds, supervisorId)
     const normalizedDto = {
@@ -170,6 +188,7 @@ export async function createMeeting(dto: CreateMeetingDto) {
 export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     const existing = await getMeetingById(id)
     if (dto.leaderId !== undefined) await assertMeetingLeader(dto.leaderId)
+    if (dto.hostId !== undefined) await assertMeetingHost(dto.hostId)
     const supervisorId = await sectorSupervisorId(dto.sectorId ?? existing.sectorId)
     if (dto.coSupervisorIds !== undefined) {
         await assertMeetingCoSupervisors(dto.coSupervisorIds, supervisorId)

@@ -22,6 +22,7 @@ const baseFields = {
     leaderId: Joi.number().integer().positive().allow(null),
     leaderName: Joi.string().trim().max(100).allow('', null),
     description: Joi.string().trim().max(300).allow('', null),
+    address: Joi.string().trim().max(300).allow('', null),
     color: Joi.string()
         .trim()
         .pattern(/^#[0-9a-f]{6}$/i),
@@ -34,6 +35,7 @@ const requiredBaseFields = {
     leaderId: baseFields.leaderId,
     leaderName: baseFields.leaderName.default(null),
     description: baseFields.description.default(null),
+    address: baseFields.address.default(null),
     color: baseFields.color.required(),
     polygon: baseFields.polygon.default([]),
     isActive: baseFields.isActive.default(true),
@@ -56,6 +58,7 @@ export const updateZoneSchema = Joi.object<UpdateZoneDto>({
 export const createSectorSchema = Joi.object<CreateSectorDto>({
     name: requiredBaseFields.name,
     description: requiredBaseFields.description,
+    address: requiredBaseFields.address,
     color: requiredBaseFields.color,
     polygon: requiredBaseFields.polygon,
     isActive: requiredBaseFields.isActive,
@@ -66,6 +69,7 @@ export const createSectorSchema = Joi.object<CreateSectorDto>({
 export const updateSectorSchema = Joi.object<UpdateSectorDto>({
     name: baseFields.name,
     description: baseFields.description,
+    address: baseFields.address,
     color: baseFields.color,
     polygon: baseFields.polygon,
     isActive: baseFields.isActive,

@@ -1172,6 +1172,7 @@ function toEntityInput(e: District | Zone | TerritorySector): TerritoryInput {
         leaderId: e.leaderId,
         leaderName: e.leaderName,
         description: e.description,
+        address: e.address,
         color: e.color,
         polygon: e.polygon,
         isActive: e.isActive,

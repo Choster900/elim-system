@@ -48,6 +48,7 @@ const meetingInclude = {
     },
     leader: true,
     supervisor: true,
+    host: true,
     coSupervisors: true,
 } satisfies Prisma.MeetingInclude
 
@@ -82,6 +83,7 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         sectorId: meeting.sectorId,
         leaderId: meeting.leaderId,
         supervisorId: meeting.supervisorId,
+        hostId: meeting.hostId,
         coSupervisorIds: meeting.coSupervisors.map((item) => item.memberId),
         title: meeting.title,
         description: meeting.description,
@@ -114,6 +116,7 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         districtName: meeting.sector.zone.district.name,
         leaderName: fullName(meeting.leader),
         supervisorName: fullName(meeting.supervisor),
+        hostName: fullName(meeting.host),
         createdAt: meeting.createdAt,
         updatedAt: meeting.updatedAt,
     }
@@ -173,6 +176,10 @@ export async function findMeetingSupervisors() {
     return findActiveCommunityRoleMembers('SUPERVISOR')
 }
 
+export async function findMeetingHosts() {
+    return findActiveCommunityRoleMembers('HOST')
+}
+
 async function findActiveCommunityRoleMembers(roleCode: string) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
@@ -214,6 +221,10 @@ export async function isMeetingSupervisor(memberId: number) {
     return hasActiveCommunityRole(memberId, 'SUPERVISOR')
 }
 
+export async function isMeetingHost(memberId: number) {
+    return hasActiveCommunityRole(memberId, 'HOST')
+}
+
 async function hasActiveCommunityRole(memberId: number, roleCode: string) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
@@ -252,6 +263,7 @@ export async function createMeeting(dto: CreateMeetingDto) {
                     sector: { connect: { id: dto.sectorId } },
                     leader: { connect: { id: dto.leaderId } },
                     supervisor: { connect: { id: dto.supervisorId } },
+                    host: { connect: { id: dto.hostId } },
                     title: dto.title,
                     description: dto.description,
                     date: dateOf(dto.date),
@@ -303,6 +315,7 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     if (dto.sectorId !== undefined) data.sector = { connect: { id: dto.sectorId } }
     if (dto.leaderId !== undefined) data.leader = { connect: { id: dto.leaderId } }
     if (dto.supervisorId !== undefined) data.supervisor = { connect: { id: dto.supervisorId } }
+    if (dto.hostId !== undefined) data.host = { connect: { id: dto.hostId } }
     if (dto.coSupervisorIds !== undefined) {
         data.coSupervisors = {
             deleteMany: {},

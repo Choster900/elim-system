@@ -6,6 +6,7 @@ export interface TerritoryBaseDto {
     leaderId?: number | null
     leaderName: string | null
     description: string | null
+    address: string | null
     color: string
     polygon: TerritoryPolygonDto
     isActive: boolean

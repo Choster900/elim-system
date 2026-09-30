@@ -18,6 +18,7 @@ interface TerritoryApiEntity {
     name: string
     code: string
     description: string | null
+    address: string | null
     leaderId: number | null
     leaderName: string | null
     color: string
@@ -66,6 +67,7 @@ function mapEntity(entity: TerritoryApiEntity): TerritoryEntity {
         ...entity,
         id: String(entity.id),
         description: entity.description ?? '',
+        address: entity.address ?? '',
         leaderId: entity.leaderId,
         leaderName: entity.leaderName ?? '',
         polygon: normalizePolygon(entity.polygon),
@@ -121,6 +123,7 @@ function requestPayload(level: TerritoryLevel, input: TerritoryInput, parentId?:
                   name: input.name,
                   supervisorId: input.supervisorId,
                   description: input.description || null,
+                  address: input.address || null,
                   color: input.color,
                   polygon: input.polygon,
                   isActive: input.isActive,
@@ -133,6 +136,7 @@ function requestPayload(level: TerritoryLevel, input: TerritoryInput, parentId?:
                   leaderId: input.leaderId,
                   leaderName: input.leaderName || null,
                   description: input.description || null,
+                  address: input.address || null,
               }
 
     if (level === 'zona') payload.districtId = Number(parentId)
@@ -168,6 +172,7 @@ export async function updateTerritoryEntity(
                   name: fields.name,
                   supervisorId: fields.supervisorId,
                   description: fields.description || null,
+                  address: fields.address || null,
                   color: fields.color,
                   polygon: fields.polygon,
                   isActive: fields.isActive,
