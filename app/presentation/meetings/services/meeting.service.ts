@@ -12,12 +12,15 @@ interface HierarchySectorApiEntity {
     id: number
     name: string
     code: string
+    zoneId: number
     polygon: unknown
     supervisorId: number | null
     supervisorName: string | null
 }
 
 interface HierarchyApiResponse {
+    districts: Array<{ id: number; name: string }>
+    zones: Array<{ id: number; name: string; districtId: number }>
     sectors: HierarchySectorApiEntity[]
 }
 
@@ -111,6 +114,14 @@ export async function getMeetingSupervisors(
     return responseData(response.data, 'No fue posible cargar los supervisores de reunión')
 }
 
+export async function getMeetingHosts(
+    apiClient: AxiosInstance,
+    signal?: AbortSignal,
+): Promise<MemberOption[]> {
+    const response = await apiClient.get<ApiResponse<MemberOption[]>>('/meetings/hosts', { signal })
+    return responseData(response.data, 'No fue posible cargar los anfitriones de reunión')
+}
+
 export async function getSectors(
     apiClient: AxiosInstance,
     signal?: AbortSignal,
@@ -119,12 +130,22 @@ export async function getSectors(
         signal,
     })
     const data = responseData(response.data, 'No fue posible cargar los sectores')
-    return data.sectors.map((sector) => ({
-        id: sector.id,
-        name: sector.name,
-        code: sector.code,
-        polygon: normalizePolygon(sector.polygon),
-        supervisorId: sector.supervisorId,
-        supervisorName: sector.supervisorName,
-    }))
+    const districtNames = new Map(data.districts.map((district) => [district.id, district.name]))
+    const zones = new Map(data.zones.map((zone) => [zone.id, zone]))
+
+    return data.sectors.map((sector) => {
+        const zone = zones.get(sector.zoneId)
+        return {
+            id: sector.id,
+            name: sector.name,
+            code: sector.code,
+            zoneName: zone?.name ?? 'Zona sin asignar',
+            districtName: zone
+                ? (districtNames.get(zone.districtId) ?? 'Distrito sin asignar')
+                : 'Distrito sin asignar',
+            polygon: normalizePolygon(sector.polygon),
+            supervisorId: sector.supervisorId,
+            supervisorName: sector.supervisorName,
+        }
+    })
 }
