@@ -4,6 +4,7 @@ import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import {
     getMeetingLeaders,
+    getMeetingHosts,
     getMeetingSupervisors,
     getMeetingTypes,
     getSectors,
@@ -38,6 +39,17 @@ export function useMeetingSupervisorsQuery(enabled: MaybeRefOrGetter<boolean> = 
     return useQuery({
         queryKey: queryKeys.members.meetingSupervisors,
         queryFn: ({ signal }) => getMeetingSupervisors(apiClient, signal),
+        enabled,
+        staleTime: CATALOG_STALE_TIME_MS,
+    })
+}
+
+export function useMeetingHostsQuery(enabled: MaybeRefOrGetter<boolean> = true) {
+    const apiClient = useApiClient()
+
+    return useQuery({
+        queryKey: queryKeys.members.meetingHosts,
+        queryFn: ({ signal }) => getMeetingHosts(apiClient, signal),
         enabled,
         staleTime: CATALOG_STALE_TIME_MS,
     })
