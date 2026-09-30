@@ -27,6 +27,7 @@ import { useMapProvider } from '~/presentation/shared/composables/useMapProvider
 import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
 import {
     useMeetingLeadersQuery,
+    useMeetingHostsQuery,
     useMeetingSectorsQuery,
     useMeetingSupervisorsQuery,
     useMeetingTypesQuery,
@@ -77,6 +78,7 @@ const meetingsQuery = useMeetingsQuery()
 const meetingTypesQuery = useMeetingTypesQuery()
 const sectorsQuery = useMeetingSectorsQuery()
 const leadersQuery = useMeetingLeadersQuery()
+const hostsQuery = useMeetingHostsQuery()
 const supervisorsQuery = useMeetingSupervisorsQuery()
 const createMeetingMutation = useCreateMeetingMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
@@ -84,6 +86,7 @@ const updateMeetingMutation = useUpdateMeetingMutation()
 const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
+const hosts = computed(() => hostsQuery.data.value ?? [])
 const supervisors = computed(() => supervisorsQuery.data.value ?? [])
 const existingMeetings = computed(() => meetingsQuery.data.value ?? [])
 const isLoading = computed(
@@ -91,6 +94,7 @@ const isLoading = computed(
         meetingTypesQuery.isPending.value ||
         sectorsQuery.isPending.value ||
         leadersQuery.isPending.value ||
+        hostsQuery.isPending.value ||
         supervisorsQuery.isPending.value ||
         meetingsQuery.isPending.value ||
         (isEditing.value && meetingQuery.isPending.value),
@@ -100,6 +104,7 @@ const loadError = computed(
         meetingTypesQuery.error.value ??
         sectorsQuery.error.value ??
         leadersQuery.error.value ??
+        hostsQuery.error.value ??
         supervisorsQuery.error.value ??
         meetingQuery.error.value,
 )
@@ -111,6 +116,7 @@ if (import.meta.server) {
             meetingTypesQuery.suspense(),
             sectorsQuery.suspense(),
             leadersQuery.suspense(),
+            hostsQuery.suspense(),
             supervisorsQuery.suspense(),
             meetingsQuery.suspense(),
             ...(isEditing.value ? [meetingQuery.suspense()] : []),
@@ -125,6 +131,7 @@ interface MeetingForm {
     sectorId: number
     leaderId: number
     supervisorId: number
+    hostId: number
     coSupervisorIds: number[]
     date: string
     recurrenceEndDate: string | null
@@ -151,6 +158,7 @@ function emptyForm(): MeetingForm {
         sectorId: 0,
         leaderId: 0,
         supervisorId: 0,
+        hostId: 0,
         coSupervisorIds: [],
         date: new Date().toISOString().slice(0, 10),
         recurrenceEndDate: null,
@@ -396,6 +404,7 @@ watch(
         meetingTypes,
         sectors,
         leaders,
+        hosts,
         supervisors,
     ],
     async () => {
@@ -412,6 +421,7 @@ watch(
                 sectorId: existing.sectorId,
                 leaderId: existing.leaderId,
                 supervisorId: existing.supervisorId,
+                hostId: existing.hostId ?? 0,
                 coSupervisorIds: [...existing.coSupervisorIds],
                 date: existing.date,
                 recurrenceEndDate: existing.recurrenceEndDate,
@@ -436,6 +446,7 @@ watch(
             form.typeId = meetingTypes.value[0]?.id ?? 0
             form.sectorId = sectors.value[0]?.id ?? 0
             form.leaderId = leaders.value[0]?.id ?? 0
+            form.hostId = hosts.value[0]?.id ?? 0
             form.supervisorId = sectors.value[0]?.supervisorId ?? 0
         }
 
@@ -485,6 +496,7 @@ const formErrors = reactive<Record<string, string | null>>({
     sectorId: null,
     leaderId: null,
     supervisorId: null,
+    hostId: null,
 })
 
 function clearFormErrors() {
@@ -532,6 +544,10 @@ function validateForm() {
     }
     if (!form.supervisorId) {
         formErrors.supervisorId = 'El sector seleccionado no tiene un supervisor asignado'
+        ok = false
+    }
+    if (!form.hostId) {
+        formErrors.hostId = 'Asigna un anfitrión con rol Anfitrión'
         ok = false
     }
     return ok
@@ -626,6 +642,7 @@ function buildInput(): MeetingInput {
         sectorId: form.sectorId,
         leaderId: form.leaderId,
         supervisorId: form.supervisorId,
+        hostId: form.hostId,
         coSupervisorIds: [...form.coSupervisorIds],
         title: form.title.trim(),
         description: form.description.trim() || null,
@@ -712,7 +729,22 @@ function cancel() {
 
 const selectedType = computed(() => meetingTypes.value.find((t) => t.id === form.typeId))
 const selectedSector = computed(() => sectors.value.find((s) => s.id === form.sectorId))
+const sectorOptions = computed(() =>
+    sectors.value.map((sector) => ({
+        ...sector,
+        displayName: `${sector.name} · ${sector.zoneName} · ${sector.districtName}`,
+    })),
+)
 const selectedLeader = computed(() => leaders.value.find((member) => member.id === form.leaderId))
+const memberOptions = (members: typeof leaders.value) =>
+    members.map((member) => ({
+        ...member,
+        displayName: member.documentNumber
+            ? `${member.fullName} · ${member.documentNumber}`
+            : member.fullName,
+    }))
+const leaderOptions = computed(() => memberOptions(leaders.value))
+const hostOptions = computed(() => memberOptions(hosts.value))
 const selectedSupervisor = computed(() => ({
     fullName: selectedSector.value?.supervisorName ?? '',
 }))
@@ -727,7 +759,7 @@ const recurrenceSummary = computed(() =>
     ),
 )
 const coSupervisorOptions = computed(() =>
-    supervisors.value.filter((member) => member.id !== form.supervisorId),
+    memberOptions(supervisors.value.filter((member) => member.id !== form.supervisorId)),
 )
 
 const inputClass =
@@ -1136,16 +1168,18 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                         </div>
 
-                        <div class="grid gap-4 md:grid-cols-3">
+                        <div class="grid gap-4 md:grid-cols-2">
                             <div>
                                 <label :class="labelClass">Sector *</label>
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.sectorId"
-                                        :options="sectors"
+                                        :options="sectorOptions"
                                         option-value="id"
-                                        option-label="name"
+                                        option-label="displayName"
                                         option-description="code"
+                                        :search-fields="['name', 'zoneName', 'districtName']"
+                                        search-placeholder="Buscar por sector, zona o distrito..."
                                         :invalid="!!formErrors.sectorId"
                                     />
                                 </div>
@@ -1154,27 +1188,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 </p>
                             </div>
                             <div>
-                                <label :class="labelClass">Líder *</label>
-                                <div class="mt-1">
-                                    <UiSearchSelect
-                                        v-model="form.leaderId"
-                                        :options="leaders"
-                                        option-value="id"
-                                        option-label="fullName"
-                                        option-description="documentNumber"
-                                        :search-fields="['code', 'email', 'phone']"
-                                        :invalid="!!formErrors.leaderId"
-                                    />
-                                </div>
-                                <p v-if="formErrors.leaderId" class="mt-1 text-xs text-destructive">
-                                    {{ formErrors.leaderId }}
-                                </p>
-                            </div>
-                            <div>
                                 <label :class="labelClass">Supervisor *</label>
                                 <div class="mt-1">
                                     <div
-                                        class="flex min-h-11 items-center rounded border bg-surface-container px-3 text-sm"
+                                        aria-disabled="true"
+                                        title="Se asigna automáticamente desde el sector"
+                                        class="flex min-h-11 cursor-not-allowed items-center rounded border bg-surface-container-high px-3 text-sm"
                                         :class="
                                             formErrors.supervisorId
                                                 ? 'border-destructive text-destructive'
@@ -1198,15 +1217,49 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 </p>
                             </div>
                             <div>
+                                <label :class="labelClass">Líder *</label>
+                                <div class="mt-1">
+                                    <UiSearchSelect
+                                        v-model="form.leaderId"
+                                        :options="leaderOptions"
+                                        option-value="id"
+                                        option-label="displayName"
+                                        :search-fields="['code', 'email', 'phone']"
+                                        search-placeholder="Buscar por nombre o DUI..."
+                                        :invalid="!!formErrors.leaderId"
+                                    />
+                                </div>
+                                <p v-if="formErrors.leaderId" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.leaderId }}
+                                </p>
+                            </div>
+                            <div>
+                                <label :class="labelClass">Anfitrión *</label>
+                                <div class="mt-1">
+                                    <UiSearchSelect
+                                        v-model="form.hostId"
+                                        :options="hostOptions"
+                                        option-value="id"
+                                        option-label="displayName"
+                                        :search-fields="['code', 'email', 'phone']"
+                                        search-placeholder="Buscar por nombre o DUI..."
+                                        :invalid="!!formErrors.hostId"
+                                    />
+                                </div>
+                                <p v-if="formErrors.hostId" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.hostId }}
+                                </p>
+                            </div>
+                            <div>
                                 <label :class="labelClass">Co-supervisores</label>
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.coSupervisorIds"
                                         :options="coSupervisorOptions"
                                         option-value="id"
-                                        option-label="fullName"
-                                        option-description="documentNumber"
+                                        option-label="displayName"
                                         :search-fields="['code', 'email', 'phone']"
+                                        search-placeholder="Buscar por nombre o DUI..."
                                         multiple
                                         clearable
                                     />
