@@ -22,6 +22,7 @@ const MEETING_HEADERS = [
     'Tipo *',
     'Sector *',
     'Líder *',
+    'Anfitrión *',
     'Co-supervisores',
     'Fecha de inicio *',
     'Hora de inicio *',
@@ -50,6 +51,7 @@ export interface MeetingImportCatalogs {
     meetingTypes: MeetingTypeOption[]
     sectors: SectorOption[]
     leaders: MemberOption[]
+    hosts: MemberOption[]
     supervisors: MemberOption[]
 }
 
@@ -194,10 +196,10 @@ function instructionsSheet() {
             sectionCell('Ejemplo'),
         ],
         [
-            'Tipo / Sector / Líder',
+            'Tipo / Sector / Líder / Anfitrión',
             'Sí',
-            'Usa el código exacto de su pestaña. El supervisor se hereda automáticamente del sector y no se escribe en el archivo.',
-            'CULTO, SEC-001, MIE-0012',
+            'Usa el código exacto de su pestaña. El anfitrión debe tener el rol Anfitrión. El supervisor se hereda automáticamente del sector y no se escribe en el archivo.',
+            'CULTO, SEC-001, MIE-0012, MIE-0018',
         ],
         [
             'Co-supervisores',
@@ -754,6 +756,14 @@ export async function parseMeetingsWorkbook(
             (item) => item.code,
             (item) => item.fullName,
         )
+        const host = resolveCatalogItem(
+            value(row, 'Anfitrión *'),
+            catalogs.hosts,
+            'Anfitrión',
+            issues,
+            (item) => item.code,
+            (item) => item.fullName,
+        )
         if (sector && !sector.supervisorId) {
             issues.push('Sector: debe tener un supervisor asignado antes de crear reuniones.')
         }
@@ -812,6 +822,7 @@ export async function parseMeetingsWorkbook(
             sectorId: sector?.id ?? 0,
             leaderId: leader?.id ?? 0,
             supervisorId: sector?.supervisorId ?? 0,
+            hostId: host?.id ?? 0,
             coSupervisorIds: resolveCoSupervisors(
                 value(row, 'Co-supervisores'),
                 catalogs.supervisors,
