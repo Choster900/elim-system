@@ -407,9 +407,9 @@ function save() {
 const inputClass =
     'w-full rounded-lg border border-outline-variant bg-surface px-3 py-2.5 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:border-primary'
 const codePrefix = computed(() => {
-    if (props.level === 'distrito') return 'DIS-###'
-    if (props.level === 'zona') return 'ZON-###'
-    return 'SEC-###'
+    if (props.level === 'distrito') return 'D#'
+    if (props.level === 'zona') return 'Z#'
+    return 'S#'
 })
 const formTitle = computed(() => {
     if (props.mode === 'edit') return `Editar ${props.levelLabel}`
