@@ -16,6 +16,7 @@ const DISTRICT_HEADERS = [
     'Nombre *',
     'Pastor',
     'Descripción',
+    'Dirección general',
     'Color',
     'Estado',
     'Polígono',
@@ -26,6 +27,7 @@ const ZONE_HEADERS = [
     'Nombre *',
     'Coordinador',
     'Descripción',
+    'Dirección general',
     'Color',
     'Estado',
     'Polígono',
@@ -36,6 +38,7 @@ const SECTOR_HEADERS = [
     'Nombre *',
     'Supervisor',
     'Descripción',
+    'Dirección general',
     'Color',
     'Estado',
     'Polígono',
@@ -370,6 +373,7 @@ function hierarchyRows(hierarchy: TerritoryHierarchy, roleCatalogs: TerritoryRol
             district.name,
             district.leaderId ? (leaderById.get(district.leaderId)?.code ?? '') : '',
             district.description,
+            district.address,
             district.color,
             district.isActive ? 'Activo' : 'Inactivo',
             formatPolygon(district.polygon),
@@ -380,6 +384,7 @@ function hierarchyRows(hierarchy: TerritoryHierarchy, roleCatalogs: TerritoryRol
             zone.name,
             zone.leaderId ? (coordinatorById.get(zone.leaderId)?.code ?? '') : '',
             zone.description,
+            zone.address,
             zone.color,
             zone.isActive ? 'Activo' : 'Inactivo',
             formatPolygon(zone.polygon),
@@ -390,6 +395,7 @@ function hierarchyRows(hierarchy: TerritoryHierarchy, roleCatalogs: TerritoryRol
             sector.name,
             sector.supervisorId ? (supervisorById.get(sector.supervisorId)?.code ?? '') : '',
             sector.description,
+            sector.address,
             sector.color,
             sector.isActive ? 'Activo' : 'Inactivo',
             formatPolygon(sector.polygon),
@@ -546,6 +552,7 @@ async function readTerritorySheet(
         const reference = text(value(row, 'Referencia *'))
         const name = text(value(row, 'Nombre *'))
         const description = text(value(row, 'Descripción'))
+        const address = text(value(row, 'Dirección general'))
         const parentReference =
             level === 'zona'
                 ? text(value(row, 'Distrito *'))
@@ -556,6 +563,7 @@ async function readTerritorySheet(
         validateText(reference, 'Referencia', 100, issues, 1)
         validateText(name, 'Nombre', 100, issues, 2)
         validateText(description, 'Descripción', 300, issues)
+        validateText(address, 'Dirección general', 300, issues)
         if (level !== 'distrito' && !parentReference) {
             issues.push(`${level === 'zona' ? 'Distrito' : 'Zona'}: es obligatorio.`)
         }
@@ -597,6 +605,7 @@ async function readTerritorySheet(
                     leaderId: level === 'sector' ? undefined : (assignedMember?.id ?? null),
                     leaderName: level === 'sector' ? '' : (assignedMember?.fullName ?? ''),
                     description,
+                    address,
                     color: parseColor(value(row, 'Color'), level, issues),
                     polygon: parsePolygon(value(row, 'Polígono'), issues),
                     isActive: parseStatus(value(row, 'Estado'), issues),
