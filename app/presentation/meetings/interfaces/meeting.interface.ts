@@ -93,6 +93,8 @@ export interface SectorOption {
     id: number
     name: string
     code: string
+    zoneName: string
+    districtName: string
     polygon: [number, number][]
     supervisorId: number | null
     supervisorName: string | null
