@@ -9,6 +9,7 @@ export interface MeetingRecord {
     sectorId: number
     leaderId: number
     supervisorId: number
+    hostId: number | null
     coSupervisorIds: number[]
     title: string
     description: string | null
@@ -37,6 +38,7 @@ export interface MeetingRecord {
     districtName: string
     leaderName: string | null
     supervisorName: string | null
+    hostName: string | null
     createdAt: string
     updatedAt: string
 }
@@ -46,6 +48,7 @@ export interface MeetingInput {
     sectorId: number
     leaderId: number
     supervisorId: number
+    hostId: number
     coSupervisorIds: number[]
     title: string
     description: string | null
