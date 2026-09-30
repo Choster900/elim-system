@@ -153,6 +153,7 @@ model Member {
   supervisedSectors     TerritorySector[]     @relation("SectorSupervisor")
   ledMeetings           Meeting[]             @relation("MeetingLeader")
   supervisedMeetings    Meeting[]             @relation("MeetingSupervisor")
+  hostedMeetings        Meeting[]             @relation("MeetingHost")
   ledOccurrences        MeetingOccurrence[]   @relation("OccurrenceLeader")
   coSupervisedMeetings  MeetingCoSupervisor[]
 
@@ -471,6 +472,8 @@ model District {
   code        String   @unique(map: "uk_dis_codigo") @map("dis_codigo") @db.VarChar(100)
   name        String   @unique(map: "uk_dis_nombre") @map("dis_nombre") @db.VarChar(100)
   description String?  @map("dis_descripcion") @db.VarChar(300)
+  /// Dirección general o referencia del distrito.
+  address     String?  @map("dis_direccion") @db.VarChar(300)
   leaderName  String?  @map("dis_nombre_lider") @db.VarChar(100)
   leaderId    Int?     @map("dis_id_mie") // TODO: no deberia de ir aqui
   color       String   @map("dis_color") @db.VarChar(100)
@@ -492,6 +495,8 @@ model Zone {
   code        String            @unique(map: "uk_zon_codigo") @map("zon_codigo") @db.VarChar(100)
   name        String            @map("zon_nombre") @db.VarChar(100)
   description String?           @map("zon_descripcion") @db.VarChar(300)
+  /// Dirección general o referencia de la zona.
+  address     String?           @map("zon_direccion") @db.VarChar(300)
   leaderName  String?           @map("zon_nombre_lider") @db.VarChar(100)
   leaderId    Int?              @map("zon_id_mie") // TODO: no deberia de ir aqui
   color       String            @map("zon_color") @db.VarChar(100)
@@ -516,6 +521,8 @@ model TerritorySector {
   code           String              @unique(map: "uk_sec_codigo") @map("sec_codigo") @db.VarChar(100)
   name           String              @map("sec_nombre") @db.VarChar(100)
   description    String?             @map("sec_descripcion") @db.VarChar(300)
+  /// Dirección general o referencia del sector.
+  address        String?             @map("sec_direccion") @db.VarChar(300)
   /// Nombre histórico conservado junto con la relación al catálogo de supervisores.
   supervisorName String?             @map("sec_nombre_supervisor") @db.VarChar(100)
   /// Miembro con rol comunitario SUPERVISOR responsable de las reuniones del sector.
@@ -563,6 +570,8 @@ model Meeting {
   /// Miembro con rol comunitario LEADER responsable de conducir la reunión.
   leaderId          Int                   @map("reu_id_mie_lider")
   supervisorId      Int                   @map("reu_id_mie_supervisor")
+  /// Miembro con rol comunitario HOST que recibe la reunión.
+  hostId            Int?                  @map("reu_id_mie_anfitrion")
   title             String                @map("reu_titulo") @db.VarChar(100)
   description       String?               @map("reu_descripcion") @db.VarChar(300)
   /// Fecha inicial de la reunión y ancla del día para su regla de recurrencia.
@@ -593,6 +602,7 @@ model Meeting {
   sector            TerritorySector       @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reu_id_sec")
   leader            Member                @relation("MeetingLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_lider")
   supervisor        Member                @relation("MeetingSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_supervisor")
+  host              Member?               @relation("MeetingHost", fields: [hostId], references: [id], onDelete: SetNull, map: "fk_reu_id_mie_anfitrion")
   coSupervisors     MeetingCoSupervisor[]
   occurrences       MeetingOccurrence[]
 
@@ -600,6 +610,7 @@ model Meeting {
   @@index([sectorId], map: "ix_reu_sector")
   @@index([leaderId], map: "ix_reu_lider")
   @@index([supervisorId], map: "ix_reu_supervisor")
+  @@index([hostId], map: "ix_reu_anfitrion")
   @@index([date], map: "ix_reu_fecha")
   @@index([isActive], map: "ix_reu_activa")
   @@map("reu_reunion")
