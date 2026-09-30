@@ -17,7 +17,12 @@
     .system-hero-overlay {
         background:
             linear-gradient(180deg, rgb(12 15 15 / 34%) 0%, rgb(12 15 15 / 92%) 100%),
-            linear-gradient(90deg, rgb(12 15 15 / 60%) 0%, rgb(12 15 15 / 8%) 52%, rgb(12 15 15 / 62%) 100%);
+            linear-gradient(
+                90deg,
+                rgb(12 15 15 / 60%) 0%,
+                rgb(12 15 15 / 8%) 52%,
+                rgb(12 15 15 / 62%) 100%
+            );
     }
 
     .system-glass-panel {
