@@ -56,6 +56,7 @@ const form = reactive({
     leaderId: null as number | null,
     leaderName: '',
     description: '',
+    address: '',
     color: '',
     isActive: true,
     supervisorId: null as number | null,
@@ -97,6 +98,7 @@ function resetForm() {
         form.leaderId = props.entity.leaderId ?? null
         form.leaderName = props.entity.leaderName
         form.description = props.entity.description
+        form.address = props.entity.address
         form.color = props.entity.color
         form.isActive = props.entity.isActive
         form.supervisorId = props.entity.supervisorId
@@ -107,6 +109,7 @@ function resetForm() {
         form.leaderId = null
         form.leaderName = ''
         form.description = ''
+        form.address = ''
         form.color = props.palette[0] ?? '#e9c176'
         form.isActive = true
         form.supervisorId = null
@@ -397,6 +400,7 @@ function save() {
         leaderName: form.leaderName.trim(),
         leaderId,
         description: form.description.trim(),
+        address: form.address.trim(),
         color: form.color,
         polygon,
         isActive: form.isActive,
@@ -608,6 +612,17 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                                 Puedes asignarlo después cuando el catálogo de supervisores esté
                                 definido.
                             </p>
+                        </div>
+
+                        <div>
+                            <label :class="labelClass" for="tf-address">Dirección general</label>
+                            <textarea
+                                id="tf-address"
+                                v-model="form.address"
+                                rows="3"
+                                placeholder="Colonia, calle, referencia o ubicación general…"
+                                :class="[inputClass, 'resize-none leading-relaxed']"
+                            />
                         </div>
 
                         <div>
