@@ -3,7 +3,7 @@ export type MonthlyMode = 'dia_fijo' | 'ordinal'
 
 export interface MeetingRecord {
     id: number
-    /// Autogenerado por el servidor: SECNNN-REUNNNN-AAAAMMDD.
+    /// Autogenerado por el servidor: D#Z#S#X#.
     code: string
     typeId: number
     sectorId: number
@@ -72,7 +72,7 @@ export interface MeetingInput {
 
 export interface MeetingTypeOption {
     id: number
-    code: string
+    codeSegment: string
     name: string
     description: string | null
     color: string
@@ -93,6 +93,8 @@ export interface SectorOption {
     id: number
     name: string
     code: string
+    zoneCode: string
+    districtCode: string
     zoneName: string
     districtName: string
     polygon: [number, number][]

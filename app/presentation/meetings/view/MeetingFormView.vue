@@ -443,7 +443,7 @@ watch(
                         : null,
             })
         } else {
-            form.typeId = meetingTypes.value[0]?.id ?? 0
+            form.typeId = meetingTypes.value.find((type) => type.isActive)?.id ?? 0
             form.sectorId = sectors.value[0]?.id ?? 0
             form.leaderId = leaders.value[0]?.id ?? 0
             form.hostId = hosts.value[0]?.id ?? 0
@@ -489,6 +489,7 @@ onBeforeUnmount(() => {
 
 const formErrors = reactive<Record<string, string | null>>({
     title: null,
+    typeId: null,
     date: null,
     recurrenceEndDate: null,
     startTime: null,
@@ -508,6 +509,10 @@ function validateForm() {
     let ok = true
     if (!form.title.trim()) {
         formErrors.title = 'El título es obligatorio'
+        ok = false
+    }
+    if (!form.typeId) {
+        formErrors.typeId = 'Selecciona un tipo de reunión activo'
         ok = false
     }
     if (!form.date) {
@@ -728,7 +733,14 @@ function cancel() {
 }
 
 const selectedType = computed(() => meetingTypes.value.find((t) => t.id === form.typeId))
+const availableMeetingTypes = computed(() =>
+    meetingTypes.value.filter((type) => type.isActive || type.id === form.typeId),
+)
 const selectedSector = computed(() => sectors.value.find((s) => s.id === form.sectorId))
+const nextCodePreview = computed(() => {
+    if (!selectedSector.value || !selectedType.value) return null
+    return `${selectedSector.value.districtCode}${selectedSector.value.zoneCode}${selectedSector.value.code}${selectedType.value.codeSegment}#`
+})
 const sectorOptions = computed(() =>
     sectors.value.map((sector) => ({
         ...sector,
@@ -895,15 +907,27 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 </p>
                             </div>
                             <div>
-                                <label :class="labelClass">Tipo</label>
+                                <label :class="labelClass">Tipo *</label>
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.typeId"
-                                        :options="meetingTypes"
+                                        :options="availableMeetingTypes"
                                         option-value="id"
                                         option-label="name"
                                     />
                                 </div>
+                                <p v-if="formErrors.typeId" class="mt-1 text-xs text-destructive">
+                                    {{ formErrors.typeId }}
+                                </p>
+                                <p
+                                    v-if="nextCodePreview"
+                                    class="mt-1 text-xs text-on-surface-variant"
+                                >
+                                    Código al crear:
+                                    <span class="font-mono font-semibold">{{
+                                        nextCodePreview
+                                    }}</span>
+                                </p>
                             </div>
                         </div>
 

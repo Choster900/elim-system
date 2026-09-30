@@ -12,6 +12,16 @@ export default [
         },
     },
     {
+        name: 'meeting-types',
+        path: '/catalogos/tipos-reunion',
+        component: () => import('~/presentation/meetings/view/MeetingTypesView.vue'),
+        meta: {
+            layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.meetingTypesManage,
+        },
+    },
+    {
         name: 'meeting-create',
         path: '/catalogos/reuniones/nueva',
         component: () => import('~/presentation/meetings/view/MeetingFormView.vue'),

@@ -128,6 +128,22 @@ export const PERMISSION_SEEDS = [
         description: 'Crear, modificar y cancelar reuniones.',
     },
     {
+        name: 'Consultar tipos de reunión',
+        code: 'meeting-types.view',
+        module: 'Catálogos',
+        resource: 'meeting-types',
+        action: 'view',
+        description: 'Consultar los tipos disponibles para clasificar reuniones.',
+    },
+    {
+        name: 'Administrar tipos de reunión',
+        code: 'meeting-types.manage',
+        module: 'Catálogos',
+        resource: 'meeting-types',
+        action: 'manage',
+        description: 'Crear, editar, activar o eliminar tipos de reunión.',
+    },
+    {
         name: 'Consultar territorios',
         code: 'territories.view',
         module: 'Catálogos',

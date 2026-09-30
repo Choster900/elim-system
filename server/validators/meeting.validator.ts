@@ -69,20 +69,18 @@ export const createMeetingSchema = Joi.object<CreateMeetingDto>(requiredBaseFiel
 export const updateMeetingSchema = Joi.object<UpdateMeetingDto>(baseFields).min(1)
 
 const meetingTypeBaseFields = {
-    code: Joi.string().trim().uppercase().min(1).max(100),
-    name: Joi.string().trim().min(2).max(100),
-    description: Joi.string().trim().max(300).allow('', null),
-    color: Joi.string()
+    codeSegment: Joi.string()
         .trim()
-        .pattern(/^#[0-9a-f]{6}$/i),
+        .uppercase()
+        .length(1)
+        .pattern(/^[A-Z]$/),
+    name: Joi.string().trim().min(2).max(100),
     isActive: Joi.boolean(),
 }
 
 export const createMeetingTypeSchema = Joi.object<CreateMeetingTypeDto>({
-    code: meetingTypeBaseFields.code.required(),
+    codeSegment: meetingTypeBaseFields.codeSegment.required(),
     name: meetingTypeBaseFields.name.required(),
-    description: meetingTypeBaseFields.description.default(null),
-    color: meetingTypeBaseFields.color.required(),
     isActive: meetingTypeBaseFields.isActive.default(true),
 })
 

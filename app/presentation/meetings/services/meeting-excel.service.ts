@@ -309,10 +309,10 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
         catalogSheet(
             'Tipos',
             'Tipos de reunión',
-            'Copia el código en la columna Tipo de la pestaña Reuniones.',
-            ['Código', 'Nombre', 'Estado', 'Color'],
+            'Copia el segmento en la columna Tipo de la pestaña Reuniones.',
+            ['Segmento', 'Nombre', 'Estado', 'Color'],
             catalogs.meetingTypes.map((type) => [
-                type.code,
+                type.codeSegment,
                 type.name,
                 type.isActive ? 'Activo' : 'Inactivo',
                 type.color,

@@ -547,7 +547,8 @@ model TerritorySector {
 
 model MeetingType {
   id          Int       @id(map: "pk_tir_tipo_reunion") @default(autoincrement()) @map("tir_id")
-  code        String    @unique(map: "uk_tir_codigo") @map("tir_codigo") @db.VarChar(100)
+  /// Segmento único de una letra que se concatena en el código de la reunión.
+  codeSegment String    @unique(map: "uk_tir_codigo") @map("tir_codigo") @db.Char(1)
   name        String    @unique(map: "uk_tir_nombre") @map("tir_nombre") @db.VarChar(100)
   description String?   @map("tir_descripcion") @db.VarChar(300)
   color       String    @map("tir_color") @db.VarChar(100)
@@ -562,8 +563,8 @@ model MeetingType {
 
 model Meeting {
   id                Int                   @id(map: "pk_reu_reunion") @default(autoincrement()) @map("reu_id")
-  /// Código autogenerado con el formato SECNNN-REUNNNN-AAAAMMDD; se recalcula si
-  /// la reunión cambia de sector o de fecha de inicio.
+  /// Código autogenerado: distrito + zona + sector + segmento de tipo + consecutivo.
+  /// Solo se recalcula al cambiar el sector o el tipo de reunión.
   code              String                @unique(map: "uk_reu_codigo") @map("reu_codigo") @db.VarChar(100)
   typeId            Int                   @map("reu_id_tir")
   sectorId          Int                   @map("reu_id_sec")

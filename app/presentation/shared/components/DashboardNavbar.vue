@@ -131,6 +131,11 @@ const navItems: DashboardMenuItem[] = [
                 requiredPermission: routePermissionCodes.meetingsView,
             },
             {
+                label: 'Tipos de reunión',
+                href: '/catalogos/tipos-reunion',
+                requiredPermission: routePermissionCodes.meetingTypesManage,
+            },
+            {
                 label: 'Distritos',
                 href: '/catalogos/distritos',
                 requiredPermission: routePermissionCodes.territoriesView,

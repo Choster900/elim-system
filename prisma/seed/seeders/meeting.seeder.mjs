@@ -4,43 +4,43 @@
 
 export const MEETING_TYPE_SEEDS = [
     {
-        code: 'TIP-SERVICIO',
+        codeSegment: 'S',
         name: 'Servicio Dominical',
         color: '#e9c176',
         description: 'Reunión central de adoración y predicación.',
     },
     {
-        code: 'TIP-CELULA',
+        codeSegment: 'C',
         name: 'Célula Familiar',
         color: '#9bc1bc',
         description: 'Grupo pequeño en hogares.',
     },
     {
-        code: 'TIP-LIDERAZGO',
+        codeSegment: 'L',
         name: 'Reunión de Liderazgo',
         color: '#d39a9a',
         description: 'Coordinación y planificación de líderes.',
     },
     {
-        code: 'TIP-CAPACITACION',
+        codeSegment: 'A',
         name: 'Capacitación',
         color: '#a3b18a',
         description: 'Formación y talleres para servidores.',
     },
     {
-        code: 'TIP-VIGILIA',
+        codeSegment: 'V',
         name: 'Vigilia de Oración',
         color: '#b4a7d6',
         description: 'Noche de oración e intercesión.',
     },
     {
-        code: 'TIP-ESTUDIO',
+        codeSegment: 'E',
         name: 'Estudio Bíblico',
         color: '#f4a261',
         description: 'Estudio expositivo de la Palabra.',
     },
     {
-        code: 'TIP-ENSAYO',
+        codeSegment: 'N',
         name: 'Ensayo de Adoración',
         color: '#8ab0d9',
         description: 'Preparación del equipo de alabanza.',
@@ -52,7 +52,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Servicio Dominical de Adoración',
         description: 'Encuentro central de la semana. Adoración y exposición de la Palabra.',
-        typeCode: 'TIP-SERVICIO',
+        typeCode: 'S',
         sectorCode: 'SEC-004',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0002'],
@@ -69,7 +69,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Célula del Buen Pastor',
         description: 'Grupo pequeño de familias del sector norte.',
-        typeCode: 'TIP-CELULA',
+        typeCode: 'C',
         sectorCode: 'SEC-001',
         supervisorCode: 'MIE-0002',
         coSupervisorCodes: [],
@@ -86,7 +86,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Reunión de Líderes de Sector',
         description: 'Revisión mensual del avance ministerial por sector.',
-        typeCode: 'TIP-LIDERAZGO',
+        typeCode: 'L',
         sectorCode: 'SEC-004',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0001'],
@@ -103,7 +103,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Capacitación de Voluntarios',
         description: 'Inducción para nuevos servidores en el área de hospitalidad.',
-        typeCode: 'TIP-CAPACITACION',
+        typeCode: 'A',
         sectorCode: 'SEC-005',
         supervisorCode: 'MIE-0008',
         coSupervisorCodes: [],
@@ -120,7 +120,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Estudio Bíblico de Jueves',
         description: 'Recorrido por el libro de Hechos.',
-        typeCode: 'TIP-ESTUDIO',
+        typeCode: 'E',
         sectorCode: 'SEC-003',
         supervisorCode: 'MIE-0007',
         coSupervisorCodes: [],
@@ -137,7 +137,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Servicio de Sanidad y Liberación',
         description: 'Servicio especial de oración por enfermos.',
-        typeCode: 'TIP-SERVICIO',
+        typeCode: 'S',
         sectorCode: 'SEC-005',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0005'],
@@ -154,7 +154,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Servicio Dominical (próximo)',
         description: 'Servicio dominical de la próxima semana.',
-        typeCode: 'TIP-SERVICIO',
+        typeCode: 'S',
         sectorCode: 'SEC-004',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0002'],
@@ -171,7 +171,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Vigilia de Inicio de Mes',
         description: 'Noche de oración intercesora abierta a toda la congregación.',
-        typeCode: 'TIP-VIGILIA',
+        typeCode: 'V',
         sectorCode: 'SEC-004',
         supervisorCode: 'MIE-0005',
         coSupervisorCodes: ['MIE-0007'],
@@ -188,7 +188,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Ensayo del Equipo de Alabanza',
         description: 'Preparación de repertorio para el servicio dominical.',
-        typeCode: 'TIP-ENSAYO',
+        typeCode: 'N',
         sectorCode: 'SEC-004',
         supervisorCode: 'MIE-0002',
         coSupervisorCodes: [],
@@ -205,7 +205,7 @@ export const MEETING_SEEDS = [
     {
         title: 'Célula de Jóvenes "Renuevo"',
         description: 'Encuentro semanal de jóvenes adultos.',
-        typeCode: 'TIP-CELULA',
+        typeCode: 'C',
         sectorCode: 'SEC-007',
         supervisorCode: 'MIE-0007',
         coSupervisorCodes: ['MIE-0014'],
@@ -234,21 +234,21 @@ export async function seedMeetingTypes(prisma) {
     const types = await prisma.$transaction(
         MEETING_TYPE_SEEDS.map((seed) => {
             const data = {
-                code: seed.code,
+                codeSegment: seed.codeSegment,
                 name: seed.name,
                 description: seed.description ?? null,
                 color: seed.color,
                 isActive: true,
             }
             return prisma.meetingType.upsert({
-                where: { code: seed.code },
+                where: { codeSegment: seed.codeSegment },
                 create: data,
                 update: data,
             })
         }),
     )
 
-    return new Map(types.map((type) => [type.code, type]))
+    return new Map(types.map((type) => [type.codeSegment, type]))
 }
 
 // Devuelve un Map<title, meeting>. Idempotente: usa el título como clave natural
@@ -307,10 +307,29 @@ export async function seedMeetings(prisma, types, sectors, members) {
             })
         }
 
-        // Mismo formato que server/utils/code/entity-code.util.ts.
-        const code = `${sector.code.toUpperCase().replace(/[^A-Z0-9]/g, '')}-REU${String(
-            meeting.id,
-        ).padStart(4, '0')}-${seed.date.replace(/-/g, '')}`
+        const sectorWithHierarchy = await prisma.territorySector.findUniqueOrThrow({
+            where: { id: sector.id },
+            include: { zone: { include: { district: true } } },
+        })
+        const compact = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        const prefix = [
+            sectorWithHierarchy.zone.district.code,
+            sectorWithHierarchy.zone.code,
+            sectorWithHierarchy.code,
+            type.codeSegment,
+        ]
+            .map(compact)
+            .join('')
+        const codes = await prisma.meeting.findMany({
+            where: { sectorId: sector.id, typeId: type.id, id: { not: meeting.id } },
+            select: { code: true },
+        })
+        const pattern = new RegExp(`^${prefix}(\\d+)$`)
+        const maximum = codes.reduce((current, item) => {
+            const match = pattern.exec(item.code)
+            return match ? Math.max(current, Number(match[1])) : current
+        }, 0)
+        const code = `${prefix}${maximum + 1}`
 
         if (meeting.code !== code) {
             meeting = await prisma.meeting.update({ where: { id: meeting.id }, data: { code } })

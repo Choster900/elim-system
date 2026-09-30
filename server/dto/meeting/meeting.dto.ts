@@ -35,10 +35,8 @@ export interface CreateMeetingDto {
 export type UpdateMeetingDto = Partial<CreateMeetingDto>
 
 export interface CreateMeetingTypeDto {
-    code: string
+    codeSegment: string
     name: string
-    description: string | null
-    color: string
     isActive: boolean
 }
 

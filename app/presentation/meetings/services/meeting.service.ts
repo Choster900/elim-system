@@ -19,8 +19,8 @@ interface HierarchySectorApiEntity {
 }
 
 interface HierarchyApiResponse {
-    districts: Array<{ id: number; name: string }>
-    zones: Array<{ id: number; name: string; districtId: number }>
+    districts: Array<{ id: number; name: string; code: string }>
+    zones: Array<{ id: number; name: string; code: string; districtId: number }>
     sectors: HierarchySectorApiEntity[]
 }
 
@@ -130,7 +130,7 @@ export async function getSectors(
         signal,
     })
     const data = responseData(response.data, 'No fue posible cargar los sectores')
-    const districtNames = new Map(data.districts.map((district) => [district.id, district.name]))
+    const districts = new Map(data.districts.map((district) => [district.id, district]))
     const zones = new Map(data.zones.map((zone) => [zone.id, zone]))
 
     return data.sectors.map((sector) => {
@@ -139,13 +139,39 @@ export async function getSectors(
             id: sector.id,
             name: sector.name,
             code: sector.code,
+            zoneCode: zone?.code ?? '',
+            districtCode: zone ? (districts.get(zone.districtId)?.code ?? '') : '',
             zoneName: zone?.name ?? 'Zona sin asignar',
             districtName: zone
-                ? (districtNames.get(zone.districtId) ?? 'Distrito sin asignar')
+                ? (districts.get(zone.districtId)?.name ?? 'Distrito sin asignar')
                 : 'Distrito sin asignar',
             polygon: normalizePolygon(sector.polygon),
             supervisorId: sector.supervisorId,
             supervisorName: sector.supervisorName,
         }
     })
+}
+
+export async function createMeetingType(
+    apiClient: AxiosInstance,
+    input: Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive'>,
+): Promise<MeetingTypeOption> {
+    const response = await apiClient.post<ApiResponse<MeetingTypeOption>>('/meeting-types', input)
+    return responseData(response.data, 'No fue posible crear el tipo de reunión')
+}
+
+export async function updateMeetingType(
+    apiClient: AxiosInstance,
+    id: number,
+    input: Partial<Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive'>>,
+): Promise<MeetingTypeOption> {
+    const response = await apiClient.put<ApiResponse<MeetingTypeOption>>(
+        `/meeting-types/${id}`,
+        input,
+    )
+    return responseData(response.data, 'No fue posible actualizar el tipo de reunión')
+}
+
+export async function deleteMeetingType(apiClient: AxiosInstance, id: number): Promise<void> {
+    await apiClient.delete(`/meeting-types/${id}`)
 }

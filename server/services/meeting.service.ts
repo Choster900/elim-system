@@ -46,6 +46,20 @@ async function assertMeetingHost(memberId: number) {
     })
 }
 
+async function assertActiveMeetingType(typeId: number) {
+    const type = await repo.findMeetingTypeById(typeId)
+    if (type?.isActive) return
+
+    throw createError({
+        statusCode: 400,
+        message: 'El tipo de reunión seleccionado no está activo',
+        data: {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            fields: { typeId: ['Selecciona un tipo de reunión activo'] },
+        },
+    })
+}
+
 async function assertMeetingCoSupervisors(memberIds: number[], supervisorId: number) {
     if (memberIds.includes(supervisorId)) {
         throw createError({
@@ -158,6 +172,7 @@ export function getMeetingHosts() {
 }
 
 export async function createMeeting(dto: CreateMeetingDto) {
+    await assertActiveMeetingType(dto.typeId)
     await assertMeetingLeader(dto.leaderId)
     await assertMeetingHost(dto.hostId)
     const supervisorId = await sectorSupervisorId(dto.sectorId)
@@ -187,6 +202,7 @@ export async function createMeeting(dto: CreateMeetingDto) {
 
 export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     const existing = await getMeetingById(id)
+    if (dto.typeId !== undefined) await assertActiveMeetingType(dto.typeId)
     if (dto.leaderId !== undefined) await assertMeetingLeader(dto.leaderId)
     if (dto.hostId !== undefined) await assertMeetingHost(dto.hostId)
     const supervisorId = await sectorSupervisorId(dto.sectorId ?? existing.sectorId)
@@ -239,16 +255,75 @@ export async function getMeetingTypeById(id: number) {
     return type
 }
 
-export function createMeetingType(dto: CreateMeetingTypeDto) {
-    return repo.createMeetingType(dto)
+async function assertMeetingTypeUnique(
+    dto: Pick<CreateMeetingTypeDto, 'name' | 'codeSegment'>,
+    excludeId?: number,
+) {
+    const [sameName, sameSegment] = await Promise.all([
+        repo.findMeetingTypeByName(dto.name, excludeId),
+        repo.findMeetingTypeByCodeSegment(dto.codeSegment, excludeId),
+    ])
+    if (!sameName && !sameSegment) return
+
+    throw createError({
+        statusCode: 409,
+        message: 'El nombre o segmento del tipo de reunión ya está en uso',
+        data: {
+            code: ApiErrorCode.RESOURCE_ALREADY_EXISTS,
+            fields: {
+                ...(sameName ? { name: ['Ya existe un tipo con este nombre'] } : {}),
+                ...(sameSegment ? { codeSegment: ['Este segmento ya está en uso'] } : {}),
+            },
+        },
+    })
+}
+
+export async function createMeetingType(dto: CreateMeetingTypeDto) {
+    const normalizedDto = {
+        ...dto,
+        name: dto.name.trim(),
+        codeSegment: dto.codeSegment.toUpperCase(),
+    }
+    await assertMeetingTypeUnique(normalizedDto)
+    return repo.createMeetingType(normalizedDto)
 }
 
 export async function updateMeetingType(id: number, dto: UpdateMeetingTypeDto) {
-    await getMeetingTypeById(id)
-    return repo.updateMeetingType(id, dto)
+    const existing = await getMeetingTypeById(id)
+    const normalizedDto = {
+        ...dto,
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.codeSegment !== undefined ? { codeSegment: dto.codeSegment.toUpperCase() } : {}),
+    }
+    if (normalizedDto.codeSegment && normalizedDto.codeSegment !== existing.codeSegment) {
+        if (await repo.countMeetingsForType(id)) {
+            throw createError({
+                statusCode: 409,
+                message: 'No se puede cambiar el segmento de un tipo con reuniones registradas',
+                data: { code: ApiErrorCode.BUSINESS_RULE_ERROR },
+            })
+        }
+    }
+    if (normalizedDto.name || normalizedDto.codeSegment) {
+        await assertMeetingTypeUnique(
+            {
+                name: normalizedDto.name ?? existing.name,
+                codeSegment: normalizedDto.codeSegment ?? existing.codeSegment,
+            },
+            id,
+        )
+    }
+    return repo.updateMeetingType(id, normalizedDto)
 }
 
 export async function deleteMeetingType(id: number) {
     await getMeetingTypeById(id)
+    if (await repo.countMeetingsForType(id)) {
+        throw createError({
+            statusCode: 409,
+            message: 'No se puede eliminar un tipo con reuniones registradas',
+            data: { code: ApiErrorCode.BUSINESS_RULE_ERROR },
+        })
+    }
     return repo.deleteMeetingType(id)
 }
