@@ -7,6 +7,7 @@ export interface TerritoryEntity {
     name: string
     code: string
     description: string
+    address: string
     leaderId: number | null
     leaderName: string
     color: string
@@ -40,6 +41,7 @@ export interface TerritoryInput {
     leaderId?: number | null
     leaderName: string
     description: string
+    address: string
     color: string
     polygon: Polygon
     isActive: boolean
