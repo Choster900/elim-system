@@ -18,7 +18,7 @@ import { useTourProgress } from '~/presentation/shared/composables/useTourProgre
 import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
-import { formatLocalIsoDate } from '~/utils/date/date-format.util'
+import { formatLocalIsoDate, formatTimeRange } from '~/utils/date/date-format.util'
 import { useRecordOccurrencesBulkMutation } from '../composables/useOccurrenceMutations'
 import {
     useAttendanceTypesQuery,
@@ -495,7 +495,7 @@ const cellInputClass =
                                 </span>
                                 <span class="inline-flex items-center gap-1.5">
                                     <Clock class="size-3.5" />
-                                    {{ meeting.startTime }}–{{ meeting.endTime }}
+                                    {{ formatTimeRange(meeting.startTime, meeting.endTime) }}
                                 </span>
                                 <span
                                     v-if="meeting.leaderName"

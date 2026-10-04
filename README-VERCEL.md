@@ -42,16 +42,15 @@ chats, tickets, capturas, logs ni archivos versionados.
 
 ### Recomendadas para producción
 
-| Variable                    | Sensible | Valor esperado                                                                                                               |
-| --------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `APP_BASE_URL`              | No       | URL pública exacta, por ejemplo `https://app.example.com`. Se usa para construir los enlaces de invitación.                  |
-| `SMTP_HOST`                 | No       | Host del proveedor SMTP, nunca `127.0.0.1` en Vercel.                                                                        |
-| `SMTP_PORT`                 | No       | Puerto del proveedor, normalmente `465` o `587`.                                                                             |
-| `SMTP_SECURE`               | No       | `true` para TLS directo, normalmente puerto 465; `false` para STARTTLS, normalmente 587. Confirma el valor con el proveedor. |
-| `SMTP_USER`                 | Sí       | Usuario SMTP.                                                                                                                |
-| `SMTP_PASSWORD`             | Sí       | Contraseña o token SMTP.                                                                                                     |
-| `MAIL_FROM`                 | No       | Remitente autorizado, por ejemplo `Elim <no-reply@example.com>`. El dominio debe estar verificado con el proveedor.          |
-| `USER_INVITATION_TTL_HOURS` | No       | Vigencia de la invitación entre 1 y 168 horas. El valor predeterminado es `24`.                                              |
+| Variable        | Sensible | Valor esperado                                                                                                               |
+| --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `APP_BASE_URL`  | No       | URL pública exacta, por ejemplo `https://app.example.com`. Se usa para construir los enlaces de invitación.                  |
+| `SMTP_HOST`     | No       | Host del proveedor SMTP, nunca `127.0.0.1` en Vercel.                                                                        |
+| `SMTP_PORT`     | No       | Puerto del proveedor, normalmente `465` o `587`.                                                                             |
+| `SMTP_SECURE`   | No       | `true` para TLS directo, normalmente puerto 465; `false` para STARTTLS, normalmente 587. Confirma el valor con el proveedor. |
+| `SMTP_USER`     | Sí       | Usuario SMTP.                                                                                                                |
+| `SMTP_PASSWORD` | Sí       | Contraseña o token SMTP.                                                                                                     |
+| `MAIL_FROM`     | No       | Remitente autorizado, por ejemplo `Elim <no-reply@example.com>`. El dominio debe estar verificado con el proveedor.          |
 
 Si todavía no se utilizarán invitaciones por correo, las variables SMTP tienen valores
 predeterminados, pero cualquier intento de enviar correo fallará en Vercel hasta configurar un

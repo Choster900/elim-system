@@ -29,6 +29,7 @@ import { useTourProgress } from '~/presentation/shared/composables/useTourProgre
 import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
+import { formatTime12h } from '~/utils/date/date-format.util'
 
 defineOptions({ name: 'DashboardView' })
 
@@ -799,7 +800,7 @@ function openMeeting(id: number) {
                                             formatDate(meeting.occurrenceDate, { weekday: 'short' })
                                         }}
                                         ·
-                                        {{ meeting.startTime }}
+                                        {{ formatTime12h(meeting.startTime) }}
                                     </span>
                                     <span class="inline-flex items-center gap-1">
                                         <MapPin class="size-3" /> {{ meeting.location }}

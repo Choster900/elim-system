@@ -1,5 +1,5 @@
 import { createError } from 'h3'
-import { validateEnv } from '../../config/env'
+import { USER_INVITATION_TTL_HOURS } from '../constants/user.constants'
 import type {
     CreateUserRequestDto,
     ResetUserPasswordRequestDto,
@@ -112,7 +112,7 @@ export async function getUserCatalog() {
             label: role.name,
             description: role.description ?? '',
         })),
-        defaultInvitationExpiresInHours: validateEnv().USER_INVITATION_TTL_HOURS,
+        defaultInvitationExpiresInHours: USER_INVITATION_TTL_HOURS,
     }
 }
 

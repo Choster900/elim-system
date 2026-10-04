@@ -2,6 +2,7 @@ import { frequencyOptions } from '~/presentation/meetings/constants/meeting.cons
 import type { MeetingFrequency } from '~/presentation/meetings/interfaces/meeting.interface'
 import {
     formatLocalIsoDate,
+    formatTimeDuration,
     formatTimeRange,
     getLocalIsoDateDay,
 } from '~/utils/date/date-format.util'
@@ -39,6 +40,10 @@ export function getMeetingDateDay(isoDate: string) {
 
 export function formatMeetingTimeRange(startTime: string, endTime: string) {
     return formatTimeRange(startTime, endTime)
+}
+
+export function formatMeetingDuration(startTime: string, endTime: string) {
+    return formatTimeDuration(startTime, endTime)
 }
 
 export function getMeetingFrequencyLabel(frequency: MeetingFrequency) {

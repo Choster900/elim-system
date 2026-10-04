@@ -51,7 +51,10 @@ import type {
     MeetingRecord,
     MonthlyMode,
 } from '~/presentation/meetings/interfaces/meeting.interface'
-import { formatMeetingRecurrence } from '~/presentation/meetings/utils/meeting-format.util'
+import {
+    formatMeetingRecurrence,
+    formatMeetingTimeRange,
+} from '~/presentation/meetings/utils/meeting-format.util'
 import { EL_SALVADOR_CENTER } from '~/presentation/territories/constants/territory.constants'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 
@@ -1650,8 +1653,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 class="mt-3 rounded-lg bg-surface-container-high px-3 py-2 text-xs text-on-surface-variant"
                             >
                                 {{ leaderScheduleConflict?.date }} ·
-                                {{ leaderScheduleConflict?.startTime }} –
-                                {{ leaderScheduleConflict?.endTime }}
+                                {{
+                                    formatMeetingTimeRange(
+                                        leaderScheduleConflict?.startTime ?? '',
+                                        leaderScheduleConflict?.endTime ?? '',
+                                    )
+                                }}
                             </p>
                         </div>
                     </div>

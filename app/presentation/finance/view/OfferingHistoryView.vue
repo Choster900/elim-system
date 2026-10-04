@@ -19,7 +19,11 @@ import AppTour from '~/presentation/shared/components/AppTour.vue'
 import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
 import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
-import { formatLocalIsoDate, formatShortIsoDate } from '~/utils/date/date-format.util'
+import {
+    formatLocalIsoDate,
+    formatShortIsoDate,
+    formatTimeRange,
+} from '~/utils/date/date-format.util'
 import { useOccurrencesQuery } from '../composables/useOccurrenceQueries'
 import type { OccurrenceFilters, OccurrenceRecord } from '../interfaces/occurrence.interface'
 
@@ -865,7 +869,12 @@ const filterLabelClass =
                                                     </span>
                                                     <span class="inline-flex items-center gap-1">
                                                         <CalendarClock class="size-3" />
-                                                        {{ item.startTime }}–{{ item.endTime }}
+                                                        {{
+                                                            formatTimeRange(
+                                                                item.startTime,
+                                                                item.endTime,
+                                                            )
+                                                        }}
                                                     </span>
                                                 </div>
                                             </div>

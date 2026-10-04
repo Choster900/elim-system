@@ -54,6 +54,7 @@ import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeeting
 import { activeOptions } from '~/presentation/meetings/constants/meeting.constants'
 import {
     formatMeetingDate,
+    formatMeetingDuration,
     formatMeetingMonth,
     formatMeetingTimeRange,
     getMeetingDateDay,
@@ -190,7 +191,7 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         sortable: true,
         filterable: true,
         filterType: 'date',
-        width: '300px',
+        width: '210px',
         accessor: (row) => row.date,
     },
     {
@@ -200,7 +201,7 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         filterable: true,
         filterType: 'text',
         accessor: (row) => row.code,
-        width: '220px',
+        width: '170px',
     },
     {
         key: 'title',
@@ -209,7 +210,7 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         filterable: true,
         filterType: 'text',
         accessor: (row) => row.title,
-        width: '420px',
+        width: '480px',
     },
     {
         key: 'type',
@@ -219,26 +220,26 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         filterType: 'select',
         filterOptions: meetingTypes.value.map((t) => ({ value: t.id, label: t.name })),
         accessor: (row) => row.typeId,
-        width: '180px',
+        width: '120px',
     },
     {
         key: 'sector',
-        label: 'Sector',
+        label: 'Sector / Supervisor',
         sortable: true,
         filterable: true,
         filterType: 'select',
         filterOptions: sectors.value.map((s) => ({ value: s.id, label: s.name })),
         accessor: (row) => row.sectorId,
-        width: '180px',
+        width: '200px',
     },
     {
-        key: 'supervisor',
-        label: 'Supervisor',
+        key: 'people',
+        label: 'Líder / Anfitrión',
         sortable: true,
         filterable: true,
         filterType: 'text',
-        accessor: (row) => row.supervisorName ?? '',
-        width: '120px',
+        accessor: (row) => `${row.leaderName ?? ''} ${row.hostName ?? ''}`.trim(),
+        width: '190px',
     },
     {
         key: 'isActive',
@@ -248,7 +249,7 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         filterType: 'select',
         filterOptions: activeOptions.map((o) => ({ value: String(o.value), label: o.label })),
         accessor: (row) => String(row.isActive),
-        width: '140px',
+        width: '100px',
     },
     {
         key: 'actions',
@@ -610,9 +611,29 @@ async function toggleActive(m: MeetingRecord) {
                             <p class="text-xs font-semibold uppercase text-on-surface-variant">
                                 {{ formatMeetingDate((row as MeetingRecord).date) }}
                             </p>
-                            <p class="text-[11px] text-on-surface-variant">
+                            <p
+                                class="mt-0.5 inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-on-surface"
+                            >
+                                <Clock class="size-3.5 text-on-surface-variant" />
                                 {{
                                     formatMeetingTimeRange(
+                                        (row as MeetingRecord).startTime,
+                                        (row as MeetingRecord).endTime,
+                                    )
+                                }}
+                            </p>
+                            <p
+                                v-if="
+                                    formatMeetingDuration(
+                                        (row as MeetingRecord).startTime,
+                                        (row as MeetingRecord).endTime,
+                                    )
+                                "
+                                class="text-[11px] text-on-surface-variant"
+                            >
+                                Duración:
+                                {{
+                                    formatMeetingDuration(
                                         (row as MeetingRecord).startTime,
                                         (row as MeetingRecord).endTime,
                                     )
@@ -623,13 +644,15 @@ async function toggleActive(m: MeetingRecord) {
                 </template>
 
                 <template #cell-code="{ row }">
-                    <span class="font-mono text-xs tabular-nums text-on-surface-variant">
+                    <span
+                        class="whitespace-nowrap font-mono text-[11px] tabular-nums text-on-surface-variant"
+                    >
                         {{ (row as MeetingRecord).code }}
                     </span>
                 </template>
 
                 <template #cell-title="{ row }">
-                    <div class="min-w-0">
+                    <div class="min-w-[320px]">
                         <p class="font-display text-sm font-semibold text-on-surface">
                             {{ (row as MeetingRecord).title }}
                         </p>
@@ -674,7 +697,7 @@ async function toggleActive(m: MeetingRecord) {
 
                 <template #cell-type="{ row }">
                     <span
-                        class="inline-flex rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                        class="inline-flex whitespace-nowrap rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
                         :style="{
                             color: (row as MeetingRecord).typeColor ?? undefined,
                             borderColor: ((row as MeetingRecord).typeColor ?? '') + '55',
@@ -687,28 +710,31 @@ async function toggleActive(m: MeetingRecord) {
                 <template #cell-sector="{ row }">
                     <div class="flex items-center gap-2">
                         <span
-                            class="flex size-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+                            class="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
                         >
                             {{ formatInitials((row as MeetingRecord).sectorName) }}
                         </span>
-                        <span class="text-sm text-on-surface">{{
-                            (row as MeetingRecord).sectorName
-                        }}</span>
+                        <div class="min-w-0">
+                            <p class="truncate text-sm text-on-surface">
+                                {{ (row as MeetingRecord).sectorName }}
+                            </p>
+                            <p class="truncate text-[11px] text-on-surface-variant">
+                                Sup. {{ (row as MeetingRecord).supervisorName ?? '—' }}
+                            </p>
+                        </div>
                     </div>
                 </template>
 
-                <template #cell-supervisor="{ row }">
-                    <div class="flex items-center gap-3">
-                        <div
-                            class="flex size-9 items-center justify-center rounded-full border border-outline-variant bg-surface-container-high text-xs font-semibold text-on-surface"
-                        >
-                            {{ formatInitials((row as MeetingRecord).supervisorName) }}
-                        </div>
-                        <div class="min-w-0">
-                            <p class="truncate text-sm font-medium text-on-surface">
-                                {{ (row as MeetingRecord).supervisorName }}
-                            </p>
-                        </div>
+                <template #cell-people="{ row }">
+                    <div class="min-w-0 space-y-0.5">
+                        <p class="truncate text-sm text-on-surface">
+                            <span class="text-[11px] text-on-surface-variant">Líder</span>
+                            {{ (row as MeetingRecord).leaderName ?? '—' }}
+                        </p>
+                        <p class="truncate text-sm text-on-surface">
+                            <span class="text-[11px] text-on-surface-variant">Anfitrión</span>
+                            {{ (row as MeetingRecord).hostName ?? '—' }}
+                        </p>
                     </div>
                 </template>
 
