@@ -55,7 +55,14 @@ function invalidRolesError() {
     })
 }
 
-function mailDeliveryError() {
+function mailDeliveryError(cause: unknown) {
+    const { code, responseCode, command, message } = (cause ?? {}) as Record<string, unknown>
+    console.error('[mail] No se pudo enviar el correo de acceso:', {
+        code,
+        responseCode,
+        command,
+        message,
+    })
     return createError({
         statusCode: 502,
         message: 'No fue posible entregar las credenciales por correo',
@@ -152,9 +159,9 @@ export async function createUser(dto: CreateUserRequestDto, createdById: number)
             expiresAt,
             requirePasswordChange: user.mustChangePassword,
         })
-    } catch {
+    } catch (error) {
         await repository.deleteUserRecord(user.id)
-        throw mailDeliveryError()
+        throw mailDeliveryError(error)
     }
 
     return mapUser(user)
@@ -212,14 +219,14 @@ export async function resetUserPassword(
             expiresAt,
             requirePasswordChange: reset.user.mustChangePassword,
         })
-    } catch {
+    } catch (error) {
         await repository.rollbackUserAccessReset(
             userId,
             reset.invitation.id,
             reset.previous,
             reset.revokedInvitationIds,
         )
-        throw mailDeliveryError()
+        throw mailDeliveryError(error)
     }
 
     await repository.revokeAllUserSessions(userId)
