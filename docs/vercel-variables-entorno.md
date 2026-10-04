@@ -38,7 +38,6 @@ npx vercel env add SMTP_USER production --sensitive
 npx vercel env add SMTP_PASSWORD production --sensitive
 npx vercel env add MAIL_FROM production
 
-npx vercel env add USER_INVITATION_TTL_HOURS production
 npx vercel env add PASSWORD_RESET_TTL_HOURS production
 ```
 
