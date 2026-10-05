@@ -3,6 +3,9 @@ export type DashboardPeriodDays = 30 | 90 | 365
 export interface DashboardQueryDto {
     periodDays: DashboardPeriodDays
     districtId?: number
+    /// Rango personalizado (AAAA-MM-DD, inclusivo). Si viene, reemplaza a periodDays.
+    startDate?: string
+    endDate?: string
 }
 
 export interface DashboardMetricDto {
@@ -62,7 +65,8 @@ export interface DashboardUpcomingMeetingDto {
 export interface DashboardSummaryDto {
     generatedAt: string
     period: {
-        days: DashboardPeriodDays
+        days: number
+        isCustom: boolean
         startDate: string
         endDate: string
         previousStartDate: string
