@@ -5,13 +5,7 @@ import type {
     PermissionFormPayload,
 } from '../interfaces/access-control.interface'
 
-interface PermissionsResponse extends ApiResponse<AccessPermission[]> {
-    meta?: {
-        pagination?: {
-            totalItems: number
-        }
-    }
-}
+type PermissionsResponse = ApiResponse<AccessPermission[]>
 
 export async function getPermissions(
     apiClient: AxiosInstance,
