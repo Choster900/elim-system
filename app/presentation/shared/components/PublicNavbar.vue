@@ -1,159 +1,92 @@
 <script setup lang="ts">
-import { ChevronDown, Menu, X } from '@lucide/vue'
+import { ArrowRight, Menu, X } from '@lucide/vue'
+import { useAccessAction } from '~/presentation/auth/composables/useAccessAction'
+import { landingNavLinks } from '~/presentation/landing/constants/landing.constants'
 import AppBrand from './AppBrand.vue'
 
-type NavGroup = {
-    label: string
-    href?: string
-    active?: boolean
-    items?: Array<{ label: string; href: string }>
-}
-
 const isOpen = ref(false)
-
-const navGroups: NavGroup[] = [
-    { label: 'Inicio', href: '/', active: true },
-    {
-        label: 'Ministerios',
-        items: [
-            { label: 'Jóvenes', href: '#ministerios' },
-            { label: 'Adultos', href: '#ministerios' },
-            { label: 'Música', href: '#ministerios' },
-            { label: 'Misiones', href: '#ministerios' },
-        ],
-    },
-    {
-        label: 'Eventos',
-        items: [
-            { label: 'Calendario', href: '#ministerios' },
-            { label: 'Inscripciones', href: '#boletin' },
-            { label: 'Galería', href: '#vision' },
-        ],
-    },
-    { label: 'Contacto', href: '#contacto' },
-]
+const accessAction = useAccessAction()
 
 function closeMenu() {
     isOpen.value = false
 }
 
-function goToNewsletter() {
-    if (import.meta.client && window.location.pathname === '/') {
-        document.getElementById('boletin')?.scrollIntoView({ behavior: 'smooth' })
-        return
+// Cierra el menú móvil si la pantalla vuelve a tamaño escritorio.
+if (import.meta.client) {
+    const desktopQuery = window.matchMedia('(min-width: 900px)')
+    const onDesktop = (event: MediaQueryListEvent) => {
+        if (event.matches) closeMenu()
     }
-
-    navigateTo('/#boletin')
+    onMounted(() => desktopQuery.addEventListener('change', onDesktop))
+    onBeforeUnmount(() => desktopQuery.removeEventListener('change', onDesktop))
 }
 </script>
 
 <template>
-    <nav class="system-nav-blur fixed inset-x-0 top-0 z-50 border-b border-outline-variant">
-        <div class="mx-auto flex max-w-system items-center justify-between px-6 py-3 lg:px-10">
+    <header
+        class="fixed inset-x-0 top-0 z-50 border-b border-[rgba(78,70,57,0.6)] bg-[rgba(18,20,20,0.78)] backdrop-blur-lg"
+    >
+        <nav
+            aria-label="Principal"
+            class="mx-auto flex h-[72px] max-w-[1240px] items-center justify-between gap-6 px-6"
+        >
             <AppBrand />
 
-            <div class="hidden items-center gap-8 md:flex">
-                <div v-for="group in navGroups" :key="group.label" class="relative group">
-                    <NuxtLink
-                        v-if="group.href"
-                        :to="group.href"
-                        :class="[
-                            'text-xs font-semibold uppercase text-on-surface-variant transition-colors hover:text-primary',
-                            group.active ? 'border-b-2 border-primary pb-1 text-primary' : '',
-                        ]"
-                    >
-                        {{ group.label }}
-                    </NuxtLink>
-
-                    <button
-                        v-else
-                        type="button"
-                        class="flex items-center gap-1 text-xs font-semibold uppercase text-on-surface-variant transition-colors hover:text-primary"
-                    >
-                        {{ group.label }}
-                        <ChevronDown class="size-4" />
-                    </button>
-
-                    <div
-                        v-if="group.items"
-                        class="invisible absolute left-0 top-full mt-3 w-48 border border-outline-variant bg-surface-container py-2 opacity-0 transition-all duration-200 group-hover:visible group-hover:opacity-100"
-                    >
-                        <NuxtLink
-                            v-for="item in group.items"
-                            :key="item.label"
-                            :to="item.href"
-                            class="block px-4 py-2 text-xs font-semibold uppercase text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary"
-                        >
-                            {{ item.label }}
-                        </NuxtLink>
-                    </div>
-                </div>
+            <div class="hidden items-center gap-8 min-[900px]:flex">
+                <NuxtLink
+                    v-for="link in landingNavLinks"
+                    :key="link.href"
+                    :to="link.href"
+                    class="py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:text-primary"
+                >
+                    {{ link.label }}
+                </NuxtLink>
             </div>
 
-            <div class="hidden items-center gap-3 md:flex">
-                <UiButton
-                    variant="ghost"
-                    type="button"
-                    class="text-xs uppercase text-on-surface-variant hover:bg-transparent hover:text-primary"
-                    @click="navigateTo('/login')"
+            <div class="flex items-center gap-3">
+                <NuxtLink
+                    :to="accessAction.to"
+                    class="landing-btn-gold hidden h-11 items-center gap-2 rounded-md bg-primary px-[22px] text-xs font-bold uppercase tracking-[0.12em] text-primary-foreground min-[900px]:inline-flex"
                 >
-                    Iniciar Sesión
-                </UiButton>
-                <UiButton
+                    {{ accessAction.label }}
+                    <ArrowRight v-if="accessAction.isAuthenticated" class="size-3.5" />
+                </NuxtLink>
+                <button
                     type="button"
-                    class="h-10 rounded px-6 text-xs uppercase"
-                    @click="goToNewsletter"
+                    class="inline-flex size-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface transition-colors hover:border-primary hover:text-primary min-[900px]:hidden"
+                    :aria-label="isOpen ? 'Cerrar menú' : 'Abrir menú'"
+                    :aria-expanded="isOpen"
+                    aria-controls="public-mobile-menu"
+                    @click="isOpen = !isOpen"
                 >
-                    Unirse
-                </UiButton>
+                    <X v-if="isOpen" class="size-5" />
+                    <Menu v-else class="size-5" />
+                </button>
             </div>
-
-            <UiButton
-                variant="ghost"
-                size="icon"
-                type="button"
-                class="md:hidden"
-                :aria-label="isOpen ? 'Cerrar navegación' : 'Abrir navegación'"
-                @click="isOpen = !isOpen"
-            >
-                <X v-if="isOpen" class="size-5" />
-                <Menu v-else class="size-5" />
-            </UiButton>
-        </div>
+        </nav>
 
         <div
             v-if="isOpen"
-            class="border-t border-outline-variant bg-surface-container-low px-6 py-5 md:hidden"
+            id="public-mobile-menu"
+            class="flex flex-col border-t border-outline-variant bg-surface-container-low px-6 pb-6 pt-3 min-[900px]:hidden"
         >
-            <div class="flex flex-col gap-4">
-                <template v-for="group in navGroups" :key="group.label">
-                    <NuxtLink
-                        v-if="group.href"
-                        :to="group.href"
-                        class="text-sm font-semibold uppercase text-on-surface-variant"
-                        @click="closeMenu"
-                    >
-                        {{ group.label }}
-                    </NuxtLink>
-                    <div v-else class="space-y-3">
-                        <p class="text-sm font-semibold uppercase text-primary">
-                            {{ group.label }}
-                        </p>
-                        <NuxtLink
-                            v-for="item in group.items"
-                            :key="item.label"
-                            :to="item.href"
-                            class="block pl-4 text-sm text-on-surface-variant"
-                            @click="closeMenu"
-                        >
-                            {{ item.label }}
-                        </NuxtLink>
-                    </div>
-                </template>
-                <UiButton type="button" class="mt-2 w-full rounded" @click="navigateTo('/login')">
-                    Iniciar Sesión
-                </UiButton>
-            </div>
+            <NuxtLink
+                v-for="link in landingNavLinks"
+                :key="link.href"
+                :to="link.href"
+                class="border-b border-[rgba(78,70,57,0.5)] py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant transition-colors last-of-type:border-b-0 hover:text-primary"
+                @click="closeMenu"
+            >
+                {{ link.label }}
+            </NuxtLink>
+            <NuxtLink
+                :to="accessAction.to"
+                class="landing-btn-gold mt-4 inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary text-xs font-bold uppercase tracking-[0.12em] text-primary-foreground"
+                @click="closeMenu"
+            >
+                {{ accessAction.label }}
+                <ArrowRight v-if="accessAction.isAuthenticated" class="size-4" />
+            </NuxtLink>
         </div>
-    </nav>
+    </header>
 </template>
