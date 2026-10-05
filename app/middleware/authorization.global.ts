@@ -19,7 +19,7 @@ function resolveRequiredPermission(to: RouteLocationNormalized) {
 export default defineNuxtRouteMiddleware(async (to) => {
     const authStore = useAuthStore()
 
-    if (to.path === '/login' && !authStore.sessionChecked) {
+    if (!to.meta.requiresAuth && !authStore.sessionChecked) {
         try {
             const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
             const response = await $fetch<ApiResponse<AuthUser>>('/api/auth/me', { headers })
