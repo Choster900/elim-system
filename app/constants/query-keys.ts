@@ -42,8 +42,12 @@ const occurrences = {
 
 const dashboard = {
     all: ['dashboard'] as const,
-    summary: (periodDays: number, districtId: number | null) =>
-        ['dashboard', 'summary', periodDays, districtId] as const,
+    summary: (
+        periodDays: number,
+        districtId: number | null,
+        startDate: string | null,
+        endDate: string | null,
+    ) => ['dashboard', 'summary', periodDays, districtId, startDate, endDate] as const,
 }
 
 const attendanceTypes = {
