@@ -19,6 +19,7 @@ import type {
     TerritoryLeaderOption,
     TerritorySupervisorOption,
 } from '~/presentation/territories/interfaces/territory.interface'
+import { firstUnusedColor } from '~/utils/color/color.util'
 
 type Level = 'distrito' | 'zona' | 'sector'
 
@@ -29,7 +30,8 @@ const props = defineProps<{
     entity: TerritoryInput | null
     parentCentroid: LatLng | null
     parentLabel: string | null
-    palette: string[]
+    palette: readonly string[]
+    usedColors?: readonly string[]
     accent: string
     levelLabel: string
     leaderLabel: string
@@ -110,7 +112,7 @@ function resetForm() {
         form.leaderName = ''
         form.description = ''
         form.address = ''
-        form.color = props.palette[0] ?? '#e9c176'
+        form.color = firstUnusedColor(props.palette, props.usedColors ?? [])
         form.isActive = true
         form.supervisorId = null
         tempPolygon.value = []
@@ -658,23 +660,20 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
 
                         <div>
                             <span :class="labelClass">Color</span>
-                            <div class="flex flex-wrap items-center gap-2.5">
-                                <button
-                                    v-for="c in palette"
-                                    :key="c"
-                                    type="button"
-                                    class="size-8 rounded-full transition-transform hover:scale-110"
-                                    :style="{
-                                        backgroundColor: c,
-                                        boxShadow:
-                                            form.color === c
-                                                ? '0 0 0 2px var(--surface-container-low), 0 0 0 4px var(--primary)'
-                                                : 'inset 0 0 0 1px rgba(0,0,0,.2)',
-                                    }"
-                                    :aria-label="`Color ${c}`"
-                                    @click="form.color = c"
-                                />
-                            </div>
+                            <UiColorPicker
+                                id="territory-color"
+                                v-model="form.color"
+                                :palette="palette"
+                            >
+                                <template #preview="{ color, textColor }">
+                                    <span
+                                        class="inline-flex min-h-8 max-w-full items-center truncate rounded-full px-3.5 text-[11px] font-bold uppercase tracking-wider shadow-sm"
+                                        :style="{ backgroundColor: color, color: textColor }"
+                                    >
+                                        {{ form.name || levelLabel }}
+                                    </span>
+                                </template>
+                            </UiColorPicker>
                         </div>
                     </section>
 
