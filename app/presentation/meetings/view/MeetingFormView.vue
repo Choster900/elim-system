@@ -3,12 +3,10 @@ import {
     ArrowLeft,
     AlertTriangle,
     CalendarDays,
-    Check,
     Info,
     LocateFixed,
     MapPin,
     MapPinned,
-    Pipette,
     Save,
     Settings2,
     Trash2,
@@ -113,19 +111,19 @@ const loadError = computed(
 )
 const notFound = computed(() => isEditing.value && meetingQuery.isError.value)
 
-if (import.meta.server) {
-    onServerPrefetch(() =>
-        Promise.allSettled([
-            meetingTypesQuery.suspense(),
-            sectorsQuery.suspense(),
-            leadersQuery.suspense(),
-            hostsQuery.suspense(),
-            supervisorsQuery.suspense(),
-            meetingsQuery.suspense(),
-            ...(isEditing.value ? [meetingQuery.suspense()] : []),
-        ]),
-    )
-}
+// Sin condicionar a import.meta.server: Vue cuenta onServerPrefetch como frontera async
+// al generar useId(); si el cliente no lo registra, los ids de radix-vue no coinciden.
+onServerPrefetch(() =>
+    Promise.allSettled([
+        meetingTypesQuery.suspense(),
+        sectorsQuery.suspense(),
+        leadersQuery.suspense(),
+        hostsQuery.suspense(),
+        supervisorsQuery.suspense(),
+        meetingsQuery.suspense(),
+        ...(isEditing.value ? [meetingQuery.suspense()] : []),
+    ]),
+)
 
 interface MeetingForm {
     title: string
@@ -182,40 +180,8 @@ function emptyForm(): MeetingForm {
 }
 
 const form = reactive(emptyForm())
-const customColor = ref(form.color.toUpperCase())
-const colorError = ref('')
 const formInitialized = ref(false)
 const isClientReady = ref(false)
-
-function normalizeHexColor(value: string) {
-    const trimmed = value.trim()
-    const candidate = trimmed.startsWith('#') ? trimmed : `#${trimmed}`
-    return /^#[0-9a-f]{6}$/i.test(candidate) ? candidate.toLowerCase() : null
-}
-
-function contrastColor(color: string) {
-    const normalized = normalizeHexColor(color)
-    if (!normalized) return '#FFFFFF'
-    const red = Number.parseInt(normalized.slice(1, 3), 16)
-    const green = Number.parseInt(normalized.slice(3, 5), 16)
-    const blue = Number.parseInt(normalized.slice(5, 7), 16)
-    return (red * 299 + green * 587 + blue * 114) / 1000 > 155 ? '#211A16' : '#FFFFFF'
-}
-
-function applyCustomColor() {
-    const color = normalizeHexColor(customColor.value)
-    if (!color) {
-        colorError.value = 'Usa un hexadecimal de 6 caracteres, por ejemplo #E9C176.'
-        return
-    }
-    colorError.value = ''
-    form.color = color
-}
-
-function selectPaletteColor(color: string) {
-    colorError.value = ''
-    form.color = color
-}
 
 // ===== Map location picker (Leaflet) =====
 const mapEl = ref<HTMLElement | null>(null)
@@ -385,9 +351,7 @@ watch(
 // Keep the pin colour in sync with the selected label colour.
 watch(
     () => form.color,
-    (color) => {
-        customColor.value = color.toUpperCase()
-        colorError.value = ''
+    () => {
         if (marker) marker.setIcon(markerIcon())
     },
 )
@@ -1341,125 +1305,21 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
 
                         <div class="mt-5">
                             <span :class="labelClass">Color de etiqueta</span>
-                            <div
-                                class="mt-2 rounded-xl border border-outline-variant bg-surface-container p-4"
+                            <UiColorPicker
+                                id="meeting-color"
+                                v-model="form.color"
+                                class="mt-2"
+                                :palette="meetingColorPalette"
                             >
-                                <div class="flex flex-wrap items-center gap-4">
-                                    <label
-                                        for="meeting-color-picker"
-                                        class="group relative flex size-14 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-outline-variant shadow-sm transition-transform hover:scale-[1.03] focus-within:ring-2 focus-within:ring-primary"
-                                        title="Abrir selector de color"
-                                    >
-                                        <input
-                                            id="meeting-color-picker"
-                                            v-model="form.color"
-                                            type="color"
-                                            class="absolute inset-0 size-full cursor-pointer opacity-0"
-                                            aria-label="Seleccionar un color personalizado"
-                                        />
-                                        <span
-                                            class="absolute inset-0"
-                                            :style="{ backgroundColor: form.color }"
-                                        />
-                                        <Pipette
-                                            class="relative size-5 drop-shadow-sm"
-                                            :style="{ color: contrastColor(form.color) }"
-                                        />
-                                    </label>
-
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-semibold text-on-surface">
-                                            Color personalizado
-                                        </p>
-                                        <p class="mt-0.5 text-xs text-on-surface-variant">
-                                            Haz clic en la muestra para abrir el selector completo.
-                                        </p>
-                                    </div>
-
+                                <template #preview="{ color, textColor }">
                                     <span
                                         class="inline-flex min-h-9 items-center rounded-full px-4 text-xs font-bold uppercase tracking-wider shadow-sm"
-                                        :style="{
-                                            backgroundColor: form.color,
-                                            color: contrastColor(form.color),
-                                        }"
+                                        :style="{ backgroundColor: color, color: textColor }"
                                     >
                                         Etiqueta de reunión
                                     </span>
-                                </div>
-
-                                <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_230px]">
-                                    <div>
-                                        <p
-                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                        >
-                                            Paleta sugerida
-                                        </p>
-                                        <div class="mt-2 flex flex-wrap items-center gap-2.5">
-                                            <button
-                                                v-for="color in meetingColorPalette"
-                                                :key="color"
-                                                type="button"
-                                                class="flex size-9 items-center justify-center rounded-full border border-black/10 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container"
-                                                :class="
-                                                    form.color.toLowerCase() === color.toLowerCase()
-                                                        ? 'ring-2 ring-primary ring-offset-2 ring-offset-surface-container'
-                                                        : ''
-                                                "
-                                                :style="{ backgroundColor: color }"
-                                                :aria-label="`Usar color ${color}`"
-                                                :aria-pressed="
-                                                    form.color.toLowerCase() === color.toLowerCase()
-                                                "
-                                                @click="selectPaletteColor(color)"
-                                            >
-                                                <Check
-                                                    v-if="
-                                                        form.color.toLowerCase() ===
-                                                        color.toLowerCase()
-                                                    "
-                                                    class="size-4"
-                                                    :style="{ color: contrastColor(color) }"
-                                                />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label
-                                            for="meeting-color-hex"
-                                            class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                        >
-                                            Código hexadecimal
-                                        </label>
-                                        <div class="mt-2 flex gap-2">
-                                            <input
-                                                id="meeting-color-hex"
-                                                v-model="customColor"
-                                                type="text"
-                                                maxlength="7"
-                                                spellcheck="false"
-                                                autocomplete="off"
-                                                class="h-10 min-w-0 flex-1 rounded border border-outline-variant bg-surface px-3 font-mono text-sm uppercase text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                                                :aria-invalid="!!colorError"
-                                                @keydown.enter.prevent="applyCustomColor"
-                                            />
-                                            <button
-                                                type="button"
-                                                class="h-10 rounded border border-outline-variant bg-surface px-3 text-xs font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary"
-                                                @click="applyCustomColor"
-                                            >
-                                                Aplicar
-                                            </button>
-                                        </div>
-                                        <p
-                                            v-if="colorError"
-                                            class="mt-1.5 text-xs text-destructive"
-                                        >
-                                            {{ colorError }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
+                                </template>
+                            </UiColorPicker>
                         </div>
 
                         <div class="mt-4">
