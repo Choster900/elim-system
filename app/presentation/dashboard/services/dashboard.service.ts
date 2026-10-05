@@ -1,17 +1,25 @@
 import type { AxiosInstance } from 'axios'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
-import type { DashboardPeriodDays, DashboardSummary } from '../interfaces/dashboard.interface'
+import type {
+    DashboardDateRange,
+    DashboardPeriodDays,
+    DashboardSummary,
+} from '../interfaces/dashboard.interface'
 
 export async function getDashboardSummary(
     apiClient: AxiosInstance,
     periodDays: DashboardPeriodDays,
     districtId: number | null,
+    dateRange: DashboardDateRange | null,
     signal?: AbortSignal,
 ) {
     const response = await apiClient.get<ApiResponse<DashboardSummary>>('/dashboard/summary', {
         params: {
             periodDays,
             ...(districtId === null ? {} : { districtId }),
+            ...(dateRange === null
+                ? {}
+                : { startDate: dateRange.startDate, endDate: dateRange.endDate }),
         },
         signal,
     })
