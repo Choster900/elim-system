@@ -20,7 +20,7 @@ const authStore = useAuthStore()
 
 const now = ref(Date.now())
 const renewing = ref(false)
-let ticker: ReturnType<typeof window.setInterval> | null = null
+let ticker: number | null = null
 
 const remainingMs = computed(() => Math.max(0, (authStore.sessionExpiresAt ?? 0) - now.value))
 const showWarning = computed(
