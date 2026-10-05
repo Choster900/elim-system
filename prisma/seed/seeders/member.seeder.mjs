@@ -97,6 +97,8 @@ const COMMUNITY_SUPERVISOR_CODES = new Set([
 
 const COMMUNITY_COORDINATOR_CODES = new Set(['MIE-0002', 'MIE-0005', 'MIE-0006', 'MIE-0008'])
 
+const COMMUNITY_PASTOR_CODES = new Set(['MIE-0001', 'MIE-0009'])
+
 export const MEMBER_SEEDS = [
     {
         code: 'MIE-0001',
@@ -397,7 +399,8 @@ export async function seedMembers(prisma) {
     const leaderRole = communityRoles.find((role) => role.code === 'LEADER')
     const coordinatorRole = communityRoles.find((role) => role.code === 'COORDINATOR')
     const supervisorRole = communityRoles.find((role) => role.code === 'SUPERVISOR')
-    if (!leaderRole || !coordinatorRole || !supervisorRole) {
+    const pastorRole = communityRoles.find((role) => role.code === 'PASTOR')
+    if (!leaderRole || !coordinatorRole || !supervisorRole || !pastorRole) {
         throw new Error('Community role catalog was not created.')
     }
 
@@ -448,6 +451,28 @@ export async function seedMembers(prisma) {
                     create: {
                         memberId: member.id,
                         roleId: coordinatorRole.id,
+                    },
+                    update: {
+                        endedAt: null,
+                    },
+                }),
+            ),
+    )
+
+    await prisma.$transaction(
+        members
+            .filter((member) => COMMUNITY_PASTOR_CODES.has(member.code))
+            .map((member) =>
+                prisma.memberCommunityRole.upsert({
+                    where: {
+                        memberId_roleId: {
+                            memberId: member.id,
+                            roleId: pastorRole.id,
+                        },
+                    },
+                    create: {
+                        memberId: member.id,
+                        roleId: pastorRole.id,
                     },
                     update: {
                         endedAt: null,
