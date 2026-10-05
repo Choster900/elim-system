@@ -39,6 +39,8 @@ export default defineNuxtConfig({
         '~/assets/styles/themes/light/theme.css',
         '~/assets/styles/themes/dark/theme.css',
         'vue-sonner/style.css',
+        // Después de vue-sonner: adapta los toasts a la paleta del sistema.
+        '~/assets/styles/base/toast.css',
         'leaflet/dist/leaflet.css',
         // main.css is injected by @nuxtjs/tailwindcss via cssPath above
     ],
