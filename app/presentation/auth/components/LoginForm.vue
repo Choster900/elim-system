@@ -129,7 +129,6 @@ async function finishLogin(result: LoginResponse) {
         return
     }
 
-    toast.success('Inicio de sesión exitoso')
     await navigateTo(safeRedirect(result.user.permissions.map(({ code }) => code)))
 }
 
