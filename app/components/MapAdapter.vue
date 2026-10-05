@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import type { Map as LeafletMap, Marker } from 'leaflet'
-import { addLeafletRasterLayer } from '@presentation/shared/maps/leaflet-raster.adapter'
-import type { MapCoordinate, MapProviderConfig } from '@presentation/shared/maps/map-provider.types'
+import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
+import type {
+    MapCoordinate,
+    MapProviderConfig,
+} from '~/presentation/shared/maps/map-provider.types'
+import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
 
 interface MapAdapterApi {
     map: LeafletMap
