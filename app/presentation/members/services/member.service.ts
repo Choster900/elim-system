@@ -1,4 +1,5 @@
 import type { AxiosInstance } from 'axios'
+import { HTTP_BULK_TIMEOUT_MS } from '~/constants/http/http.constants'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type {
     Member,
@@ -53,9 +54,11 @@ export async function getMemberCatalogs(apiClient: AxiosInstance, signal?: Abort
 }
 
 export async function importMembers(apiClient: AxiosInstance, rows: MemberImportRequestRow[]) {
-    const response = await apiClient.post<ApiResponse<MemberImportResult>>('/members/import', {
-        rows,
-    })
+    const response = await apiClient.post<ApiResponse<MemberImportResult>>(
+        '/members/import',
+        { rows },
+        { timeout: HTTP_BULK_TIMEOUT_MS },
+    )
     if (!response.data.data) throw new Error('No fue posible importar los miembros')
     return response.data.data
 }
