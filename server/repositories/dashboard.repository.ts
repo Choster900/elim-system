@@ -9,7 +9,7 @@ export interface DashboardRepositoryFilters {
     districtId?: number
 }
 
-export function findDashboardData(filters: DashboardRepositoryFilters) {
+export async function findDashboardData(filters: DashboardRepositoryFilters) {
     const meetingWhere: Prisma.MeetingWhereInput = {
         ...(filters.sectorIds ? { sectorId: { in: filters.sectorIds } } : {}),
         ...(filters.districtId ? { sector: { zone: { districtId: filters.districtId } } } : {}),
@@ -30,83 +30,80 @@ export function findDashboardData(filters: DashboardRepositoryFilters) {
             : {}),
     }
 
-    return prisma.$transaction(async (transaction) => {
-        const [
-            offerings,
-            expectedOccurrences,
-            meetings,
-            activeMembers,
-            newMembers,
-            previousNewMembers,
-            districts,
-        ] = await Promise.all([
-            transaction.meetingOccurrence.findMany({
-                where: {
-                    status: 'RECORDED',
-                    date: { gte: filters.rangeStart, lt: filters.endExclusive },
-                    meeting: meetingWhere,
-                },
-                include: {
-                    meeting: {
-                        include: {
-                            type: true,
-                            sector: { include: { zone: { include: { district: true } } } },
-                        },
+    const [
+        offerings,
+        expectedOccurrences,
+        meetings,
+        activeMembers,
+        newMembers,
+        previousNewMembers,
+        districts,
+    ] = await Promise.all([
+        prisma.meetingOccurrence.findMany({
+            where: {
+                status: 'RECORDED',
+                date: { gte: filters.rangeStart, lt: filters.endExclusive },
+                meeting: meetingWhere,
+            },
+            include: {
+                meeting: {
+                    include: {
+                        type: true,
+                        sector: { include: { zone: { include: { district: true } } } },
                     },
-                    details: { include: { category: true } },
                 },
-                orderBy: [{ date: 'desc' }, { id: 'desc' }],
-            }),
-            // Denominador de la cobertura de registro del período.
-            transaction.meetingOccurrence.count({
-                where: {
-                    date: { gte: filters.rangeStart, lt: filters.endExclusive },
-                    meeting: meetingWhere,
-                },
-            }),
-            transaction.meeting.findMany({
-                where: {
-                    ...meetingWhere,
-                    isActive: true,
-                },
-                include: {
-                    type: true,
-                    sector: { include: { zone: { include: { district: true } } } },
-                },
-            }),
-            transaction.member.count({ where: memberWhere }),
-            transaction.member.count({
-                where: {
-                    ...memberWhere,
-                    joinedAt: { gte: filters.currentStart, lt: filters.endExclusive },
-                },
-            }),
-            transaction.member.count({
-                where: {
-                    ...memberWhere,
-                    joinedAt: { gte: filters.rangeStart, lt: filters.currentStart },
-                },
-            }),
-            transaction.district.findMany({
-                where: districtWhere,
-                select: { id: true, name: true },
-                orderBy: { name: 'asc' },
-            }),
-        ])
+                details: { include: { category: true } },
+            },
+            orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        }),
+        prisma.meetingOccurrence.count({
+            where: {
+                date: { gte: filters.rangeStart, lt: filters.endExclusive },
+                meeting: meetingWhere,
+            },
+        }),
+        prisma.meeting.findMany({
+            where: {
+                ...meetingWhere,
+                isActive: true,
+            },
+            include: {
+                type: true,
+                sector: { include: { zone: { include: { district: true } } } },
+            },
+        }),
+        prisma.member.count({ where: memberWhere }),
+        prisma.member.count({
+            where: {
+                ...memberWhere,
+                joinedAt: { gte: filters.currentStart, lt: filters.endExclusive },
+            },
+        }),
+        prisma.member.count({
+            where: {
+                ...memberWhere,
+                joinedAt: { gte: filters.rangeStart, lt: filters.currentStart },
+            },
+        }),
+        prisma.district.findMany({
+            where: districtWhere,
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        }),
+    ])
 
-        return {
-            // Una ocurrencia registrada siempre trae ambos datos; el ?? satisface al tipo.
-            offerings: offerings.map((occurrence) => ({
-                ...occurrence,
-                attendance: occurrence.attendance ?? 0,
-                totalAmount: occurrence.totalAmount ?? 0,
-            })),
-            expectedOccurrences,
-            meetings,
-            activeMembers,
-            newMembers,
-            previousNewMembers,
-            districts,
-        }
-    })
+    return {
+        // Una ocurrencia registrada siempre trae ambos datos; el ?? satisface al tipo.
+        offerings: offerings.map((occurrence) => ({
+            ...occurrence,
+            attendance: occurrence.attendance ?? 0,
+            totalAmount: occurrence.totalAmount ?? 0,
+        })),
+        expectedOccurrences,
+        meetings,
+        activeMembers,
+        newMembers,
+        previousNewMembers,
+        districts,
+    }
 }

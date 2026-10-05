@@ -267,7 +267,7 @@ export async function createMember(
 
             return serializeMember(member as MemberWithRelations)
         } catch (error) {
-            if (attempt < 2 && !requestedCode && isRetryableCodeError(error)) continue
+            if (attempt < 2 && isRetryableCodeError(error)) continue
             mapPrismaError(error)
         }
     }

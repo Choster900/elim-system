@@ -262,8 +262,9 @@ export async function findSectorSupervisors() {
     return findActiveCommunityRoleMembers('SUPERVISOR')
 }
 
+// El responsable de un distrito es su pastor; LEADER es el líder de reunión.
 export async function findTerritoryLeaders() {
-    return findActiveCommunityRoleMembers('LEADER')
+    return findActiveCommunityRoleMembers('PASTOR')
 }
 
 export async function findZoneCoordinators() {
