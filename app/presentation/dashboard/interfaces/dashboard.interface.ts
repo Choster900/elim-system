@@ -1,5 +1,10 @@
 export type DashboardPeriodDays = 30 | 90 | 365
 
+export interface DashboardDateRange {
+    startDate: string
+    endDate: string
+}
+
 export interface DashboardMetric {
     value: number
     previousValue: number
@@ -57,7 +62,8 @@ export interface DashboardUpcomingMeeting {
 export interface DashboardSummary {
     generatedAt: string
     period: {
-        days: DashboardPeriodDays
+        days: number
+        isCustom: boolean
         startDate: string
         endDate: string
         previousStartDate: string
