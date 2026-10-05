@@ -38,10 +38,10 @@ async function requireTerritoryLeader(leaderId: number) {
 
     throw createError({
         statusCode: 400,
-        message: 'El miembro seleccionado no pertenece al catálogo de líderes',
+        message: 'El miembro seleccionado no tiene el rol de pastor activo',
         data: {
             code: ApiErrorCode.VALIDATION_ERROR,
-            fields: { leaderId: ['Selecciona un líder activo'] },
+            fields: { leaderId: ['Selecciona un pastor activo'] },
         },
     })
 }

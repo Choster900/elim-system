@@ -42,7 +42,7 @@ function metric(current: number, previous: number): DashboardMetricDto {
 
 function formatTrendLabel(value: Date, periodDays: number) {
     return new Intl.DateTimeFormat('es-SV', {
-        day: periodDays === 365 ? undefined : '2-digit',
+        day: periodDays > 300 ? undefined : '2-digit',
         month: 'short',
         timeZone: 'UTC',
     })
@@ -55,8 +55,9 @@ function createTrend(
     currentStart: Date,
     periodDays: number,
 ) {
-    const buckets: DashboardTrendPointDto[] = Array.from({ length: TREND_BUCKETS }, (_, index) => {
-        const offset = Math.floor((index * periodDays) / TREND_BUCKETS)
+    const bucketCount = Math.min(TREND_BUCKETS, periodDays)
+    const buckets: DashboardTrendPointDto[] = Array.from({ length: bucketCount }, (_, index) => {
+        const offset = Math.floor((index * periodDays) / bucketCount)
         const bucketDate = addUtcDays(currentStart, offset)
         return {
             key: toIsoDate(bucketDate),
@@ -73,8 +74,8 @@ function createTrend(
             Math.floor((startOfUtcDay(offering.date).getTime() - currentStart.getTime()) / DAY_MS),
         )
         const bucketIndex = Math.min(
-            TREND_BUCKETS - 1,
-            Math.floor((dayOffset * TREND_BUCKETS) / periodDays),
+            bucketCount - 1,
+            Math.floor((dayOffset * bucketCount) / periodDays),
         )
         const bucket = buckets[bucketIndex]
         if (!bucket) continue
@@ -206,9 +207,16 @@ export async function getDashboardSummary(
     now = new Date(),
 ): Promise<DashboardSummaryDto> {
     const today = startOfUtcDay(now)
-    const endExclusive = addUtcDays(today, 1)
-    const currentStart = addUtcDays(endExclusive, -query.periodDays)
-    const previousStart = addUtcDays(currentStart, -query.periodDays)
+    const isCustom = Boolean(query.startDate && query.endDate)
+    const endExclusive = isCustom
+        ? addUtcDays(new Date(`${query.endDate}T00:00:00Z`), 1)
+        : addUtcDays(today, 1)
+    const currentStart = isCustom
+        ? new Date(`${query.startDate}T00:00:00Z`)
+        : addUtcDays(endExclusive, -query.periodDays)
+    const periodDays = Math.round((endExclusive.getTime() - currentStart.getTime()) / DAY_MS)
+    // El período de comparación tiene la misma duración y termina justo antes del actual.
+    const previousStart = addUtcDays(currentStart, -periodDays)
     const data = await findDashboardData({
         rangeStart: previousStart,
         currentStart,
@@ -253,9 +261,10 @@ export async function getDashboardSummary(
     return {
         generatedAt: now.toISOString(),
         period: {
-            days: query.periodDays,
+            days: periodDays,
+            isCustom,
             startDate: toIsoDate(currentStart),
-            endDate: toIsoDate(today),
+            endDate: toIsoDate(addUtcDays(endExclusive, -1)),
             previousStartDate: toIsoDate(previousStart),
             previousEndDate: toIsoDate(addUtcDays(currentStart, -1)),
         },
@@ -286,7 +295,7 @@ export async function getDashboardSummary(
                     : 0,
             pendingOccurrences: Math.max(0, data.expectedOccurrences - data.offerings.length),
         },
-        trends: createTrend(currentOfferings, currentStart, query.periodDays),
+        trends: createTrend(currentOfferings, currentStart, periodDays),
         categoryDistribution: buildCategoryDistribution(currentOfferings),
         districtPerformance: [...districtTotals]
             .map(([id, district]) => ({
