@@ -658,7 +658,12 @@ function resolveWeekday(value: ExcelValue, issues: string[]) {
     return null
 }
 
-function meetingKey(input: MeetingInput) {
+type MeetingKeyFields = Pick<
+    MeetingInput,
+    'sectorId' | 'typeId' | 'leaderId' | 'title' | 'date' | 'startTime' | 'endTime'
+>
+
+function meetingKey(input: MeetingKeyFields) {
     return [
         input.sectorId,
         input.typeId,
@@ -737,7 +742,7 @@ export async function parseMeetingsWorkbook(
             catalogs.meetingTypes,
             'Tipo',
             issues,
-            (item) => item.code,
+            (item) => item.codeSegment,
             (item) => item.name,
         )
         const sector = resolveCatalogItem(
