@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, type QueryKey } from '@tanstack/vue-query'
 import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import type { OccurrenceFilters } from '../interfaces/occurrence.interface'
@@ -16,11 +16,12 @@ export function usePendingOccurrencesQuery(
     options: { autoRefresh?: boolean; includeUnfinished?: boolean } = {},
 ) {
     const apiClient = useApiClient()
+    const queryKey: QueryKey = options.includeUnfinished
+        ? queryKeys.occurrences.pendingForCapture
+        : queryKeys.occurrences.pending
 
     return useQuery({
-        queryKey: options.includeUnfinished
-            ? queryKeys.occurrences.pendingForCapture
-            : queryKeys.occurrences.pending,
+        queryKey,
         queryFn: ({ signal }) =>
             getPendingOccurrences(apiClient, signal, {
                 includeUnfinished: options.includeUnfinished,
