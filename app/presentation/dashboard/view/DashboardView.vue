@@ -18,7 +18,9 @@ import {
 import DashboardDonutChart from '~/presentation/dashboard/components/DashboardDonutChart.vue'
 import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
 import { useDashboardQuery } from '~/presentation/dashboard/composables/useDashboardQuery'
+import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import type {
+    DashboardDateRange,
     DashboardMetric,
     DashboardPeriodDays,
 } from '~/presentation/dashboard/interfaces/dashboard.interface'
@@ -39,7 +41,21 @@ const authStore = useAuthStore()
 const toast = useAppToast()
 const selectedPeriod = ref<DashboardPeriodDays>(30)
 const selectedDistrictId = ref<number | null>(null)
-const dashboardQuery = useDashboardQuery(selectedPeriod, selectedDistrictId)
+const customRange = ref<DatePickerRange>({ start: null, end: null })
+const DASHBOARD_MAX_RANGE_DAYS = 731
+const isRangeTooLong = computed(() => {
+    const { start, end } = customRange.value
+    if (!start || !end) return false
+    const days = (Date.parse(end) - Date.parse(start)) / 86_400_000 + 1
+    return days > DASHBOARD_MAX_RANGE_DAYS
+})
+// Solo se consulta cuando el rango está completo; mientras tanto sigue el período rápido.
+const appliedRange = computed<DashboardDateRange | null>(() => {
+    const { start, end } = customRange.value
+    if (!start || !end || isRangeTooLong.value) return null
+    return { startDate: start, endDate: end }
+})
+const dashboardQuery = useDashboardQuery(selectedPeriod, selectedDistrictId, appliedRange)
 const summary = computed(() => dashboardQuery.data.value ?? null)
 const isLoading = computed(() => dashboardQuery.isPending.value)
 const isRefreshing = computed(() => dashboardQuery.isFetching.value && !isLoading.value)
@@ -59,7 +75,7 @@ const tourSteps: TourStep[] = [
         target: '[data-tour="dashboard-period"]',
         title: 'Elige el período',
         description:
-            'Consulta los últimos 30 o 90 días, o los últimos 12 meses. Puedes actualizar los datos aquí.',
+            'Consulta los últimos 30 o 90 días, los últimos 12 meses o elige un rango de fechas exacto.',
     },
     {
         id: 'district-filter',
@@ -155,6 +171,14 @@ const periodOptions: Array<{ value: DashboardPeriodDays; label: string }> = [
     { value: 90, label: '90 días' },
     { value: 365, label: '12 meses' },
 ]
+
+const filterLabelClass =
+    'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
+
+function selectPeriod(period: DashboardPeriodDays) {
+    selectedPeriod.value = period
+    customRange.value = { start: null, end: null }
+}
 const districtOptions = computed(
     () =>
         summary.value?.filters.districts.map((district) => ({
@@ -192,14 +216,12 @@ const hasQuickActions = computed(
     () => canCreateMembers.value || canManageMeetings.value || canManageFinance.value,
 )
 
-if (import.meta.server) {
-    onServerPrefetch(() =>
-        dashboardQuery
-            .suspense()
-            .then(() => undefined)
-            .catch(() => undefined),
-    )
-}
+onServerPrefetch(() =>
+    dashboardQuery
+        .suspense()
+        .then(() => undefined)
+        .catch(() => undefined),
+)
 
 if (import.meta.client) {
     watch(
@@ -316,10 +338,7 @@ function openMeeting(id: number) {
                 <TerritoryAssignment :territory="authStore.user?.territoryAssignment" />
             </div>
 
-            <div
-                data-tour="dashboard-period"
-                class="flex flex-col gap-3 sm:flex-row sm:items-center"
-            >
+            <div class="flex items-center gap-3">
                 <div class="group relative">
                     <button
                         type="button"
@@ -345,25 +364,9 @@ function openMeeting(id: number) {
                         </p>
                     </div>
                 </div>
-                <div class="inline-flex rounded-lg border border-outline-variant bg-surface p-1">
-                    <button
-                        v-for="period in periodOptions"
-                        :key="period.value"
-                        type="button"
-                        :class="[
-                            'rounded-md px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors',
-                            selectedPeriod === period.value
-                                ? 'bg-primary text-primary-foreground shadow-sm'
-                                : 'text-on-surface-variant hover:bg-surface-container',
-                        ]"
-                        @click="selectedPeriod = period.value"
-                    >
-                        {{ period.label }}
-                    </button>
-                </div>
                 <button
                     type="button"
-                    class="flex size-10 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                    class="flex size-10 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
                     aria-label="Actualizar dashboard"
                     :disabled="dashboardQuery.isFetching.value"
                     @click="dashboardQuery.refetch()"
@@ -374,20 +377,57 @@ function openMeeting(id: number) {
         </header>
 
         <section
-            v-if="districtOptions.length > 1"
-            data-tour="dashboard-district-filter"
-            class="mt-6 flex flex-col gap-3 rounded-xl border border-outline-variant bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+            class="mt-6 flex flex-col gap-4 rounded-xl border border-outline-variant bg-surface-container-low p-4 sm:p-5 lg:flex-row lg:items-end"
+            aria-label="Filtros del dashboard"
         >
-            <div>
-                <p class="text-xs font-semibold uppercase tracking-wider text-on-surface">
-                    Alcance territorial
-                </p>
-                <p class="mt-1 text-xs text-on-surface-variant">
-                    Los indicadores de reuniones y ofrendas se recalculan para el distrito
-                    seleccionado.
-                </p>
+            <div
+                data-tour="dashboard-period"
+                class="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end lg:flex-1"
+            >
+                <div class="shrink-0">
+                    <span :class="filterLabelClass">Período</span>
+                    <div
+                        class="flex h-11 items-center gap-1 rounded-lg border border-outline-variant bg-surface p-1"
+                    >
+                        <button
+                            v-for="period in periodOptions"
+                            :key="period.value"
+                            type="button"
+                            :class="[
+                                'h-full flex-1 whitespace-nowrap rounded-md px-3.5 text-[11px] font-semibold uppercase tracking-wider transition-colors sm:flex-none',
+                                !appliedRange && selectedPeriod === period.value
+                                    ? 'bg-primary text-primary-foreground shadow-sm'
+                                    : 'text-on-surface-variant hover:bg-surface-container',
+                            ]"
+                            :aria-pressed="!appliedRange && selectedPeriod === period.value"
+                            @click="selectPeriod(period.value)"
+                        >
+                            {{ period.label }}
+                        </button>
+                    </div>
+                </div>
+                <div class="relative min-w-0 flex-1">
+                    <span :class="filterLabelClass">Rango personalizado</span>
+                    <UiDatePicker
+                        v-model="customRange"
+                        mode="range"
+                        placeholder="Elige fecha inicial y final"
+                        :invalid="isRangeTooLong"
+                    />
+                    <p
+                        v-if="isRangeTooLong"
+                        class="mt-1 text-[11px] text-destructive lg:absolute lg:top-full"
+                    >
+                        El rango no puede superar {{ DASHBOARD_MAX_RANGE_DAYS }} días.
+                    </p>
+                </div>
             </div>
-            <div class="w-full sm:w-72">
+            <div
+                v-if="districtOptions.length > 1"
+                data-tour="dashboard-district-filter"
+                class="min-w-0 lg:w-72 lg:flex-none"
+            >
+                <span :class="filterLabelClass">Distrito</span>
                 <UiSearchSelect
                     v-model="selectedDistrictId"
                     :options="districtOptions"
