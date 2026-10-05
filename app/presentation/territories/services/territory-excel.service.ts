@@ -6,43 +6,52 @@ import type {
     TerritoryLevel,
     TerritorySupervisorOption,
 } from '../interfaces/territory.interface'
+import { territoryColorCatalog } from '../constants/territory.constants'
+import { contrastColor, normalizeHexColor } from '~/utils/color/color.util'
 import { createTerritoryEntity } from './territory.service'
 
 type ExcelValue = string | number | boolean | Date | null | undefined
 type ExcelOutputCell = ExcelValue | Record<string, unknown>
 
-const DISTRICT_HEADERS = [
-    'Referencia *',
-    'Nombre *',
-    'Pastor',
-    'Descripción',
-    'Dirección general',
-    'Color',
-    'Estado',
-    'Polígono',
-] as const
-const ZONE_HEADERS = [
-    'Referencia *',
-    'Distrito *',
-    'Nombre *',
-    'Coordinador',
-    'Descripción',
-    'Dirección general',
-    'Color',
-    'Estado',
-    'Polígono',
-] as const
-const SECTOR_HEADERS = [
-    'Referencia *',
-    'Zona *',
-    'Nombre *',
-    'Supervisor',
-    'Descripción',
-    'Dirección general',
-    'Color',
-    'Estado',
-    'Polígono',
-] as const
+type SheetColumn = readonly [header: string, width: number]
+
+const DISTRICT_COLUMNS = [
+    ['Referencia *', 24],
+    ['Nombre *', 34],
+    ['Pastor', 30],
+    ['Descripción', 44],
+    ['Dirección general', 44],
+    ['Color', 14],
+    ['Estado', 14],
+    ['Polígono', 74],
+] as const satisfies readonly SheetColumn[]
+const ZONE_COLUMNS = [
+    ['Referencia *', 24],
+    ['Distrito *', 24],
+    ['Nombre *', 34],
+    ['Coordinador', 30],
+    ['Descripción', 44],
+    ['Dirección general', 44],
+    ['Color', 14],
+    ['Estado', 14],
+    ['Polígono', 74],
+] as const satisfies readonly SheetColumn[]
+const SECTOR_COLUMNS = [
+    ['Referencia *', 24],
+    ['Zona *', 24],
+    ['Nombre *', 34],
+    ['Supervisor', 30],
+    ['Descripción', 44],
+    ['Dirección general', 44],
+    ['Color', 14],
+    ['Estado', 14],
+    ['Polígono', 74],
+] as const satisfies readonly SheetColumn[]
+
+const headersOf = (columns: readonly SheetColumn[]) => columns.map(([header]) => header)
+const DISTRICT_HEADERS = headersOf(DISTRICT_COLUMNS)
+const ZONE_HEADERS = headersOf(ZONE_COLUMNS)
+const SECTOR_HEADERS = headersOf(SECTOR_COLUMNS)
 
 const LEVEL_SHEET: Record<TerritoryLevel, string> = {
     distrito: 'Distritos',
@@ -148,18 +157,26 @@ function formatPolygon(polygon: TerritoryInput['polygon']) {
     return polygon.map(([latitude, longitude]) => `${latitude},${longitude}`).join(' | ')
 }
 
+// La celda de color se pinta con su propio color para que se vea en el Excel.
+function colorSwatch(value: ExcelValue) {
+    const color = normalizeHexColor(text(value))
+    return color ? { backgroundColor: color.toUpperCase(), textColor: contrastColor(color) } : {}
+}
+
 function territorySheet(
     sheet: string,
-    headers: readonly string[],
+    columns: readonly SheetColumn[],
     rows: ExcelValue[][],
-    widths: number[],
     failureReasons?: string[],
 ) {
-    const outputHeaders = failureReasons ? [...headers, 'Motivo del rechazo'] : [...headers]
+    const headers = headersOf(columns)
+    const colorIndex = headers.indexOf('Color')
+    const outputHeaders = failureReasons ? [...headers, 'Motivo del rechazo'] : headers
     const dataRows = rows.map((row, index) => {
         const values = failureReasons ? [...row, failureReasons[index] ?? ''] : row
         return values.map((value, columnIndex) => ({
             ...bodyCell(value, index % 2 === 1),
+            ...(columnIndex === colorIndex ? colorSwatch(value) : {}),
             ...(failureReasons && columnIndex === values.length - 1
                 ? { textColor: '#B42318', backgroundColor: '#FEF3F2' }
                 : {}),
@@ -172,7 +189,9 @@ function territorySheet(
             ...dataRows,
         ] as never[][],
         sheet,
-        columns: [...widths, ...(failureReasons ? [58] : [])].map((width) => ({ width })),
+        columns: [...columns.map(([, width]) => width), ...(failureReasons ? [58] : [])].map(
+            (width) => ({ width }),
+        ),
         stickyRowsCount: 1,
         stickyColumnsCount: sheet === 'Distritos' ? 1 : 2,
         showGridLines: false,
@@ -217,7 +236,7 @@ function instructionsSheet() {
         [
             'Distrito / Zona',
             'Sí',
-            'Usa la referencia de una fila del mismo archivo o el código de un registro que ya existe.',
+            'Usa la referencia de una fila del mismo archivo o el código de un registro que ya existe. Los códigos existentes están en las pestañas Distritos existentes y Zonas existentes.',
             'DISTRITO-NORTE o DIS-001',
         ],
         [
@@ -229,7 +248,7 @@ function instructionsSheet() {
         [
             'Color',
             'No',
-            'Color hexadecimal. Si queda vacío se aplicará el color predeterminado del nivel.',
+            'Color hexadecimal, con o sin #. Puedes copiar uno de la pestaña Colores sugeridos. Si queda vacío se aplicará el color predeterminado del nivel.',
             '#E9C176',
         ],
         ['Estado', 'No', 'Admite Activo o Inactivo. Si queda vacío se usará Activo.', 'Activo'],
@@ -245,6 +264,12 @@ function instructionsSheet() {
             'Solo crea registros nuevos. Antes de guardar verás las filas válidas y los errores que debes corregir.',
             'No cambia registros existentes',
         ],
+        [
+            'Archivo de Exportar',
+            '—',
+            'El archivo que genera Exportar es un reporte: sus referencias son códigos que ya existen y serían rechazadas. Para importar, parte de esta plantilla.',
+            'Usa Descargar plantilla',
+        ],
     ]
 
     return {
@@ -256,102 +281,186 @@ function instructionsSheet() {
     }
 }
 
+// Hoja de consulta: título, nota, encabezados y filas. Si no hay filas muestra el aviso vacío.
+function catalogSheet(
+    sheet: string,
+    title: string,
+    note: string,
+    columns: readonly SheetColumn[],
+    rows: ExcelOutputCell[][],
+    emptyMessage: string,
+) {
+    const span = columns.length
+    const fullWidth = (cell: Record<string, unknown>) => [
+        { ...cell, columnSpan: span },
+        ...Array.from({ length: span - 1 }, () => null),
+    ]
+    const body = rows.length
+        ? rows.map((row, index) =>
+              row.map((value) =>
+                  value !== null && typeof value === 'object' && !(value instanceof Date)
+                      ? { ...bodyCell(null, index % 2 === 1), ...value }
+                      : bodyCell(value as ExcelValue, index % 2 === 1),
+              ),
+          )
+        : [fullWidth({ value: emptyMessage, textColor: '#655D58', fontStyle: 'italic' })]
+
+    return {
+        data: [
+            fullWidth({
+                value: title,
+                fontWeight: 'bold',
+                fontSize: 17,
+                textColor: '#FFFFFF',
+                backgroundColor: '#6B4F3A',
+            }),
+            fullWidth({
+                value: note,
+                textColor: '#655D58',
+                backgroundColor: '#F7EFE3',
+                wrap: true,
+            }),
+            columns.map(([header]) => titleCell(header)),
+            ...body,
+        ] as never[][],
+        sheet,
+        columns: columns.map(([, width]) => ({ width })),
+        stickyRowsCount: 3,
+        showGridLines: false,
+    }
+}
+
 function roleCatalogSheet(
     sheet: string,
     title: string,
     columnLabel: string,
     members: TerritoryLeaderOption[] | TerritorySupervisorOption[],
 ) {
-    const rows = members.map((member) => [member.code, member.fullName, member.email, member.phone])
-
-    return {
-        data: [
-            [
-                {
-                    value: title,
-                    fontWeight: 'bold',
-                    fontSize: 17,
-                    textColor: '#FFFFFF',
-                    backgroundColor: '#6B4F3A',
-                    columnSpan: 4,
-                },
-                null,
-                null,
-                null,
-            ],
-            [
-                {
-                    value: `Copia el código del miembro en la columna ${columnLabel}.`,
-                    textColor: '#655D58',
-                    backgroundColor: '#F7EFE3',
-                    columnSpan: 4,
-                    wrap: true,
-                },
-                null,
-                null,
-                null,
-            ],
-            ['Código', 'Nombre', 'Correo', 'Teléfono'].map((header) => titleCell(header)),
-            ...rows.map((row, index) => row.map((value) => bodyCell(value, index % 2 === 1))),
-        ] as never[][],
+    return catalogSheet(
         sheet,
-        columns: [{ width: 22 }, { width: 42 }, { width: 34 }, { width: 22 }],
-        stickyRowsCount: 3,
-        showGridLines: false,
-    }
+        title,
+        `Copia el código del miembro en la columna ${columnLabel}.`,
+        [
+            ['Código', 22],
+            ['Nombre', 42],
+            ['Correo', 34],
+            ['Teléfono', 22],
+        ],
+        members.map((member) => [member.code, member.fullName, member.email, member.phone]),
+        'No hay miembros activos con este rol. Asígnalo desde Comunidad › Miembros.',
+    )
+}
+
+function existingDistrictsSheet(hierarchy: TerritoryHierarchy | null) {
+    return catalogSheet(
+        'Distritos existentes',
+        'Distritos registrados en el sistema',
+        'Usa el código en la columna Distrito * de la pestaña Zonas para colgar una zona de un distrito que ya existe.',
+        [
+            ['Código', 18],
+            ['Nombre', 40],
+            ['Estado', 14],
+            ['Color', 14],
+        ],
+        (hierarchy?.districts ?? []).map((district) => [
+            district.code,
+            district.name,
+            district.isActive ? 'Activo' : 'Inactivo',
+            { value: district.color, ...colorSwatch(district.color) },
+        ]),
+        'Aún no hay distritos registrados.',
+    )
+}
+
+function existingZonesSheet(hierarchy: TerritoryHierarchy | null) {
+    const districtById = new Map((hierarchy?.districts ?? []).map((d) => [d.id, d]))
+    return catalogSheet(
+        'Zonas existentes',
+        'Zonas registradas en el sistema',
+        'Usa el código en la columna Zona * de la pestaña Sectores para colgar un sector de una zona que ya existe.',
+        [
+            ['Código', 18],
+            ['Nombre', 36],
+            ['Distrito', 36],
+            ['Estado', 14],
+        ],
+        (hierarchy?.zones ?? []).map((zone) => {
+            const district = districtById.get(zone.districtId)
+            return [
+                zone.code,
+                zone.name,
+                district ? `${district.code} · ${district.name}` : '',
+                zone.isActive ? 'Activo' : 'Inactivo',
+            ]
+        }),
+        'Aún no hay zonas registradas.',
+    )
+}
+
+function colorCatalogSheet() {
+    return catalogSheet(
+        'Colores sugeridos',
+        'Colores sugeridos',
+        'Copia el código en la columna Color. También puedes usar cualquier otro hexadecimal.',
+        [
+            ['Muestra', 14],
+            ['Código', 16],
+        ],
+        territoryColorCatalog.map((color) => [
+            { value: '', backgroundColor: color.toUpperCase() },
+            color.toUpperCase(),
+        ]),
+        '',
+    )
+}
+
+/** Hojas del libro; separado de la escritura para poder verificarlo sin navegador. */
+export function buildTerritoryWorkbookSheets(
+    rows: WorkbookRows,
+    roleCatalogs: TerritoryRoleCatalogs,
+    hierarchy: TerritoryHierarchy | null,
+    failureReasons?: WorkbookFailureReasons,
+) {
+    return [
+        instructionsSheet(),
+        territorySheet('Distritos', DISTRICT_COLUMNS, rows.districts, failureReasons?.districts),
+        territorySheet('Zonas', ZONE_COLUMNS, rows.zones, failureReasons?.zones),
+        territorySheet('Sectores', SECTOR_COLUMNS, rows.sectors, failureReasons?.sectors),
+        roleCatalogSheet(
+            'Pastores',
+            'Pastores disponibles para distritos',
+            'Pastor de la pestaña Distritos',
+            roleCatalogs.leaders,
+        ),
+        roleCatalogSheet(
+            'Coordinadores',
+            'Coordinadores disponibles para zonas',
+            'Coordinador de la pestaña Zonas',
+            roleCatalogs.coordinators,
+        ),
+        roleCatalogSheet(
+            'Supervisores',
+            'Supervisores disponibles para sectores',
+            'Supervisor de la pestaña Sectores',
+            roleCatalogs.supervisors,
+        ),
+        existingDistrictsSheet(hierarchy),
+        existingZonesSheet(hierarchy),
+        colorCatalogSheet(),
+    ]
 }
 
 async function writeTerritoryWorkbook(
     rows: WorkbookRows,
     roleCatalogs: TerritoryRoleCatalogs,
+    hierarchy: TerritoryHierarchy | null,
     filename: string,
     failureReasons?: WorkbookFailureReasons,
 ) {
     const { default: writeExcelFile } = await import('write-excel-file/browser')
 
     await writeExcelFile(
-        [
-            instructionsSheet(),
-            territorySheet(
-                'Distritos',
-                DISTRICT_HEADERS,
-                rows.districts,
-                [24, 34, 30, 44, 16, 16, 74],
-                failureReasons?.districts,
-            ),
-            territorySheet(
-                'Zonas',
-                ZONE_HEADERS,
-                rows.zones,
-                [24, 24, 34, 30, 44, 16, 16, 74],
-                failureReasons?.zones,
-            ),
-            territorySheet(
-                'Sectores',
-                SECTOR_HEADERS,
-                rows.sectors,
-                [24, 24, 34, 24, 44, 16, 16, 74],
-                failureReasons?.sectors,
-            ),
-            roleCatalogSheet(
-                'Pastores',
-                'Pastores disponibles para distritos',
-                'Pastor de la pestaña Distritos',
-                roleCatalogs.leaders,
-            ),
-            roleCatalogSheet(
-                'Coordinadores',
-                'Coordinadores disponibles para zonas',
-                'Coordinador de la pestaña Zonas',
-                roleCatalogs.coordinators,
-            ),
-            roleCatalogSheet(
-                'Supervisores',
-                'Supervisores disponibles para sectores',
-                'Supervisor de la pestaña Sectores',
-                roleCatalogs.supervisors,
-            ),
-        ],
+        buildTerritoryWorkbookSheets(rows, roleCatalogs, hierarchy, failureReasons),
         { fontFamily: 'Arial', fontSize: 10 },
     ).toFile(filename)
 }
@@ -410,14 +519,19 @@ export function exportTerritoriesWorkbook(
     return writeTerritoryWorkbook(
         hierarchyRows(hierarchy, roleCatalogs),
         roleCatalogs,
+        hierarchy,
         `territorios-${new Date().toISOString().slice(0, 10)}.xlsx`,
     )
 }
 
-export function downloadTerritoryTemplate(roleCatalogs: TerritoryRoleCatalogs) {
+export function downloadTerritoryTemplate(
+    roleCatalogs: TerritoryRoleCatalogs,
+    hierarchy: TerritoryHierarchy | null,
+) {
     return writeTerritoryWorkbook(
         { districts: [], zones: [], sectors: [] },
         roleCatalogs,
+        hierarchy,
         'plantilla-importacion-territorial.xlsx',
     )
 }
@@ -447,12 +561,20 @@ function parseStatus(value: ExcelValue, issues: string[]) {
 }
 
 function parseColor(value: ExcelValue, level: TerritoryLevel, issues: string[]) {
-    const color = text(value) || DEFAULT_COLORS[level]
-    if (!/^#[0-9a-f]{6}$/i.test(color)) {
+    const raw = text(value)
+    if (!raw) return DEFAULT_COLORS[level]
+    // Acepta con o sin #, como suele quedar al copiar un color en Excel.
+    const color = normalizeHexColor(raw)
+    if (!color) {
         issues.push('Color: debe tener formato hexadecimal, por ejemplo #E9C176.')
         return DEFAULT_COLORS[level]
     }
-    return color.toLowerCase()
+    return color
+}
+
+// "Referencia", "Referencia *" y "referencia*" cuentan como el mismo encabezado.
+function normalizeHeader(value: string) {
+    return normalize(value).replace(/\*/g, '').replace(/\s+/g, ' ').trim()
 }
 
 function parsePolygon(value: ExcelValue, issues: string[]): TerritoryInput['polygon'] {
@@ -519,30 +641,28 @@ function findRoleMember(
     return matches[0]!
 }
 
-async function readTerritorySheet(
-    file: File,
+function parseTerritorySheetRows(
+    excelRows: ExcelValue[][],
     sheet: string,
     headers: readonly string[],
     level: TerritoryLevel,
     roleCatalogs: TerritoryRoleCatalogs,
 ) {
-    const { readSheet } = await import('read-excel-file/browser')
-    const excelRows = (await readSheet(file, sheet)) as ExcelValue[][]
     if (!excelRows.length) return []
 
     const headerIndexes = new Map(
-        excelRows[0]!.map((cell, index) => [normalize(text(cell)), index]),
+        excelRows[0]!.map((cell, index) => [normalizeHeader(text(cell)), index]),
     )
     const requiredHeaders = headers.filter((header) => header.endsWith('*'))
     const missingHeaders = requiredHeaders.filter(
-        (header) => headerIndexes.get(normalize(header)) == null,
+        (header) => headerIndexes.get(normalizeHeader(header)) == null,
     )
     if (missingHeaders.length) {
         throw new Error(`${sheet}: faltan columnas obligatorias: ${missingHeaders.join(', ')}.`)
     }
 
     const value = (row: ExcelValue[], header: string) => {
-        const index = headerIndexes.get(normalize(header))
+        const index = headerIndexes.get(normalizeHeader(header))
         return index == null ? null : row[index]
     }
 
@@ -700,6 +820,20 @@ export async function parseTerritoriesWorkbook(
         }
     }
 
+    const { readSheet } = await import('read-excel-file/browser')
+    return buildTerritoryImportPreview(
+        async (sheet) => (await readSheet(file, sheet)) as ExcelValue[][],
+        hierarchy,
+        roleCatalogs,
+    )
+}
+
+/** Valida las hojas leídas; recibe el lector para poder probarlo sin navegador. */
+export async function buildTerritoryImportPreview(
+    readRows: (sheet: string) => Promise<ExcelValue[][]>,
+    hierarchy: TerritoryHierarchy,
+    roleCatalogs: TerritoryRoleCatalogs,
+): Promise<TerritoryImportPreview> {
     const preview: TerritoryImportPreview = {
         districts: [],
         zones: [],
@@ -714,7 +848,13 @@ export async function parseTerritoriesWorkbook(
 
     for (const [target, sheet, headers, level] of sheets) {
         try {
-            const rows = await readTerritorySheet(file, sheet, headers, level, roleCatalogs)
+            const rows = parseTerritorySheetRows(
+                await readRows(sheet),
+                sheet,
+                headers,
+                level,
+                roleCatalogs,
+            )
             if (target === 'distritos') preview.districts = rows
             if (target === 'zones') preview.zones = rows
             if (target === 'sectors') preview.sectors = rows
@@ -848,6 +988,7 @@ export function downloadTerritoryImportFailures(
     failures: TerritoryImportFailure[],
     roleCatalogs: TerritoryRoleCatalogs,
     result?: TerritoryImportResult | null,
+    hierarchy: TerritoryHierarchy | null = null,
 ) {
     const failureByRow = new Map(
         failures.map((failure) => [
@@ -877,6 +1018,7 @@ export function downloadTerritoryImportFailures(
             sectors: sectors.map((row) => replaceParent(row, result?.resolvedZoneCodes)),
         },
         roleCatalogs,
+        hierarchy,
         `territorios-pendientes-${new Date().toISOString().slice(0, 10)}.xlsx`,
         {
             districts: districts.map(
