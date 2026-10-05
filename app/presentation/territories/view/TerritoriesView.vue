@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
     AlertTriangle,
+    ChevronRight,
     Compass,
     Download,
     ExternalLink,
@@ -283,6 +284,7 @@ const formMode = ref<'create' | 'edit'>('create')
 const formEntity = ref<TerritoryInput | null>(null)
 const formParentCentroid = ref<LatLng | null>(null)
 const formParentLabel = ref<string | null>(null)
+const formUsedColors = ref<string[]>([])
 let formEditId: string | null = null
 let formParentDistrictId: string | null = null
 let formParentZoneId: string | null = null
@@ -338,19 +340,17 @@ watch(
     { immediate: true },
 )
 
-if (import.meta.server) {
-    onServerPrefetch(async () => {
-        await Promise.allSettled([
-            hierarchyQuery.suspense(),
-            meetingsQuery.suspense(),
-            leadersQuery.suspense(),
-            coordinatorsQuery.suspense(),
-            supervisorsQuery.suspense(),
-        ])
-        const hierarchy = hierarchyQuery.data.value
-        if (hierarchy) synchronizeSelection(hierarchy)
-    })
-}
+onServerPrefetch(async () => {
+    await Promise.allSettled([
+        hierarchyQuery.suspense(),
+        meetingsQuery.suspense(),
+        leadersQuery.suspense(),
+        coordinatorsQuery.suspense(),
+        supervisorsQuery.suspense(),
+    ])
+    const hierarchy = hierarchyQuery.data.value
+    if (hierarchy) synchronizeSelection(hierarchy)
+})
 
 if (import.meta.client) {
     watch(
@@ -457,7 +457,10 @@ async function exportExcel() {
 async function downloadTemplate() {
     downloadingTemplate.value = true
     try {
-        await downloadTerritoryTemplate(territoryRoleCatalogs.value)
+        await downloadTerritoryTemplate(
+            territoryRoleCatalogs.value,
+            hierarchyQuery.data.value ?? null,
+        )
         toast.success('Plantilla territorial descargada')
     } catch {
         toast.error('No fue posible generar la plantilla territorial.')
@@ -547,6 +550,7 @@ async function downloadPendingTerritories() {
             failures,
             territoryRoleCatalogs.value,
             importResult.value,
+            hierarchyQuery.data.value ?? null,
         )
         toast.success('Archivo de territorios pendientes descargado')
     } catch {
@@ -577,6 +581,7 @@ async function confirmTerritoryImport() {
                 failures,
                 territoryRoleCatalogs.value,
                 result,
+                hierarchyQuery.data.value ?? null,
             )
             toast.warning(
                 `${result.createdDistricts + result.createdZones + result.createdSectors} registros creados y ${failures.length} pendientes. Se descargó el archivo de corrección.`,
@@ -827,8 +832,33 @@ const crumbs = computed(() => {
 })
 
 // ===== selection =====
+// En móvil solo cabe una columna: se muestra la que el usuario está recorriendo.
+const LEVEL_ORDER: Level[] = ['distrito', 'zona', 'sector', 'reunion']
+const mobileLevel = ref<Level>('distrito')
+const mobileSteps = computed(() =>
+    columns.value.map((col) => ({
+        level: col.level,
+        label: col.label,
+        count: col.count,
+        enabled:
+            col.level === 'distrito' ||
+            (col.level === 'zona' && !!selD.value) ||
+            (col.level === 'sector' && !!selZ.value) ||
+            (col.level === 'reunion' && !!selS.value),
+    })),
+)
+
+// Si se borra o mueve lo seleccionado, regresa al último nivel que sigue disponible.
+watch(mobileSteps, (steps) => {
+    if (steps.find((step) => step.level === mobileLevel.value)?.enabled) return
+    mobileLevel.value = [...steps].reverse().find((step) => step.enabled)?.level ?? 'distrito'
+})
+
 function select(level: Level, id: string) {
     closeMenu()
+    if (level !== 'reunion') {
+        mobileLevel.value = LEVEL_ORDER[LEVEL_ORDER.indexOf(level) + 1] ?? level
+    }
     if (level === 'distrito') {
         selD.value = id
         selZ.value = null
@@ -853,6 +883,7 @@ function clearSelection() {
     selS.value = null
     selM.value = null
     drawer.value = null
+    mobileLevel.value = 'distrito'
 }
 
 // ===== context menu =====
@@ -1207,6 +1238,14 @@ function openCreate(level: EntityLevel) {
         formParentCentroid.value = centroid(z.polygon)
         formParentLabel.value = d ? `${d.name} · ${z.name}` : z.name
     }
+    // Colores de los hermanos: el formulario sugiere uno que todavía no se use.
+    formUsedColors.value = (
+        level === 'distrito'
+            ? districts.value
+            : level === 'zona'
+              ? zonesOf(formParentDistrictId ?? '')
+              : sectorsOf(formParentZoneId ?? '')
+    ).map((item) => item.color)
     formOpen.value = true
 }
 
@@ -1535,7 +1574,7 @@ onBeforeUnmount(() => {
         <!-- Toolbar: breadcrumb, totals, search -->
         <div
             data-tour="territories-summary"
-            class="flex flex-none flex-col gap-3 border-b border-outline-variant bg-surface-container px-6 py-3.5 lg:flex-row lg:items-center lg:px-10"
+            class="flex flex-none flex-col gap-3 border-b border-outline-variant bg-surface-container px-4 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:px-10"
         >
             <div>
                 <p
@@ -1649,7 +1688,7 @@ onBeforeUnmount(() => {
                     </UiButton>
                 </div>
                 <div
-                    class="flex items-center gap-2 rounded-full border border-outline-variant bg-surface px-4 py-2 sm:w-72"
+                    class="flex w-full items-center gap-2 rounded-full border border-outline-variant bg-surface px-4 py-2 sm:w-72"
                 >
                     <Search class="size-4 shrink-0 text-on-surface-variant" />
                     <input
@@ -1673,10 +1712,57 @@ onBeforeUnmount(() => {
 
         <div
             v-if="catalogLoading"
-            class="flex min-h-0 flex-1 items-center justify-center gap-3 bg-surface text-sm text-on-surface-variant"
+            class="flex min-h-0 flex-1 bg-surface"
+            role="status"
+            aria-busy="true"
+            aria-label="Cargando distritos, zonas, sectores y reuniones"
         >
-            <LoaderCircle class="size-5 animate-spin text-primary" />
-            Cargando distritos, zonas, sectores y reuniones…
+            <section
+                v-for="(level, index) in LEVEL_ORDER"
+                :key="level"
+                :class="[
+                    'min-w-0 flex-1 flex-col border-r border-outline-variant last:border-r-0 md:min-w-[240px]',
+                    index === 0 ? 'flex' : 'hidden md:flex',
+                ]"
+            >
+                <header
+                    class="flex h-12 flex-none items-center justify-between border-b border-t-2 border-b-outline-variant bg-surface-container-low px-4"
+                    :style="{ borderTopColor: LEVEL_ACCENT[level] }"
+                >
+                    <div class="flex items-center gap-2">
+                        <span class="h-3 w-20 animate-pulse rounded bg-surface-container-high" />
+                        <span
+                            class="h-5 w-7 animate-pulse rounded-full bg-surface-container-high"
+                        />
+                    </div>
+                </header>
+                <div class="flex-1 overflow-hidden">
+                    <div
+                        v-for="row in index === 0 ? 7 : 4 - index + 2"
+                        :key="row"
+                        class="flex items-center gap-3 border-b border-outline-variant/50 px-4 py-3"
+                    >
+                        <span
+                            class="size-2.5 shrink-0 animate-pulse rounded-full bg-surface-container-high"
+                        />
+                        <span class="min-w-0 flex-1 space-y-1.5">
+                            <span
+                                class="block h-2.5 w-14 animate-pulse rounded bg-surface-container-high"
+                            />
+                            <span
+                                class="block h-3.5 animate-pulse rounded bg-surface-container-high"
+                                :style="{ width: `${55 + ((row * 17 + index * 11) % 35)}%` }"
+                            />
+                            <span
+                                class="block h-3 w-1/3 animate-pulse rounded bg-surface-container-high"
+                            />
+                        </span>
+                        <span
+                            class="h-5 w-7 shrink-0 animate-pulse rounded-full bg-surface-container-high"
+                        />
+                    </div>
+                </div>
+            </section>
         </div>
 
         <div
@@ -1756,107 +1842,157 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Miller columns -->
-        <main
-            v-else
-            data-tour="territories-hierarchy"
-            class="flex min-h-0 flex-1 overflow-x-auto bg-surface"
-        >
-            <section
-                v-for="col in columns"
-                :key="col.level"
-                :data-tour="`territories-${col.level}-column`"
-                class="flex min-w-[240px] flex-1 flex-col border-r border-outline-variant last:border-r-0"
+        <template v-else>
+            <!-- Móvil: una columna a la vez, con pasos para moverse entre niveles -->
+            <nav
+                class="flex flex-none items-center gap-1 overflow-x-auto border-b border-outline-variant bg-surface-container-low px-3 py-2 md:hidden"
+                aria-label="Nivel de la jerarquía"
             >
-                <header
-                    class="flex flex-none items-center justify-between border-b border-outline-variant px-4 py-2.5"
+                <template v-for="(step, index) in mobileSteps" :key="step.level">
+                    <ChevronRight
+                        v-if="index > 0"
+                        class="size-3.5 shrink-0 text-outline"
+                        aria-hidden="true"
+                    />
+                    <button
+                        type="button"
+                        :disabled="!step.enabled"
+                        :aria-current="mobileLevel === step.level ? 'step' : undefined"
+                        :class="[
+                            'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40',
+                            mobileLevel === step.level
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-on-surface-variant hover:bg-surface-container-high',
+                        ]"
+                        @click="mobileLevel = step.level"
+                    >
+                        {{ step.label }}
+                        <span
+                            :class="[
+                                'rounded-full px-1.5 text-[10px] tabular-nums',
+                                mobileLevel === step.level
+                                    ? 'bg-primary-foreground/20'
+                                    : 'bg-surface-container-high',
+                            ]"
+                        >
+                            {{ step.count }}
+                        </span>
+                    </button>
+                </template>
+            </nav>
+
+            <main
+                data-tour="territories-hierarchy"
+                class="flex min-h-0 flex-1 overflow-x-auto bg-surface"
+            >
+                <section
+                    v-for="col in columns"
+                    :key="col.level"
+                    :data-tour="`territories-${col.level}-column`"
+                    :class="[
+                        'min-w-0 flex-1 flex-col border-r border-outline-variant last:border-r-0 md:flex md:min-w-[240px]',
+                        mobileLevel === col.level ? 'flex' : 'hidden',
+                    ]"
                 >
-                    <div class="flex items-center gap-2">
-                        <span
-                            class="text-[11px] font-bold uppercase tracking-[0.16em]"
-                            :style="{ color: col.accent }"
-                        >
-                            {{ col.label }}
-                        </span>
-                        <span
-                            class="rounded-full bg-surface-container px-2.5 py-0.5 text-[11px] font-semibold text-on-surface-variant"
-                        >
-                            {{ col.count }}
-                        </span>
-                    </div>
-                    <button
-                        v-if="col.canAdd"
-                        type="button"
-                        :data-tour="
-                            col.level === 'distrito' ? 'territories-district-add' : undefined
-                        "
-                        class="flex size-7 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
-                        :title="col.addTitle"
-                        :aria-label="col.addTitle"
-                        @click="onColumnAdd(col.level)"
+                    <header
+                        class="flex h-12 flex-none items-center justify-between gap-2 border-b border-t-2 border-b-outline-variant bg-surface-container-low px-4"
+                        :style="{ borderTopColor: col.accent }"
                     >
-                        <Plus class="size-4" />
-                    </button>
-                </header>
-
-                <div class="min-h-0 flex-1 overflow-y-auto">
-                    <p
-                        v-if="col.hint"
-                        class="px-5 py-10 text-center text-sm leading-relaxed text-on-surface-variant"
-                    >
-                        {{ col.hint }}
-                    </p>
-                    <p
-                        v-else-if="col.empty"
-                        class="px-5 py-10 text-center text-sm italic text-on-surface-variant"
-                    >
-                        {{ col.empty }}
-                    </p>
-
-                    <button
-                        v-for="it in col.items"
-                        :key="it.id"
-                        type="button"
-                        class="group relative flex w-full items-center gap-3 border-b border-outline-variant/50 px-4 py-3 text-left transition-colors hover:bg-surface-container-high"
-                        :class="it.selected ? 'bg-primary/10' : ''"
-                        @click="select(it.level, it.id)"
-                    >
-                        <span
-                            v-if="it.selected"
-                            class="absolute inset-y-0 left-0 w-[3px] bg-primary"
-                        />
-                        <span
-                            class="size-2.5 shrink-0 rounded-full"
-                            :style="{ backgroundColor: it.color }"
-                        />
-                        <span class="min-w-0 flex-1">
+                        <div class="flex min-w-0 items-center gap-2">
                             <span
-                                class="block truncate font-mono text-[10px] uppercase tracking-wider text-on-surface-variant/70"
-                                >{{ it.code }}</span
+                                class="truncate text-[11px] font-bold uppercase tracking-[0.16em]"
+                                :style="{ color: col.accent }"
                             >
-                            <span class="block truncate text-sm font-semibold text-on-surface">{{
-                                it.name
-                            }}</span>
-                            <span class="mt-0.5 block truncate text-xs text-on-surface-variant">{{
-                                it.sub
-                            }}</span>
-                        </span>
-                        <span
-                            class="shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
+                                {{ col.label }}
+                            </span>
+                            <span
+                                class="rounded-full bg-surface-container-high px-2 py-0.5 text-[11px] font-semibold tabular-nums text-on-surface-variant"
+                            >
+                                {{ col.count }}
+                            </span>
+                        </div>
+                        <button
+                            v-if="col.canAdd"
+                            type="button"
+                            :data-tour="
+                                col.level === 'distrito' ? 'territories-district-add' : undefined
+                            "
+                            class="flex size-8 shrink-0 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                            :title="col.addTitle"
+                            :aria-label="col.addTitle"
+                            @click="onColumnAdd(col.level)"
                         >
-                            {{ it.badge }}
-                        </span>
-                        <span
-                            class="flex size-7 shrink-0 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-                            role="button"
-                            :aria-label="`Acciones de ${it.name}`"
-                            @click="openMenu(it.level, it.id, $event)"
+                            <Plus class="size-4" />
+                        </button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto">
+                        <div
+                            v-if="col.hint || col.empty"
+                            class="m-4 rounded-xl border border-dashed border-outline-variant px-5 py-8 text-center"
                         >
-                            <MoreHorizontal class="size-4" />
-                        </span>
-                    </button>
-                </div>
-            </section>
-        </main>
+                            <span
+                                class="mx-auto mb-3 block size-2.5 rounded-full opacity-70"
+                                :style="{ backgroundColor: col.accent }"
+                            />
+                            <p
+                                :class="[
+                                    'text-sm leading-relaxed text-on-surface-variant',
+                                    col.hint ? '' : 'italic',
+                                ]"
+                            >
+                                {{ col.hint || col.empty }}
+                            </p>
+                        </div>
+
+                        <button
+                            v-for="it in col.items"
+                            :key="it.id"
+                            type="button"
+                            class="group relative flex w-full items-center gap-3 border-b border-outline-variant/50 px-4 py-3 text-left transition-colors hover:bg-surface-container-high"
+                            :class="it.selected ? 'bg-primary/10' : ''"
+                            @click="select(it.level, it.id)"
+                        >
+                            <span
+                                v-if="it.selected"
+                                class="absolute inset-y-0 left-0 w-[3px] bg-primary"
+                            />
+                            <span
+                                class="size-2.5 shrink-0 rounded-full"
+                                :style="{ backgroundColor: it.color }"
+                            />
+                            <span class="min-w-0 flex-1">
+                                <span
+                                    class="block truncate font-mono text-[10px] uppercase tracking-wider text-on-surface-variant/70"
+                                    >{{ it.code }}</span
+                                >
+                                <span
+                                    class="block truncate text-sm font-semibold text-on-surface"
+                                    >{{ it.name }}</span
+                                >
+                                <span
+                                    class="mt-0.5 block truncate text-xs text-on-surface-variant"
+                                    >{{ it.sub }}</span
+                                >
+                            </span>
+                            <span
+                                class="shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
+                            >
+                                {{ it.badge }}
+                            </span>
+                            <span
+                                class="flex size-7 shrink-0 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+                                role="button"
+                                :aria-label="`Acciones de ${it.name}`"
+                                @click="openMenu(it.level, it.id, $event)"
+                            >
+                                <MoreHorizontal class="size-4" />
+                            </span>
+                        </button>
+                    </div>
+                </section>
+            </main>
+        </template>
 
         <!-- Context menu -->
         <template v-if="menuFor">
@@ -2385,6 +2521,7 @@ onBeforeUnmount(() => {
             :parent-centroid="formParentCentroid"
             :parent-label="formParentLabel"
             :palette="paletteFor(formLevel)"
+            :used-colors="formUsedColors"
             :accent="LEVEL_ACCENT[formLevel]"
             :level-label="formLevel"
             :leader-label="formLevel === 'distrito' ? 'Pastor' : 'Coordinador'"
