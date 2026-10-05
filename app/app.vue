@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { VueQueryDevtools } from '@tanstack/vue-query-devtools'
+import AppToaster from '~/presentation/shared/components/AppToaster.vue'
 
 const shouldShowQueryDevtools = import.meta.dev
 </script>
@@ -9,6 +10,7 @@ const shouldShowQueryDevtools = import.meta.dev
         <NuxtLayout>
             <NuxtPage />
         </NuxtLayout>
+        <AppToaster />
         <ClientOnly>
             <VueQueryDevtools
                 v-if="shouldShowQueryDevtools"
