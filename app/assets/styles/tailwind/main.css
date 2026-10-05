@@ -43,3 +43,203 @@
         animation: fade-slide-up 0.5s ease-out both;
     }
 }
+
+/* Landing pública */
+@layer components {
+    .landing-btn-gold {
+        transition:
+            transform 0.25s ease,
+            box-shadow 0.25s ease,
+            filter 0.25s ease;
+    }
+
+    .landing-btn-gold:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.06);
+        box-shadow: 0 14px 34px -14px var(--primary);
+    }
+
+    /* Mapa de la landing (Leaflet) */
+    /* El estilo oscuro de CARTO es casi negro: se aclara y entibia para que las calles
+       se lean y combinen con el dorado del sistema. */
+    .landing-map .leaflet-tile-pane {
+        filter: brightness(1.9) contrast(1.08) sepia(0.45) saturate(0.85);
+    }
+
+    .landing-map .leaflet-container {
+        background: #0f1212;
+        font-family: inherit;
+    }
+
+    .landing-map .leaflet-control-attribution {
+        background: rgb(12 15 15 / 72%);
+        color: #9a8f80;
+        font-size: 10px;
+        border-radius: 0 0 8px;
+    }
+
+    .landing-map .leaflet-control-attribution a {
+        color: #d1c5b4;
+    }
+
+    .landing-map .leaflet-bar {
+        border: 1px solid rgb(78 70 57 / 80%);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: none;
+    }
+
+    .landing-map .leaflet-bar a {
+        width: 34px;
+        height: 34px;
+        line-height: 34px;
+        background: rgb(18 20 20 / 88%);
+        color: #e2e2e2;
+        border-bottom-color: rgb(78 70 57 / 80%);
+    }
+
+    .landing-map .leaflet-bar a:hover {
+        background: #282a2b;
+        color: var(--primary);
+    }
+
+    /*
+     * Pin de la iglesia. El punto (0,0) del ícono de Leaflet es la ubicación exacta:
+     * la punta de la gota apunta ahí y el pulso se dibuja sobre el suelo.
+     */
+    .landing-map-pin {
+        position: relative;
+    }
+
+    .landing-map-pin span {
+        position: absolute;
+        display: block;
+    }
+
+    .landing-map-pin__pulse {
+        left: -28px;
+        top: -11px;
+        width: 56px;
+        height: 22px;
+        border-radius: 9999px;
+        background: radial-gradient(
+            ellipse at center,
+            rgb(233 193 118 / 55%) 0%,
+            rgb(233 193 118 / 0%) 70%
+        );
+        animation: landing-pin 2.8s ease-out infinite;
+    }
+
+    .landing-map-pin__shadow {
+        left: -9px;
+        top: -3px;
+        width: 18px;
+        height: 6px;
+        border-radius: 9999px;
+        background: rgb(0 0 0 / 55%);
+        filter: blur(2px);
+    }
+
+    .landing-map-pin__body {
+        left: 0;
+        top: 0;
+        animation: landing-pin-float 3.2s ease-in-out infinite;
+    }
+
+    /* Gota: un cuadrado con tres esquinas redondas, girado -45° para que la punta mire abajo. */
+    .landing-map-pin__drop {
+        left: -23px;
+        top: -56px;
+        width: 46px;
+        height: 46px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        background: linear-gradient(135deg, #f3d79c 0%, var(--primary) 45%, #c79a4e 100%);
+        box-shadow:
+            0 0 0 2px rgb(15 18 18 / 85%),
+            0 10px 24px -6px rgb(0 0 0 / 70%),
+            0 0 28px 2px rgb(233 193 118 / 35%);
+    }
+
+    .landing-map-pin__icon {
+        left: -12px;
+        top: -45px;
+        width: 24px;
+        height: 24px;
+        color: var(--on-primary);
+    }
+
+    .landing-map-pin__icon svg {
+        display: block;
+        width: 24px;
+        height: 24px;
+    }
+
+    .landing-map-pin__label {
+        left: 0;
+        top: -100px;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        padding: 5px 14px;
+        border-radius: 9999px;
+        border: 1px solid rgb(233 193 118 / 40%);
+        background: rgb(18 20 20 / 90%);
+        color: #e2e2e2;
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 15px;
+        line-height: 1.4;
+        box-shadow: 0 8px 20px -10px rgb(0 0 0 / 80%);
+    }
+
+    .landing-pin-pulse {
+        animation: landing-pin 2.8s ease-out infinite;
+    }
+
+    .landing-cue {
+        animation: landing-cue 2.4s ease-in-out infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .landing-btn-gold:hover {
+            transform: none;
+        }
+
+        .landing-pin-pulse,
+        .landing-map-pin__pulse,
+        .landing-map-pin__body,
+        .landing-cue {
+            animation: none;
+        }
+    }
+}
+
+@keyframes landing-pin {
+    0% {
+        transform: scale(0.45);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(1.9);
+        opacity: 0;
+    }
+}
+
+@keyframes landing-cue {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(6px);
+    }
+}
+
+@keyframes landing-pin-float {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-4px);
+    }
+}
