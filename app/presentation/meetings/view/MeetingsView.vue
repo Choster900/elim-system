@@ -130,15 +130,13 @@ const isMutating = computed(
         deleteMeetingMutation.isPending.value,
 )
 
-if (import.meta.server) {
-    onServerPrefetch(() =>
-        Promise.allSettled([
-            meetingsQuery.suspense(),
-            meetingTypesQuery.suspense(),
-            sectorsQuery.suspense(),
-        ]),
-    )
-}
+onServerPrefetch(() =>
+    Promise.allSettled([
+        meetingsQuery.suspense(),
+        meetingTypesQuery.suspense(),
+        sectorsQuery.suspense(),
+    ]),
+)
 
 if (import.meta.client) {
     watch(
