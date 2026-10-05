@@ -177,13 +177,9 @@ onMounted(() => {
 
 watch([() => authStore.user?.id, loading], startFirstVisitTour)
 
-if (import.meta.server) {
-    onServerPrefetch(() =>
-        Promise.allSettled([membersQuery.suspense(), catalogsQuery.suspense()]).then(
-            () => undefined,
-        ),
-    )
-}
+onServerPrefetch(() =>
+    Promise.allSettled([membersQuery.suspense(), catalogsQuery.suspense()]).then(() => undefined),
+)
 
 if (import.meta.client) {
     watch(
@@ -224,7 +220,7 @@ const columns = computed<DataTableColumn<Member>[]>(() => [
         filterable: true,
         filterType: 'text',
         accessor: (row) => `${row.code} ${getMemberFullName(row)} ${row.documentNumber ?? ''}`,
-        width: '360px',
+        width: '260px',
     },
     {
         key: 'documentNumber',
@@ -521,8 +517,10 @@ async function confirmImport() {
             )
             importOpen.value = false
         }
-    } catch {
-        toast.error('No fue posible iniciar la importación. Ninguna fila adicional fue procesada.')
+    } catch (error) {
+        toast.error(
+            resolveHttpErrorMessage(error, 'No fue posible completar la importación de miembros.'),
+        )
     }
 }
 
@@ -637,7 +635,7 @@ async function downloadPendingMembers() {
                 :rows="sortedMembers"
                 :columns="columns"
                 row-key="id"
-                :page-size="25"
+                :page-size="5"
                 :loading="loading"
                 show-search
                 search-placeholder="Buscar por nombre, código, documento, teléfono…"
@@ -727,7 +725,7 @@ async function downloadPendingMembers() {
                 <template #cell-member="{ row }">
                     <button
                         type="button"
-                        class="flex min-w-0 items-center gap-3 text-left"
+                        class="flex w-full min-w-0 max-w-56 items-center gap-3 text-left"
                         @click="openDetails(row as Member)"
                     >
                         <span
@@ -741,13 +739,12 @@ async function downloadPendingMembers() {
                         <span class="min-w-0">
                             <span
                                 class="block truncate font-display text-sm font-semibold text-on-surface hover:text-primary"
+                                :title="getMemberFullName(row as Member)"
                                 >{{ getMemberFullName(row as Member) }}</span
                             >
-                            <span class="mt-0.5 block text-[11px] text-on-surface-variant"
+                            <span class="mt-0.5 block truncate text-[11px] text-on-surface-variant"
                                 >{{ (row as Member).code
-                                }}<template v-if="(row as Member).documentNumber">
-                                    · {{ (row as Member).documentNumber }}</template
-                                ><template v-if="getMemberAge((row as Member).birthDate) !== null">
+                                }}<template v-if="getMemberAge((row as Member).birthDate) !== null">
                                     · {{ getMemberAge((row as Member).birthDate) }} años</template
                                 ></span
                             >
