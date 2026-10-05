@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from '@lucide/vue'
-import communityDinnerImage from '~/assets/images/system/community-dinner.png'
+import { ArrowDown, ArrowRight, Clock, Droplet, MapPin, Users } from '@lucide/vue'
 import heroMainImage from '~/assets/images/system/hero-main.jpg'
-import lifeSchoolImage from '~/assets/images/system/life-school.png'
 import visionForestImage from '~/assets/images/system/vision-forest.png'
-import worshipServiceImage from '~/assets/images/system/worship-service.png'
-import youthMinistryImage from '~/assets/images/system/youth-ministry.png'
+import { useAccessAction } from '~/presentation/auth/composables/useAccessAction'
+import LandingHeroScene from '../components/LandingHeroScene.vue'
+import LandingMap from '../components/LandingMap.vue'
+import { landingContact, landingMinistries } from '../constants/landing.constants'
 
 defineOptions({ name: 'HomePage' })
 
 useHead({
-    title: 'Sistema - Landing Page Iglesia',
+    title: 'Elim · Misión Cristiana',
     meta: [
         {
             name: 'description',
@@ -20,243 +20,271 @@ useHead({
     ],
 })
 
-const slider = ref<HTMLElement | null>(null)
+const accessAction = useAccessAction()
 
-const ministryCards = [
-    {
-        title: 'Jóvenes en Acción',
-        label: 'Ministerio',
-        image: youthMinistryImage,
-        description:
-            'Un espacio dinámico para que las nuevas generaciones exploren su fe en un lenguaje actual.',
-    },
-    {
-        title: 'Cena de Comunidad',
-        label: 'Evento Próximo',
-        image: communityDinnerImage,
-        description:
-            'Compartimos la mesa y la vida. Un encuentro mensual para fortalecer nuestros lazos fraternales.',
-    },
-    {
-        title: 'Escuela de Vida',
-        label: 'Clases Dominicales',
-        image: lifeSchoolImage,
-        description:
-            'Clases diseñadas para aplicar la sabiduría bíblica a los desafíos de la vida moderna cotidiana.',
-    },
-    {
-        title: 'Celebración de Fe',
-        label: 'Servicio Dominical',
-        image: worshipServiceImage,
-        description:
-            'Experiencias de adoración inmersivas que combinan liturgia clásica con expresión contemporánea.',
-    },
+const values = [
+    { title: 'Paz', description: 'Un lugar para descansar y escuchar.' },
+    { title: 'Propósito', description: 'Fe aplicada a la vida diaria.' },
+    { title: 'Comunidad', description: 'Relaciones reales, mesa compartida.' },
 ]
 
-function scrollSlider(direction: 'prev' | 'next') {
-    slider.value?.scrollBy({
-        left: direction === 'next' ? 432 : -432,
-        behavior: 'smooth',
-    })
-}
-
-function scrollToId(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-}
+const eyebrowClass = 'block text-[11px] font-bold uppercase tracking-[0.22em] text-primary'
+const sectionTitleClass =
+    'font-display text-[clamp(2rem,3.6vw,2.9rem)] font-semibold leading-[1.12] text-on-surface'
 </script>
 
 <template>
-    <main>
-        <header
-            class="relative flex min-h-[92vh] items-center justify-center overflow-hidden px-6 pb-24 pt-32"
+    <main class="overflow-x-clip bg-background text-on-surface">
+        <!-- Portada -->
+        <section
+            id="inicio"
+            class="relative flex min-h-[46rem] items-center justify-center overflow-hidden bg-surface-container-lowest px-6 pb-36 pt-40"
         >
             <img
                 :src="heroMainImage"
-                alt="Interior moderno de iglesia con luz cálida"
-                class="absolute inset-0 size-full object-cover"
+                alt=""
+                aria-hidden="true"
+                fetchpriority="high"
+                class="absolute inset-0 size-full object-cover opacity-[0.22] grayscale-[0.4]"
             />
-            <div class="system-hero-overlay absolute inset-0" />
+            <div
+                aria-hidden="true"
+                class="absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_38%,rgba(12,15,15,0.15)_0%,rgba(12,15,15,0.85)_70%,var(--surface-container-lowest)_100%)]"
+            />
+            <LandingHeroScene />
+            <div
+                aria-hidden="true"
+                class="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-background"
+            />
 
-            <div class="relative z-10 mx-auto max-w-4xl text-center">
+            <div class="relative z-10 flex max-w-[880px] flex-col items-center text-center">
                 <h1
-                    class="font-display text-4xl font-bold leading-tight text-on-background md:text-6xl"
+                    class="font-display text-[clamp(2.5rem,6.2vw,4.75rem)] font-bold leading-[1.05] tracking-[-0.015em] text-on-surface"
                 >
-                    Donde la tradición se encuentra con la modernidad
+                    Donde la tradición se encuentra con la
+                    <em class="font-semibold italic text-primary">modernidad</em>
                 </h1>
-                <p class="mx-auto mt-6 max-w-2xl text-lg leading-8 text-on-surface-variant">
+                <p
+                    class="mt-6 max-w-[620px] text-[clamp(1rem,1.6vw,1.15rem)] leading-[1.75] text-on-surface-variant"
+                >
                     Únete a nuestra comunidad y descubre un espacio de paz y propósito diseñado para
                     el alma contemporánea.
                 </p>
 
-                <div class="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
-                    <UiButton
-                        type="button"
-                        class="h-12 rounded px-10 text-xs uppercase"
-                        @click="scrollToId('vision')"
+                <div class="mt-10 flex flex-wrap justify-center gap-3.5">
+                    <a
+                        href="#vision"
+                        class="landing-btn-gold inline-flex h-[52px] items-center gap-2.5 rounded-md bg-primary px-[30px] text-xs font-bold uppercase tracking-[0.14em] text-primary-foreground"
                     >
                         Conócenos
-                    </UiButton>
-                    <UiButton
-                        variant="outline"
-                        type="button"
-                        class="h-12 rounded border-primary px-10 text-xs uppercase text-primary"
-                        @click="scrollToId('ministerios')"
+                        <ArrowRight class="size-4" />
+                    </a>
+                    <a
+                        href="#ministerios"
+                        class="inline-flex h-[52px] items-center rounded-md border border-[rgba(233,193,118,0.45)] px-[30px] text-xs font-bold uppercase tracking-[0.14em] text-on-surface transition-colors hover:border-primary hover:bg-[rgba(233,193,118,0.08)] hover:text-primary"
                     >
-                        Ver Servicios
-                    </UiButton>
+                        Ver ministerios
+                    </a>
+                </div>
+
+                <div
+                    class="mt-12 inline-flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 rounded-xl border border-[rgba(78,70,57,0.7)] bg-[rgba(26,28,28,0.6)] px-[22px] py-3.5 text-[13px] text-on-surface-variant backdrop-blur-md"
+                >
+                    <span class="inline-flex items-center gap-2">
+                        <Clock class="size-4 text-primary" />
+                        Servicio · {{ landingContact.serviceSchedule }}
+                    </span>
+                    <span aria-hidden="true" class="hidden h-4 w-px bg-outline-variant sm:block" />
+                    <span class="inline-flex items-center gap-2">
+                        <MapPin class="size-4 text-primary" />
+                        {{ landingContact.address }}
+                    </span>
                 </div>
             </div>
 
-            <button
-                type="button"
-                class="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center text-xs font-semibold uppercase text-on-surface-variant transition-colors hover:text-primary"
-                @click="scrollToId('ministerios')"
+            <a
+                href="#ministerios"
+                class="absolute bottom-7 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:text-primary"
             >
                 Descubre más
-                <ArrowDown class="mt-2 size-5" />
-            </button>
-        </header>
+                <ArrowDown class="landing-cue size-[18px]" />
+            </a>
+        </section>
 
-        <section id="ministerios" class="bg-background py-24 lg:py-32">
-            <div class="mx-auto mb-14 flex max-w-system items-end justify-between px-6 lg:px-10">
-                <div>
-                    <span class="mb-4 block text-xs font-semibold uppercase text-primary"
-                        >Comunidad activa</span
-                    >
-                    <h2 class="font-display text-3xl font-semibold text-on-background md:text-4xl">
-                        Ministerios y Eventos
-                    </h2>
-                </div>
-
-                <div class="hidden gap-3 md:flex">
-                    <UiButton
-                        variant="outline"
-                        size="icon"
-                        type="button"
-                        class="rounded-full"
-                        aria-label="Ver tarjeta anterior"
-                        @click="scrollSlider('prev')"
-                    >
-                        <ChevronLeft class="size-5" />
-                    </UiButton>
-                    <UiButton
-                        variant="outline"
-                        size="icon"
-                        type="button"
-                        class="rounded-full"
-                        aria-label="Ver tarjeta siguiente"
-                        @click="scrollSlider('next')"
-                    >
-                        <ChevronRight class="size-5" />
-                    </UiButton>
-                </div>
-            </div>
-
-            <div
-                ref="slider"
-                class="hide-scrollbar flex gap-8 overflow-x-auto scroll-smooth px-6 pb-8 lg:px-10"
-            >
-                <article
-                    v-for="card in ministryCards"
-                    :key="card.title"
-                    class="group min-w-[320px] cursor-pointer md:min-w-[400px]"
-                >
-                    <div class="relative mb-6 h-[420px] overflow-hidden md:h-[500px]">
-                        <img
-                            :src="card.image"
-                            :alt="card.title"
-                            class="size-full object-cover grayscale transition duration-700 group-hover:scale-105 group-hover:grayscale-0"
-                        />
-                        <div class="absolute left-4 top-4">
-                            <UiBadge variant="sacred" class="uppercase">
-                                {{ card.label }}
-                            </UiBadge>
-                        </div>
+        <!-- Ministerios -->
+        <section id="ministerios" class="scroll-mt-20 px-6 py-[clamp(72px,9vw,128px)]">
+            <div class="mx-auto max-w-[1240px]">
+                <div class="mb-12 flex flex-wrap items-end justify-between gap-6">
+                    <div class="max-w-[560px]">
+                        <span :class="eyebrowClass">Comunidad activa</span>
+                        <h2 :class="['mt-4', sectionTitleClass]">Ministerios y eventos</h2>
                     </div>
-                    <h3 class="mb-2 font-display text-2xl font-semibold text-on-background">
-                        {{ card.title }}
-                    </h3>
-                    <p class="line-clamp-2 leading-7 text-on-surface-variant">
-                        {{ card.description }}
+                    <p class="max-w-[420px] text-[15px] leading-[1.7] text-on-surface-variant">
+                        Espacios para crecer en la fe, compartir la mesa y servir juntos durante
+                        toda la semana.
                     </p>
-                </article>
+                </div>
+
+                <div class="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-7">
+                    <article
+                        v-for="ministry in landingMinistries"
+                        :key="ministry.title"
+                        class="group flex flex-col transition-transform duration-300 ease-out hover:-translate-y-1.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                    >
+                        <div
+                            class="relative aspect-[4/5] overflow-hidden rounded-[10px] bg-surface-container"
+                        >
+                            <img
+                                :src="ministry.image"
+                                :alt="ministry.title"
+                                loading="lazy"
+                                decoding="async"
+                                class="size-full object-cover grayscale-[0.85] transition duration-[900ms] ease-out group-hover:scale-[1.06] group-hover:grayscale-0 motion-reduce:transition-none"
+                            />
+                            <div
+                                aria-hidden="true"
+                                class="absolute inset-0 bg-gradient-to-b from-transparent from-55% to-[rgba(12,15,15,0.7)]"
+                            />
+                        </div>
+                        <h3
+                            class="mt-5 font-display text-[22px] font-semibold leading-tight text-on-surface"
+                        >
+                            {{ ministry.title }}
+                        </h3>
+                        <p class="mt-2.5 text-[15px] leading-[1.7] text-on-surface-variant">
+                            {{ ministry.description }}
+                        </p>
+                    </article>
+                </div>
             </div>
         </section>
 
+        <!-- Por qué Elim -->
         <section
-            id="vision"
-            class="relative overflow-hidden bg-surface-container-lowest py-24 lg:py-32"
+            id="elim"
+            class="relative scroll-mt-20 overflow-hidden border-y border-[rgba(78,70,57,0.5)] bg-surface-container-lowest px-6 py-[clamp(80px,10vw,144px)]"
         >
             <div
-                class="pointer-events-none absolute -right-20 top-0 hidden opacity-[0.05] lg:block"
-            >
-                <span class="font-display text-[360px] font-bold leading-none text-primary">R</span>
-            </div>
+                aria-hidden="true"
+                class="absolute left-1/2 top-1/2 size-[720px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(233,193,118,0.10)_0%,rgba(233,193,118,0)_65%)]"
+            />
+            <figure class="relative mx-auto max-w-[900px] text-center">
+                <Droplet class="mx-auto size-9 text-primary" :stroke-width="1.6" />
+                <blockquote
+                    class="mt-7 font-display text-[clamp(1.6rem,3.4vw,2.6rem)] font-semibold italic leading-[1.35] text-on-surface"
+                >
+                    “Y llegaron a Elim, donde había doce fuentes de aguas, y setenta palmeras; y
+                    acamparon allí junto a las aguas.”
+                </blockquote>
+                <figcaption class="mt-6 text-xs font-bold uppercase tracking-[0.22em] text-primary">
+                    Éxodo 15:27
+                </figcaption>
+                <p
+                    class="mx-auto mt-7 max-w-[560px] text-base leading-[1.75] text-on-surface-variant"
+                >
+                    Nuestro nombre recuerda un lugar de descanso y agua viva en medio del desierto.
+                    Eso queremos ser para nuestra ciudad.
+                </p>
+            </figure>
+        </section>
 
-            <div class="mx-auto grid max-w-system items-center gap-12 px-6 md:grid-cols-2 lg:px-10">
-                <div class="relative order-2 h-[520px] md:order-1">
-                    <img
-                        :src="visionForestImage"
-                        alt="Bosque sereno con luz cálida"
-                        class="size-full rounded-sm object-cover grayscale transition duration-700 hover:grayscale-0"
-                    />
+        <!-- Visión -->
+        <section id="vision" class="scroll-mt-20 px-6 py-[clamp(80px,10vw,140px)]">
+            <div
+                class="mx-auto flex max-w-[1240px] flex-wrap items-center gap-[clamp(40px,6vw,88px)]"
+            >
+                <div class="relative min-w-0 flex-[1_1_380px]">
                     <div
-                        class="absolute -bottom-8 -right-8 hidden w-48 border border-primary bg-[rgba(233,193,118,0.08)] p-6 backdrop-blur md:block"
+                        class="aspect-[4/5] max-h-[600px] overflow-hidden rounded-xl bg-surface-container"
                     >
-                        <p class="mb-2 text-xs font-semibold uppercase text-primary">Valores</p>
-                        <p class="leading-7 text-on-surface">Paz, Propósito y Comunidad Real.</p>
+                        <img
+                            :src="visionForestImage"
+                            alt="Bosque sereno con luz cálida"
+                            loading="lazy"
+                            decoding="async"
+                            class="size-full object-cover grayscale-[0.5]"
+                        />
+                    </div>
+                    <div
+                        class="absolute -bottom-6 right-3 max-w-[220px] rounded-xl border border-[rgba(233,193,118,0.45)] bg-[rgba(26,28,28,0.85)] px-6 py-[22px] backdrop-blur-md sm:-right-3"
+                    >
+                        <span
+                            class="block text-[10px] font-bold uppercase tracking-[0.2em] text-primary"
+                        >
+                            Valores
+                        </span>
+                        <p class="mt-2 font-display text-[19px] leading-snug text-on-surface">
+                            Paz, propósito y comunidad real.
+                        </p>
                     </div>
                 </div>
 
-                <div class="order-1 md:order-2">
-                    <span class="mb-6 block text-xs font-semibold uppercase text-primary"
-                        >Nuestra visión</span
-                    >
-                    <h2
-                        class="mb-8 font-display text-4xl font-semibold leading-tight text-on-background"
-                    >
+                <div class="min-w-0 flex-[1_1_420px]">
+                    <span :class="eyebrowClass">Nuestra visión</span>
+                    <h2 :class="['mt-[18px]', sectionTitleClass]">
                         Un refugio para el alma en el ruido de la ciudad.
                     </h2>
-                    <p class="mb-6 text-lg leading-8 text-on-surface-variant">
-                        En SISTEMA, creemos que la espiritualidad no es algo del pasado, sino una
+                    <p class="mt-[26px] text-[17px] leading-[1.8] text-on-surface-variant">
+                        En Elim creemos que la espiritualidad no es algo del pasado, sino una
                         brújula esencial para navegar el presente. Somos una comunidad que valora la
                         profundidad teológica, la estética moderna y la inclusión radical.
                     </p>
-                    <p class="mb-10 leading-8 text-on-surface-variant">
+                    <p class="mt-[18px] text-base leading-[1.8] text-on-surface-variant">
                         Nuestro espacio está diseñado para ser acogedor y contemporáneo, permitiendo
                         que cada persona encuentre su propio ritmo de conexión con lo divino y con
                         los demás.
                     </p>
-                    <NuxtLink
-                        to="#"
-                        class="inline-flex items-center gap-3 border-b border-primary pb-1 text-xs font-semibold uppercase text-primary transition-opacity hover:opacity-75"
-                    >
-                        Leer nuestro manifiesto
-                        <ArrowRight class="size-4" />
-                    </NuxtLink>
+                    <div class="mt-8 grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3.5">
+                        <div
+                            v-for="value in values"
+                            :key="value.title"
+                            class="rounded-[10px] border border-outline-variant bg-surface-container-low p-[18px]"
+                        >
+                            <span class="block font-display text-lg text-on-surface">
+                                {{ value.title }}
+                            </span>
+                            <span
+                                class="mt-1.5 block text-[13px] leading-[1.55] text-on-surface-variant"
+                            >
+                                {{ value.description }}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <section id="boletin" class="border-t border-outline-variant bg-background px-6 py-24">
-            <div class="mx-auto max-w-4xl text-center">
-                <h3 class="mb-6 font-display text-3xl font-semibold text-on-background">
-                    ¿Buscas algo más profundo?
-                </h3>
-                <p class="mx-auto mb-10 max-w-2xl leading-7 text-on-surface-variant">
-                    Suscríbete a nuestro boletín semanal de reflexiones y mantente al tanto de
-                    nuestros próximos eventos.
-                </p>
-                <form class="mx-auto flex max-w-xl flex-col gap-4 md:flex-row" @submit.prevent>
-                    <UiInput
-                        type="email"
-                        placeholder="Tu correo electrónico"
-                        class="h-12 rounded-none border-x-0 border-t-0 bg-surface-container text-on-surface"
-                    />
-                    <UiButton type="submit" class="h-12 rounded px-8 text-xs uppercase">
-                        Suscribirse
-                    </UiButton>
-                </form>
+        <!-- Ubicación -->
+        <section id="ubicacion" class="scroll-mt-20 px-6 pb-[clamp(72px,9vw,120px)]">
+            <div class="mx-auto max-w-[1240px]">
+                <LandingMap />
+
+                <div
+                    class="mt-7 flex flex-wrap items-center justify-between gap-[18px] rounded-[14px] border border-dashed border-[rgba(233,193,118,0.4)] px-[clamp(20px,4vw,36px)] py-6"
+                >
+                    <div class="flex min-w-0 items-center gap-4">
+                        <span
+                            class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(233,193,118,0.1)] text-primary"
+                        >
+                            <Users class="size-5" />
+                        </span>
+                        <span>
+                            <span class="block text-base font-semibold text-on-surface">
+                                ¿Ya sirves en Elim?
+                            </span>
+                            <span class="mt-0.5 block text-sm text-on-surface-variant">
+                                Ingresa al sistema con la invitación que recibiste de tu líder.
+                            </span>
+                        </span>
+                    </div>
+                    <NuxtLink
+                        :to="accessAction.to"
+                        class="inline-flex h-[46px] items-center gap-2 rounded-md border border-[rgba(233,193,118,0.5)] px-[22px] text-xs font-bold uppercase tracking-[0.12em] text-on-surface transition-colors hover:border-primary hover:bg-[rgba(233,193,118,0.08)] hover:text-primary"
+                    >
+                        {{ accessAction.label }}
+                        <ArrowRight class="size-4" />
+                    </NuxtLink>
+                </div>
             </div>
         </section>
     </main>
