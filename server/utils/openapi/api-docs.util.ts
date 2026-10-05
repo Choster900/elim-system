@@ -610,6 +610,19 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             in: 'query',
                             schema: { type: 'integer', minimum: 1 },
                         },
+                        {
+                            name: 'startDate',
+                            in: 'query',
+                            description:
+                                'Custom range start (inclusive). Send together with endDate; overrides periodDays. Max 731 days.',
+                            schema: { type: 'string', format: 'date', example: '2026-01-01' },
+                        },
+                        {
+                            name: 'endDate',
+                            in: 'query',
+                            description: 'Custom range end (inclusive).',
+                            schema: { type: 'string', format: 'date', example: '2026-03-31' },
+                        },
                     ],
                     responses: {
                         200: { description: 'Summary for the requested period' },
