@@ -5,10 +5,7 @@ import {
     Compass,
     Download,
     ExternalLink,
-    FileDown,
-    FileSpreadsheet,
     HandCoins,
-    LoaderCircle,
     MapPinned,
     MoreHorizontal,
     Plus,
@@ -18,7 +15,6 @@ import {
     X,
 } from '@lucide/vue'
 import {
-    DialogClose,
     DialogContent,
     DialogDescription,
     DialogOverlay,
@@ -31,6 +27,9 @@ import { useUpdateMeetingMutation } from '~/presentation/meetings/composables/us
 import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
 import type { MeetingRecord } from '~/presentation/meetings/interfaces/meeting.interface'
 import { getMeetingFrequencyLabel } from '~/presentation/meetings/utils/meeting-format.util'
+import ExcelImportDialog from '~/presentation/shared/components/excel-import/ExcelImportDialog.vue'
+import ImportNote from '~/presentation/shared/components/excel-import/ImportNote.vue'
+import ImportStatCard from '~/presentation/shared/components/excel-import/ImportStatCard.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
 import AppTour from '~/presentation/shared/components/AppTour.vue'
@@ -394,9 +393,7 @@ function retryCatalog() {
 const exporting = ref(false)
 const downloadingTemplate = ref(false)
 const parsingImportFile = ref(false)
-const importInput = ref<HTMLInputElement | null>(null)
 const importOpen = ref(false)
-const isImportDropActive = ref(false)
 const importFileName = ref('')
 const importPreview = ref<TerritoryImportPreview>({
     districts: [],
@@ -410,6 +407,15 @@ const downloadingFailures = ref(false)
 const importRows = computed(() => territoryImportRows(importPreview.value))
 const validImportRows = computed(() => importRows.value.filter((row) => !row.issues.length))
 const invalidImportRows = computed(() => importRows.value.filter((row) => row.issues.length))
+const importValidSummary = computed(() => {
+    const validCount = (rows: { issues: string[] }[]) =>
+        rows.filter((row) => !row.issues.length).length
+    return [
+        { label: 'Distritos válidos', value: validCount(importPreview.value.districts) },
+        { label: 'Zonas válidas', value: validCount(importPreview.value.zones) },
+        { label: 'Sectores válidos', value: validCount(importPreview.value.sectors) },
+    ]
+})
 const importErrors = computed(() => {
     if (importResult.value) {
         return retryImportFailures.value.flatMap((failure) =>
@@ -486,10 +492,6 @@ function openImportModal() {
     importOpen.value = true
 }
 
-function pickImportFile() {
-    importInput.value?.click()
-}
-
 async function processImportFile(file: File) {
     const hierarchy = hierarchyQuery.data.value
     if (!hierarchy) {
@@ -514,19 +516,6 @@ async function processImportFile(file: File) {
     } finally {
         parsingImportFile.value = false
     }
-}
-
-async function onImportFile(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    input.value = ''
-    if (file) await processImportFile(file)
-}
-
-async function onImportDrop(event: DragEvent) {
-    isImportDropActive.value = false
-    const file = event.dataTransfer?.files?.[0]
-    if (file) await processImportFile(file)
 }
 
 function previewFailures(): TerritoryImportFailure[] {
@@ -1650,14 +1639,6 @@ onBeforeUnmount(() => {
                             </p>
                         </div>
                     </div>
-                    <input
-                        v-if="canManage"
-                        ref="importInput"
-                        type="file"
-                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        class="hidden"
-                        @change="onImportFile"
-                    />
                     <UiButton
                         v-if="canManage"
                         variant="outline"
@@ -2182,335 +2163,94 @@ onBeforeUnmount(() => {
             </aside>
         </template>
 
-        <DialogRoot v-model:open="importOpen">
-            <DialogPortal>
-                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
-                <DialogContent
-                    class="fixed left-1/2 top-1/2 z-[71] max-h-[88vh] w-[96vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none sm:p-7"
+        <ExcelImportDialog
+            v-model:open="importOpen"
+            title="Carga masiva de territorios"
+            :file-name="importFileName"
+            :parsing="parsingImportFile"
+            :downloading-template="downloadingTemplate"
+            template-hint="Descarga la plantilla si necesitas la estructura y los catálogos actualizados."
+            :errors="importErrors"
+            :errors-title="
+                importResult
+                    ? 'Registros que continúan pendientes:'
+                    : 'Corrige estas filas o importa únicamente las válidas:'
+            "
+            :has-result="!!importResult"
+            :can-download-pending="
+                importResult
+                    ? retryImportFailures.length > 0
+                    : !validImportRows.length && invalidImportRows.length > 0
+            "
+            :downloading-pending="downloadingFailures"
+            :confirm-label="`Importar ${validImportRows.length} registro(s)`"
+            :confirming="importTerritoriesMutation.isPending.value"
+            :confirm-disabled="!validImportRows.length || !!importPreview.fileErrors.length"
+            @download-template="downloadTemplate"
+            @file="processImportFile"
+            @download-pending="downloadPendingTerritories"
+            @confirm="confirmTerritoryImport"
+        >
+            <template #summary>
+                <div v-if="importResult" class="grid gap-3 sm:grid-cols-4">
+                    <ImportStatCard
+                        label="Distritos"
+                        :value="importResult.createdDistricts"
+                        tone="primary"
+                    />
+                    <ImportStatCard
+                        label="Zonas"
+                        :value="importResult.createdZones"
+                        tone="warning"
+                    />
+                    <ImportStatCard
+                        label="Sectores"
+                        :value="importResult.createdSectors"
+                        tone="success"
+                    />
+                    <ImportStatCard
+                        label="Pendientes"
+                        :value="retryImportFailures.length"
+                        :tone="retryImportFailures.length ? 'danger' : 'neutral'"
+                    />
+                </div>
+                <div v-else class="grid gap-3 sm:grid-cols-4">
+                    <ImportStatCard
+                        v-for="summary in importValidSummary"
+                        :key="summary.label"
+                        :label="summary.label"
+                        :value="summary.value"
+                    />
+                    <ImportStatCard
+                        label="Filas con errores"
+                        :value="invalidImportRows.length"
+                        :tone="importErrors.length ? 'danger' : 'neutral'"
+                    />
+                </div>
+            </template>
+
+            <template #notes>
+                <ImportNote v-if="!importResult && !importErrors.length">
+                    Se crearán primero los distritos, después las zonas y finalmente los sectores.
+                    Usa el código del miembro de las pestañas Pastores, Coordinadores o Supervisores
+                    para asignar cada responsable. Las reuniones no se modifican. Las referencias de
+                    la plantilla solo sirven para enlazar las filas y el sistema generará los
+                    códigos definitivos.
+                </ImportNote>
+                <ImportNote
+                    v-if="!importResult && invalidImportRows.length && validImportRows.length"
+                    tone="warning"
                 >
-                    <div class="flex items-start gap-4">
-                        <div
-                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"
-                        >
-                            <FileSpreadsheet class="size-6" />
-                        </div>
-                        <div class="min-w-0">
-                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">
-                                Carga masiva de territorios
-                            </DialogTitle>
-                            <DialogDescription
-                                class="mt-1 truncate text-sm text-on-surface-variant"
-                            >
-                                {{
-                                    importFileName ||
-                                    'Descarga la plantilla o sube un archivo de Excel .xlsx'
-                                }}
-                            </DialogDescription>
-                        </div>
-                    </div>
-
-                    <div v-if="!importFileName || parsingImportFile" class="mt-6 space-y-5">
-                        <div
-                            class="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                            <div>
-                                <p class="text-sm font-semibold text-on-surface">
-                                    ¿Ya tienes el archivo listo?
-                                </p>
-                                <p class="mt-1 text-xs leading-5 text-on-surface-variant">
-                                    Descarga la plantilla si necesitas la estructura y los catálogos
-                                    actualizados.
-                                </p>
-                            </div>
-                            <div class="flex shrink-0 flex-wrap gap-2">
-                                <UiButton
-                                    variant="outline"
-                                    type="button"
-                                    class="border-primary/40 bg-surface hover:bg-primary hover:text-primary-foreground"
-                                    :loading="downloadingTemplate"
-                                    @click="downloadTemplate"
-                                >
-                                    <FileDown class="size-4" />
-                                    Descargar plantilla
-                                </UiButton>
-                                <UiButton
-                                    type="button"
-                                    class="shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
-                                    :loading="parsingImportFile"
-                                    :disabled="parsingImportFile"
-                                    @click="pickImportFile"
-                                >
-                                    <Upload class="size-4" />
-                                    Importar
-                                </UiButton>
-                            </div>
-                        </div>
-
-                        <button
-                            type="button"
-                            class="group flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:bg-primary/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:py-12"
-                            :class="
-                                isImportDropActive
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-primary/60 hover:bg-primary/5'
-                            "
-                            :disabled="parsingImportFile"
-                            @click="pickImportFile"
-                            @dragenter.prevent="isImportDropActive = true"
-                            @dragover.prevent="isImportDropActive = true"
-                            @dragleave.self.prevent="isImportDropActive = false"
-                            @drop.prevent="onImportDrop"
-                        >
-                            <span
-                                class="flex size-14 items-center justify-center rounded-2xl bg-surface text-primary shadow-sm transition-transform duration-200 group-hover:scale-110"
-                            >
-                                <Upload v-if="!parsingImportFile" class="size-6" />
-                                <LoaderCircle v-else class="size-6 animate-spin" />
-                            </span>
-                            <span class="mt-4 text-sm font-semibold text-on-surface">
-                                {{
-                                    parsingImportFile
-                                        ? 'Analizando el archivo…'
-                                        : 'Arrastra aquí tu archivo de Excel'
-                                }}
-                            </span>
-                            <span class="mt-1 text-xs leading-5">
-                                {{
-                                    parsingImportFile
-                                        ? importFileName
-                                        : 'o haz clic para seleccionar un archivo .xlsx'
-                                }}
-                            </span>
-                        </button>
-
-                        <p class="text-center text-xs leading-5 text-on-surface-variant">
-                            Revisaremos el archivo antes de guardar. Las filas válidas se podrán
-                            importar aunque otras tengan errores.
-                        </p>
-
-                        <div class="flex justify-end">
-                            <DialogClose as-child>
-                                <UiButton
-                                    variant="outline"
-                                    type="button"
-                                    class="bg-surface hover:bg-surface-container"
-                                >
-                                    Cancelar
-                                </UiButton>
-                            </DialogClose>
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="importFileName && !parsingImportFile && importResult"
-                        class="mt-6 grid gap-3 sm:grid-cols-4"
-                    >
-                        <div class="rounded-xl border border-primary/25 bg-primary/5 p-4">
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Distritos
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-primary">
-                                {{ importResult.createdDistricts }}
-                            </p>
-                        </div>
-                        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Zonas
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-amber-600">
-                                {{ importResult.createdZones }}
-                            </p>
-                        </div>
-                        <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Sectores
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-emerald-600">
-                                {{ importResult.createdSectors }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-xl border p-4"
-                            :class="
-                                retryImportFailures.length
-                                    ? 'border-destructive/35 bg-destructive/5'
-                                    : 'border-outline-variant bg-surface-container'
-                            "
-                        >
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Pendientes
-                            </p>
-                            <p
-                                class="mt-1 font-display text-2xl font-semibold"
-                                :class="
-                                    retryImportFailures.length
-                                        ? 'text-destructive'
-                                        : 'text-on-surface'
-                                "
-                            >
-                                {{ retryImportFailures.length }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        v-else-if="importFileName && !parsingImportFile"
-                        class="mt-6 grid gap-3 sm:grid-cols-4"
-                    >
-                        <div
-                            v-for="summary in [
-                                {
-                                    label: 'Distritos válidos',
-                                    value: importPreview.districts.filter(
-                                        (row) => !row.issues.length,
-                                    ).length,
-                                },
-                                {
-                                    label: 'Zonas válidas',
-                                    value: importPreview.zones.filter((row) => !row.issues.length)
-                                        .length,
-                                },
-                                {
-                                    label: 'Sectores válidos',
-                                    value: importPreview.sectors.filter((row) => !row.issues.length)
-                                        .length,
-                                },
-                            ]"
-                            :key="summary.label"
-                            class="rounded-xl border border-outline-variant bg-surface-container p-4"
-                        >
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                {{ summary.label }}
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-on-surface">
-                                {{ summary.value }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-xl border p-4"
-                            :class="
-                                importErrors.length
-                                    ? 'border-destructive/35 bg-destructive/5'
-                                    : 'border-outline-variant bg-surface-container'
-                            "
-                        >
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Filas con errores
-                            </p>
-                            <p
-                                class="mt-1 font-display text-2xl font-semibold"
-                                :class="
-                                    importErrors.length ? 'text-destructive' : 'text-on-surface'
-                                "
-                            >
-                                {{ invalidImportRows.length }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="importFileName && !parsingImportFile && importErrors.length"
-                        class="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
-                    >
-                        <p class="text-xs font-semibold text-destructive">
-                            {{
-                                importResult
-                                    ? 'Registros que continúan pendientes:'
-                                    : 'Corrige estas filas o importa únicamente las válidas:'
-                            }}
-                        </p>
-                        <ul
-                            class="mt-2 max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-on-surface-variant"
-                        >
-                            <li v-for="error in importErrors" :key="error">
-                                {{ error }}
-                            </li>
-                        </ul>
-                    </div>
-
-                    <p
-                        v-else-if="importFileName && !parsingImportFile && !importResult"
-                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Se crearán primero los distritos, después las zonas y finalmente los
-                        sectores. Usa el código del miembro de las pestañas Pastores, Coordinadores
-                        o Supervisores para asignar cada responsable. Las reuniones no se modifican.
-                        Las referencias de la plantilla solo sirven para enlazar las filas y el
-                        sistema generará los códigos definitivos.
-                    </p>
-
-                    <p
-                        v-if="!importResult && invalidImportRows.length && validImportRows.length"
-                        class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Se importarán primero los {{ validImportRows.length }} registros válidos.
-                        Las {{ invalidImportRows.length }} filas con errores quedarán pendientes
-                        para corregirlas y descargarlas en un nuevo Excel.
-                    </p>
-
-                    <p
-                        v-if="importResult && retryImportFailures.length"
-                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Los {{ importedTotal }} registros creados ya no aparecen en el Excel de
-                        pendientes. Corrige ese archivo y vuelve a importarlo.
-                    </p>
-
-                    <div
-                        v-if="importFileName && !parsingImportFile"
-                        class="mt-6 flex flex-wrap justify-end gap-2"
-                    >
-                        <DialogClose as-child>
-                            <UiButton
-                                variant="outline"
-                                type="button"
-                                class="bg-surface hover:bg-surface-container"
-                            >
-                                {{ importResult ? 'Cerrar' : 'Cancelar' }}
-                            </UiButton>
-                        </DialogClose>
-                        <UiButton
-                            v-if="
-                                (importResult && retryImportFailures.length) ||
-                                (!importResult &&
-                                    !validImportRows.length &&
-                                    invalidImportRows.length)
-                            "
-                            variant="outline"
-                            type="button"
-                            class="bg-surface hover:bg-surface-container"
-                            :loading="downloadingFailures"
-                            @click="downloadPendingTerritories"
-                        >
-                            <Download class="size-4" />
-                            Descargar pendientes
-                        </UiButton>
-                        <UiButton
-                            v-if="!importResult"
-                            type="button"
-                            :loading="importTerritoriesMutation.isPending.value"
-                            :disabled="!validImportRows.length || !!importPreview.fileErrors.length"
-                            @click="confirmTerritoryImport"
-                        >
-                            <Upload class="size-4" />
-                            Importar {{ validImportRows.length }} registro(s)
-                        </UiButton>
-                    </div>
-                </DialogContent>
-            </DialogPortal>
-        </DialogRoot>
+                    Se importarán primero los {{ validImportRows.length }} registros válidos. Las
+                    {{ invalidImportRows.length }} filas con errores quedarán pendientes para
+                    corregirlas y descargarlas en un nuevo Excel.
+                </ImportNote>
+                <ImportNote v-if="importResult && retryImportFailures.length">
+                    Los {{ importedTotal }} registros creados ya no aparecen en el Excel de
+                    pendientes. Corrige ese archivo y vuelve a importarlo.
+                </ImportNote>
+            </template>
+        </ExcelImportDialog>
 
         <!-- Create / edit drawer (district · zone · sector) -->
         <TerritoryFormDrawer
