@@ -36,7 +36,6 @@ const MEETING_HEADERS = [
     'Latitud',
     'Longitud',
     'Asistentes esperados',
-    'Estado',
     'Visibilidad',
     'Color',
     'Descripción',
@@ -141,6 +140,7 @@ function meetingsSheet(rows: ExcelValue[][], failureReasons?: string[]) {
             22,
             22,
             30,
+            30,
             18,
             16,
             16,
@@ -153,7 +153,6 @@ function meetingsSheet(rows: ExcelValue[][], failureReasons?: string[]) {
             16,
             16,
             22,
-            16,
             18,
             16,
             46,
@@ -232,10 +231,10 @@ function instructionsSheet() {
             'Templo central, 13.704, -89.204',
         ],
         [
-            'Estado / Visibilidad',
+            'Visibilidad',
             'No',
-            'Si quedan vacíos se usará Activa e Interna. Consulta sus pestañas para ver los valores admitidos.',
-            'Activa, Interna',
+            'Si queda vacía se usará Interna. Consulta su pestaña para ver los valores admitidos. Las reuniones importadas siempre quedan activas.',
+            'Interna',
         ],
         [
             'Color',
@@ -380,17 +379,6 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
             [22, 36],
         ),
         catalogSheet(
-            'Estados',
-            'Estados de una reunión',
-            'Una reunión inactiva deja de generar nuevas ocurrencias.',
-            ['Valor', 'Descripción'],
-            [
-                ['Activa', 'Genera ocurrencias según su regla'],
-                ['Inactiva', 'No genera nuevas ocurrencias'],
-            ],
-            [24, 52],
-        ),
-        catalogSheet(
             'Visibilidad',
             'Visibilidad de una reunión',
             'Indica si la reunión es pública o interna.',
@@ -522,14 +510,6 @@ function parseNumber(
         return null
     }
     return parsed
-}
-
-function parseActive(value: ExcelValue, issues: string[]) {
-    const input = normalize(text(value))
-    if (!input || ['activa', 'activo', 'true', 'si', '1'].includes(input)) return true
-    if (['inactiva', 'inactivo', 'false', 'no', '0'].includes(input)) return false
-    issues.push('Estado: usa Activa o Inactiva.')
-    return true
 }
 
 function parseVisibility(value: ExcelValue, issues: string[]) {
@@ -848,7 +828,7 @@ export async function parseMeetingsWorkbook(
             weekOrdinal,
             weekday,
             expectedAttendees,
-            isActive: parseActive(value(row, 'Estado'), issues),
+            isActive: true,
             isPublic: parseVisibility(value(row, 'Visibilidad'), issues),
             notes: notes || null,
             color: parseColor(value(row, 'Color'), type?.color ?? DEFAULT_COLOR, issues),
