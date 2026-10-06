@@ -5,11 +5,8 @@ import {
     CheckCircle2,
     Clock,
     Compass,
-    Download,
     Eye,
     EyeOff,
-    FileDown,
-    FileSpreadsheet,
     MapPin,
     MoreVertical,
     Pencil,
@@ -36,6 +33,9 @@ import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import ExcelImportDialog from '~/presentation/shared/components/excel-import/ExcelImportDialog.vue'
+import ImportNote from '~/presentation/shared/components/excel-import/ImportNote.vue'
+import ImportStatCard from '~/presentation/shared/components/excel-import/ImportStatCard.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import {
     useMeetingLeadersQuery,
@@ -285,7 +285,6 @@ async function confirmDelete() {
 const downloadingTemplate = ref(false)
 const parsingImportFile = ref(false)
 const downloadingFailures = ref(false)
-const importInput = ref<HTMLInputElement | null>(null)
 const importOpen = ref(false)
 const importFileName = ref('')
 const importPreview = ref<MeetingImportPreview>({ rows: [], fileErrors: [] })
@@ -321,16 +320,19 @@ async function downloadTemplate() {
     }
 }
 
-function pickImportFile() {
-    importInput.value?.click()
+function resetImportPreview() {
+    importFileName.value = ''
+    importPreview.value = { rows: [], fileErrors: [] }
+    importResult.value = null
+    retryImportFailures.value = []
 }
 
-async function onImportFile(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    input.value = ''
-    if (!file) return
+function openImportModal() {
+    resetImportPreview()
+    importOpen.value = true
+}
 
+async function processImportFile(file: File) {
     parsingImportFile.value = true
     importFileName.value = file.name
     importResult.value = null
@@ -341,8 +343,8 @@ async function onImportFile(event: Event) {
             importCatalogs.value,
             meetings.value,
         )
-        importOpen.value = true
     } catch {
+        resetImportPreview()
         toast.error('No pudimos leer el archivo. Verifica que sea un Excel .xlsx válido.')
     } finally {
         parsingImportFile.value = false
@@ -483,35 +485,15 @@ async function toggleActive(m: MeetingRecord) {
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                <input
-                    v-if="canManage"
-                    ref="importInput"
-                    type="file"
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    class="hidden"
-                    @change="onImportFile"
-                />
                 <UiButton
                     v-if="canManage"
                     variant="outline"
                     type="button"
-                    :loading="downloadingTemplate"
                     :disabled="importCatalogsLoading"
-                    @click="downloadTemplate"
-                >
-                    <FileDown class="size-4" />
-                    Plantilla
-                </UiButton>
-                <UiButton
-                    v-if="canManage"
-                    variant="outline"
-                    type="button"
-                    :loading="parsingImportFile"
-                    :disabled="importCatalogsLoading"
-                    @click="pickImportFile"
+                    @click="openImportModal"
                 >
                     <Upload class="size-4" />
-                    Importar
+                    Carga masiva
                 </UiButton>
                 <NuxtLink
                     to="/catalogos/reuniones/nueva"
@@ -846,179 +828,75 @@ async function toggleActive(m: MeetingRecord) {
             </DialogPortal>
         </DialogRoot>
 
-        <DialogRoot v-model:open="importOpen">
-            <DialogPortal>
-                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
-                <DialogContent
-                    class="fixed left-1/2 top-1/2 z-[71] max-h-[88vh] w-[96vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none sm:p-7"
+        <ExcelImportDialog
+            v-model:open="importOpen"
+            title="Carga masiva de reuniones"
+            :file-name="importFileName"
+            :parsing="parsingImportFile"
+            :downloading-template="downloadingTemplate"
+            template-hint="Descarga la plantilla si necesitas las columnas y los catálogos de tipos, sectores y líderes actualizados."
+            :errors="importErrors"
+            :errors-title="
+                importResult
+                    ? 'Reuniones que continúan pendientes:'
+                    : 'Corrige estas filas o importa únicamente las válidas:'
+            "
+            :has-result="!!importResult"
+            :can-download-pending="
+                importResult
+                    ? retryImportFailures.length > 0
+                    : !validImportRows.length && invalidImportRows.length > 0
+            "
+            :downloading-pending="downloadingFailures"
+            :confirm-label="`Importar ${validImportRows.length} reunión(es)`"
+            :confirming="importMeetingsMutation.isPending.value"
+            :confirm-disabled="!validImportRows.length || !!importPreview.fileErrors.length"
+            @download-template="downloadTemplate"
+            @file="processImportFile"
+            @download-pending="downloadPendingMeetings"
+            @confirm="confirmMeetingImport"
+        >
+            <template #summary>
+                <div v-if="importResult" class="grid gap-3 sm:grid-cols-2">
+                    <ImportStatCard label="Creadas" :value="importResult.created" tone="success" />
+                    <ImportStatCard
+                        label="Pendientes"
+                        :value="retryImportFailures.length"
+                        :tone="retryImportFailures.length ? 'danger' : 'neutral'"
+                    />
+                </div>
+                <div v-else class="grid gap-3 sm:grid-cols-2">
+                    <ImportStatCard
+                        label="Reuniones válidas"
+                        :value="validImportRows.length"
+                        tone="primary"
+                    />
+                    <ImportStatCard
+                        label="Filas con errores"
+                        :value="invalidImportRows.length"
+                        :tone="importErrors.length ? 'danger' : 'neutral'"
+                    />
+                </div>
+            </template>
+
+            <template #notes>
+                <ImportNote v-if="!importResult && !importErrors.length">
+                    El supervisor se tomará del sector y cada reunión conservará las mismas reglas
+                    de tipo, líder, horario y recurrencia que la creación manual.
+                </ImportNote>
+                <ImportNote
+                    v-if="!importResult && invalidImportRows.length && validImportRows.length"
+                    tone="warning"
                 >
-                    <div class="flex items-start gap-4">
-                        <div
-                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"
-                        >
-                            <FileSpreadsheet class="size-6" />
-                        </div>
-                        <div class="min-w-0">
-                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">
-                                Importar reuniones desde Excel
-                            </DialogTitle>
-                            <DialogDescription
-                                class="mt-1 truncate text-sm text-on-surface-variant"
-                            >
-                                {{ importFileName }}
-                            </DialogDescription>
-                        </div>
-                    </div>
-
-                    <div v-if="importResult" class="mt-6 grid gap-3 sm:grid-cols-2">
-                        <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Creadas
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-emerald-600">
-                                {{ importResult.created }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-xl border p-4"
-                            :class="
-                                retryImportFailures.length
-                                    ? 'border-destructive/35 bg-destructive/5'
-                                    : 'border-outline-variant bg-surface-container'
-                            "
-                        >
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Pendientes
-                            </p>
-                            <p
-                                class="mt-1 font-display text-2xl font-semibold"
-                                :class="
-                                    retryImportFailures.length
-                                        ? 'text-destructive'
-                                        : 'text-on-surface'
-                                "
-                            >
-                                {{ retryImportFailures.length }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div v-else class="mt-6 grid gap-3 sm:grid-cols-2">
-                        <div class="rounded-xl border border-primary/25 bg-primary/5 p-4">
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Reuniones válidas
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-primary">
-                                {{ validImportRows.length }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded-xl border p-4"
-                            :class="
-                                importErrors.length
-                                    ? 'border-destructive/35 bg-destructive/5'
-                                    : 'border-outline-variant bg-surface-container'
-                            "
-                        >
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                            >
-                                Filas con errores
-                            </p>
-                            <p
-                                class="mt-1 font-display text-2xl font-semibold"
-                                :class="
-                                    importErrors.length ? 'text-destructive' : 'text-on-surface'
-                                "
-                            >
-                                {{ invalidImportRows.length }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="importErrors.length"
-                        class="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
-                    >
-                        <p class="text-xs font-semibold text-destructive">
-                            {{
-                                importResult
-                                    ? 'Reuniones que continúan pendientes:'
-                                    : 'Corrige estas filas o importa únicamente las válidas:'
-                            }}
-                        </p>
-                        <ul
-                            class="mt-2 max-h-52 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-on-surface-variant"
-                        >
-                            <li v-for="error in importErrors" :key="error">
-                                {{ error }}
-                            </li>
-                        </ul>
-                    </div>
-
-                    <p
-                        v-else-if="!importResult"
-                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        El supervisor se tomará del sector y cada reunión conservará las mismas
-                        reglas de tipo, líder, horario y recurrencia que la creación manual.
-                    </p>
-                    <p
-                        v-if="!importResult && invalidImportRows.length && validImportRows.length"
-                        class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Se crearán las {{ validImportRows.length }} reuniones válidas. Las
-                        {{ invalidImportRows.length }} filas con problemas quedarán en un nuevo
-                        Excel con el motivo para corregirlas y volver a importarlas.
-                    </p>
-                    <p
-                        v-if="importResult && retryImportFailures.length"
-                        class="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Las {{ importResult.created }} reuniones creadas ya no aparecen en el Excel
-                        de pendientes.
-                    </p>
-
-                    <div class="mt-6 flex flex-wrap justify-end gap-2">
-                        <DialogClose as-child>
-                            <UiButton variant="outline" type="button">
-                                {{ importResult ? 'Cerrar' : 'Cancelar' }}
-                            </UiButton>
-                        </DialogClose>
-                        <UiButton
-                            v-if="
-                                (importResult && retryImportFailures.length) ||
-                                (!importResult &&
-                                    !validImportRows.length &&
-                                    invalidImportRows.length)
-                            "
-                            variant="outline"
-                            type="button"
-                            :loading="downloadingFailures"
-                            @click="downloadPendingMeetings"
-                        >
-                            <Download class="size-4" />
-                            Descargar pendientes
-                        </UiButton>
-                        <UiButton
-                            v-if="!importResult"
-                            type="button"
-                            :loading="importMeetingsMutation.isPending.value"
-                            :disabled="!validImportRows.length || !!importPreview.fileErrors.length"
-                            @click="confirmMeetingImport"
-                        >
-                            <Upload class="size-4" />
-                            Importar {{ validImportRows.length }} reunión(es)
-                        </UiButton>
-                    </div>
-                </DialogContent>
-            </DialogPortal>
-        </DialogRoot>
+                    Se crearán las {{ validImportRows.length }} reuniones válidas. Las
+                    {{ invalidImportRows.length }} filas con problemas quedarán en un nuevo Excel
+                    con el motivo para corregirlas y volver a importarlas.
+                </ImportNote>
+                <ImportNote v-if="importResult && retryImportFailures.length">
+                    Las {{ importResult.created }} reuniones creadas ya no aparecen en el Excel de
+                    pendientes.
+                </ImportNote>
+            </template>
+        </ExcelImportDialog>
     </main>
 </template>
