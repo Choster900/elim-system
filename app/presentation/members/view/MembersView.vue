@@ -4,10 +4,7 @@ import {
     Cake,
     Download,
     Eye,
-    FileDown,
-    FileSpreadsheet,
     Compass,
-    LoaderCircle,
     Mail,
     MoreVertical,
     Pencil,
@@ -38,6 +35,9 @@ import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import ExcelImportDialog from '~/presentation/shared/components/excel-import/ExcelImportDialog.vue'
+import ImportNote from '~/presentation/shared/components/excel-import/ImportNote.vue'
+import ImportStatCard from '~/presentation/shared/components/excel-import/ImportStatCard.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import AppTour from '~/presentation/shared/components/AppTour.vue'
 import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
@@ -397,9 +397,7 @@ async function downloadTemplate() {
     }
 }
 
-const importInput = ref<HTMLInputElement | null>(null)
 const importOpen = ref(false)
-const isImportDropActive = ref(false)
 const importing = computed(() => importMembersMutation.isPending.value)
 const parsingFile = ref(false)
 const importFileName = ref('')
@@ -427,10 +425,6 @@ const previewErrors = computed(() => {
         ),
     ]
 })
-
-function pickImportFile() {
-    importInput.value?.click()
-}
 
 function resetImportPreview() {
     importFileName.value = ''
@@ -463,19 +457,6 @@ async function processImportFile(file: File) {
     } finally {
         parsingFile.value = false
     }
-}
-
-async function onImportFile(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    input.value = ''
-    if (file) await processImportFile(file)
-}
-
-async function onImportDrop(event: DragEvent) {
-    isImportDropActive.value = false
-    const file = event.dataTransfer?.files?.[0]
-    if (file) await processImportFile(file)
 }
 
 async function confirmImport() {
@@ -679,14 +660,6 @@ async function downloadPendingMembers() {
                                 </p>
                             </div>
                         </div>
-                        <input
-                            v-if="canImportExport"
-                            ref="importInput"
-                            type="file"
-                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            class="hidden"
-                            @change="onImportFile"
-                        />
                         <UiButton
                             v-if="canImportExport"
                             variant="outline"
@@ -936,257 +909,77 @@ async function downloadPendingMembers() {
             </DialogPortal>
         </DialogRoot>
 
-        <DialogRoot v-model:open="importOpen">
-            <DialogPortal>
-                <DialogOverlay class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" />
-                <DialogContent
-                    class="fixed left-1/2 top-1/2 z-[71] max-h-[88vh] w-[96vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-6 shadow-2xl focus:outline-none sm:p-7"
+        <ExcelImportDialog
+            v-model:open="importOpen"
+            title="Carga masiva de miembros"
+            :file-name="importFileName"
+            :parsing="parsingFile"
+            :downloading-template="downloadingTemplate"
+            :errors="previewErrors"
+            :errors-title="
+                importResult
+                    ? 'Filas que continúan pendientes:'
+                    : 'Estas filas se devolverán para corregirlas:'
+            "
+            :has-result="!!importResult"
+            :can-download-pending="
+                importResult
+                    ? importResult.rejected > 0
+                    : !validImportRows.length && invalidImportRows.length > 0
+            "
+            :downloading-pending="downloadingFailures"
+            :confirm-label="`Importar ${validImportRows.length} miembro(s)`"
+            :confirming="importing"
+            :confirm-disabled="!validImportRows.length || !!importPreview.fileErrors.length"
+            @download-template="downloadTemplate"
+            @file="processImportFile"
+            @download-pending="downloadPendingMembers"
+            @confirm="confirmImport"
+        >
+            <template #summary>
+                <div v-if="importResult" class="grid grid-cols-3 gap-3">
+                    <ImportStatCard label="Creados" :value="importResult.created" tone="success" />
+                    <ImportStatCard
+                        label="Actualizados"
+                        :value="importResult.updated"
+                        tone="primary"
+                    />
+                    <ImportStatCard
+                        label="Pendientes"
+                        :value="importResult.rejected"
+                        tone="danger"
+                    />
+                </div>
+                <div v-else class="grid grid-cols-2 gap-3">
+                    <ImportStatCard label="Registros válidos" :value="validImportRows.length" />
+                    <ImportStatCard
+                        label="Errores"
+                        :value="invalidImportRows.length"
+                        :tone="previewErrors.length ? 'danger' : 'neutral'"
+                    />
+                </div>
+            </template>
+
+            <template #notes>
+                <ImportNote v-if="!importResult && !previewErrors.length">
+                    Los registros con un
+                    <strong class="text-on-surface">documento existente</strong> serán actualizados.
+                    Los demás se crearán con un código generado automáticamente por el sistema.
+                </ImportNote>
+                <ImportNote
+                    v-if="!importResult && invalidImportRows.length && validImportRows.length"
+                    tone="warning"
                 >
-                    <div class="flex items-start gap-4">
-                        <div
-                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"
-                        >
-                            <FileSpreadsheet class="size-6" />
-                        </div>
-                        <div class="min-w-0">
-                            <DialogTitle class="font-display text-xl font-semibold text-on-surface">
-                                Carga masiva de miembros
-                            </DialogTitle>
-                            <DialogDescription
-                                class="mt-1 truncate text-sm text-on-surface-variant"
-                            >
-                                {{
-                                    importFileName ||
-                                    'Descarga la plantilla o sube un archivo de Excel .xlsx'
-                                }}
-                            </DialogDescription>
-                        </div>
-                    </div>
-
-                    <div v-if="!importFileName || parsingFile" class="mt-6 space-y-5">
-                        <div
-                            class="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                            <div>
-                                <p class="text-sm font-semibold text-on-surface">
-                                    ¿Ya tienes el archivo listo?
-                                </p>
-                                <p class="mt-1 text-xs leading-5 text-on-surface-variant">
-                                    Descarga la plantilla si necesitas las columnas y los catálogos
-                                    actualizados.
-                                </p>
-                            </div>
-                            <div class="flex shrink-0 flex-wrap gap-2">
-                                <UiButton
-                                    variant="outline"
-                                    type="button"
-                                    class="border-primary/40 bg-surface hover:bg-primary hover:text-primary-foreground"
-                                    :loading="downloadingTemplate"
-                                    @click="downloadTemplate"
-                                >
-                                    <FileDown class="size-4" /> Descargar plantilla
-                                </UiButton>
-                                <UiButton
-                                    type="button"
-                                    class="shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
-                                    :loading="parsingFile"
-                                    :disabled="parsingFile"
-                                    @click="pickImportFile"
-                                >
-                                    <Upload class="size-4" /> Importar
-                                </UiButton>
-                            </div>
-                        </div>
-
-                        <button
-                            type="button"
-                            class="group flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:bg-primary/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:py-12"
-                            :class="
-                                isImportDropActive
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-primary/60 hover:bg-primary/5'
-                            "
-                            :disabled="parsingFile"
-                            @click="pickImportFile"
-                            @dragenter.prevent="isImportDropActive = true"
-                            @dragover.prevent="isImportDropActive = true"
-                            @dragleave.self.prevent="isImportDropActive = false"
-                            @drop.prevent="onImportDrop"
-                        >
-                            <span
-                                class="flex size-14 items-center justify-center rounded-2xl bg-surface text-primary shadow-sm transition-transform duration-200 group-hover:scale-110"
-                            >
-                                <Upload v-if="!parsingFile" class="size-6" />
-                                <LoaderCircle v-else class="size-6 animate-spin" />
-                            </span>
-                            <span class="mt-4 text-sm font-semibold text-on-surface">
-                                {{
-                                    parsingFile
-                                        ? 'Analizando el archivo…'
-                                        : 'Arrastra aquí tu archivo de Excel'
-                                }}
-                            </span>
-                            <span class="mt-1 text-xs leading-5">
-                                {{
-                                    parsingFile
-                                        ? importFileName
-                                        : 'o haz clic para seleccionar un archivo .xlsx'
-                                }}
-                            </span>
-                        </button>
-
-                        <p class="text-center text-xs leading-5 text-on-surface-variant">
-                            Revisaremos el archivo antes de guardar. Las filas válidas se podrán
-                            importar aunque otras tengan errores.
-                        </p>
-
-                        <div class="flex justify-end">
-                            <DialogClose as-child>
-                                <UiButton variant="outline" type="button">Cancelar</UiButton>
-                            </DialogClose>
-                        </div>
-                    </div>
-
-                    <div v-else-if="importResult" class="mt-6 grid grid-cols-3 gap-3">
-                        <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-4">
-                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                Creados
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-emerald-600">
-                                {{ importResult.created }}
-                            </p>
-                        </div>
-                        <div class="rounded border border-primary/30 bg-primary/5 p-4">
-                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                Actualizados
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-primary">
-                                {{ importResult.updated }}
-                            </p>
-                        </div>
-                        <div class="rounded border border-destructive/40 bg-destructive/5 p-4">
-                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                Pendientes
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-destructive">
-                                {{ importResult.rejected }}
-                            </p>
-                        </div>
-                    </div>
-                    <div v-else-if="importFileName" class="mt-6 grid grid-cols-2 gap-3">
-                        <div class="rounded border border-outline-variant bg-surface-container p-4">
-                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                Registros válidos
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-semibold text-on-surface">
-                                {{ validImportRows.length }}
-                            </p>
-                        </div>
-                        <div
-                            class="rounded border p-4"
-                            :class="
-                                previewErrors.length
-                                    ? 'border-destructive/40 bg-destructive/5'
-                                    : 'border-outline-variant bg-surface-container'
-                            "
-                        >
-                            <p class="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                Errores
-                            </p>
-                            <p
-                                class="mt-1 font-display text-2xl font-semibold"
-                                :class="
-                                    previewErrors.length ? 'text-destructive' : 'text-on-surface'
-                                "
-                            >
-                                {{ invalidImportRows.length }}
-                            </p>
-                        </div>
-                    </div>
-                    <div
-                        v-if="previewErrors.length"
-                        class="mt-4 rounded border border-destructive/30 bg-destructive/5 p-4"
-                    >
-                        <p class="text-xs font-semibold text-destructive">
-                            {{
-                                importResult
-                                    ? 'Filas que continúan pendientes:'
-                                    : 'Estas filas se devolverán para corregirlas:'
-                            }}
-                        </p>
-                        <ul
-                            class="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-on-surface-variant"
-                        >
-                            <li v-for="error in previewErrors" :key="error">
-                                {{ error }}
-                            </li>
-                        </ul>
-                    </div>
-                    <p
-                        v-else-if="importFileName && !importResult"
-                        class="mt-4 rounded border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Los registros con un
-                        <strong class="text-on-surface">documento existente</strong> serán
-                        actualizados. Los demás se crearán con un código generado automáticamente
-                        por el sistema.
-                    </p>
-                    <p
-                        v-if="!importResult && invalidImportRows.length && validImportRows.length"
-                        class="mt-4 rounded border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Los {{ validImportRows.length }} registros válidos se guardarán. Las
-                        {{ invalidImportRows.length }} filas con problemas quedarán en un nuevo
-                        Excel junto con el motivo, listas para corregir y volver a importar.
-                    </p>
-                    <p
-                        v-if="importResult && importResult.rejected"
-                        class="mt-4 rounded border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
-                    >
-                        Los miembros creados o actualizados ya no aparecen en el archivo de
-                        pendientes. Puedes corregir ese archivo y subirlo nuevamente.
-                    </p>
-                    <div
-                        v-if="importFileName && !parsingFile"
-                        class="mt-6 flex flex-wrap justify-end gap-2"
-                    >
-                        <DialogClose as-child>
-                            <UiButton variant="outline" type="button">
-                                {{ importResult ? 'Cerrar' : 'Cancelar' }}
-                            </UiButton>
-                        </DialogClose>
-                        <UiButton
-                            v-if="
-                                (importResult && importResult.rejected) ||
-                                (!importResult &&
-                                    !validImportRows.length &&
-                                    invalidImportRows.length)
-                            "
-                            variant="outline"
-                            type="button"
-                            :loading="downloadingFailures"
-                            @click="downloadPendingMembers"
-                        >
-                            <Download class="size-4" /> Descargar pendientes
-                        </UiButton>
-                        <UiButton
-                            v-if="!importResult"
-                            type="button"
-                            :loading="importing"
-                            :disabled="
-                                importing ||
-                                !validImportRows.length ||
-                                !!importPreview.fileErrors.length
-                            "
-                            @click="confirmImport"
-                        >
-                            <Upload class="size-4" /> Importar
-                            {{ validImportRows.length }} miembro(s)
-                        </UiButton>
-                    </div>
-                </DialogContent>
-            </DialogPortal>
-        </DialogRoot>
+                    Los {{ validImportRows.length }} registros válidos se guardarán. Las
+                    {{ invalidImportRows.length }} filas con problemas quedarán en un nuevo Excel
+                    junto con el motivo, listas para corregir y volver a importar.
+                </ImportNote>
+                <ImportNote v-if="importResult && importResult.rejected">
+                    Los miembros creados o actualizados ya no aparecen en el archivo de pendientes.
+                    Puedes corregir ese archivo y subirlo nuevamente.
+                </ImportNote>
+            </template>
+        </ExcelImportDialog>
         <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </main>
 </template>
