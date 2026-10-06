@@ -8,7 +8,8 @@ import { getPositiveIntegerParam } from '../../utils/http/route-parameter.util'
 
 export default defineEventHandler(async (event) => {
     try {
-        const auth = requirePermission(event, 'roles.manage')
+        // Gestionar roles y permisos es exclusivo del super administrador (system.manage)
+        const auth = requirePermission(event, 'system.manage')
         const id = getPositiveIntegerParam(event, 'id')
         const dto = validateDto(updateRoleSchema, await readBody(event))
         const data = await updateRole(id, dto, auth.userId)

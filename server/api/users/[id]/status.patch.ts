@@ -8,7 +8,7 @@ import { updateUserStatusSchema } from '../../../validators/user.validator'
 
 export default defineEventHandler(async (event) => {
     try {
-        requirePermission(event, 'users.block')
+        requirePermission(event, 'system.manage')
         const id = getPositiveIntegerParam(event, 'id')
         const dto = validateDto(updateUserStatusSchema, await readBody(event))
         const user = await updateUserStatus(id, dto.status)

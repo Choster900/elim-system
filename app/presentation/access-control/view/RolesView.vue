@@ -21,6 +21,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from 'radix-vue'
+import { SYSTEM_PERMISSION_CODE } from '~/presentation/auth/constants/permission.constants'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
@@ -45,6 +47,9 @@ defineOptions({ name: 'RolesView' })
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const toast = useAppToast()
+const authStore = useAuthStore()
+// Crear, editar y activar/desactivar roles es exclusivo del super administrador.
+const canManage = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 const rolesQuery = useRolesQuery()
 const permissionsQuery = usePermissionsQuery()
 const createRoleMutation = useCreateRoleMutation()
@@ -61,7 +66,7 @@ const stats = computed(() => ({
     protected: roles.value.filter((role) => role.isSystem).length,
 }))
 
-const columns: DataTableColumn<AccessRole>[] = [
+const columns = computed<DataTableColumn<AccessRole>[]>(() => [
     {
         key: 'role',
         label: 'Rol',
@@ -103,8 +108,10 @@ const columns: DataTableColumn<AccessRole>[] = [
         accessor: (row) => row.status,
         width: '130px',
     },
-    { key: 'actions', label: '', width: '70px', align: 'right' },
-]
+    ...(canManage.value
+        ? [{ key: 'actions', label: '', width: '70px', align: 'right' as const }]
+        : []),
+])
 
 function permissionModules(role: AccessRole) {
     return Array.from(
@@ -219,7 +226,12 @@ async function toggleStatus(role: AccessRole) {
                     sistema puede utilizar cada grupo de usuarios.
                 </p>
             </div>
-            <UiButton type="button" data-testid="roles-new-button" @click="openCreate">
+            <UiButton
+                v-if="canManage"
+                type="button"
+                data-testid="roles-new-button"
+                @click="openCreate"
+            >
                 <Plus class="size-4" /> Nuevo rol
             </UiButton>
         </section>
@@ -228,9 +240,13 @@ async function toggleStatus(role: AccessRole) {
             class="mt-5 flex items-start gap-3 rounded border border-primary/25 bg-primary/5 px-4 py-3 text-xs text-on-surface-variant"
         >
             <ShieldCheck class="mt-0.5 size-4 shrink-0 text-primary" />
-            <p>
+            <p v-if="canManage">
                 Los cambios se guardan de inmediato. Los roles protegidos conservan su nombre y
                 código, pero sus permisos se pueden administrar.
+            </p>
+            <p v-else>
+                Vista de solo lectura. Solo el super administrador puede crear o modificar roles y
+                sus permisos.
             </p>
         </div>
 
@@ -303,7 +319,7 @@ async function toggleStatus(role: AccessRole) {
                     </span>
                 </template>
 
-                <template #toolbar-end>
+                <template v-if="canManage" #toolbar-end>
                     <UiButton variant="outline" size="sm" type="button" @click="openCreate">
                         <Plus class="size-4" /> Nuevo rol
                     </UiButton>
@@ -312,7 +328,8 @@ async function toggleStatus(role: AccessRole) {
                 <template #cell-role="{ row }">
                     <button
                         type="button"
-                        class="flex min-w-0 items-center gap-3 text-left"
+                        class="flex min-w-0 items-center gap-3 text-left disabled:cursor-default"
+                        :disabled="!canManage"
                         @click="openEdit(row as AccessRole)"
                     >
                         <span
@@ -399,7 +416,7 @@ async function toggleStatus(role: AccessRole) {
                     </span>
                 </template>
 
-                <template #cell-actions="{ row }">
+                <template v-if="canManage" #cell-actions="{ row }">
                     <DropdownMenuRoot>
                         <DropdownMenuTrigger
                             class="flex size-9 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-primary"

@@ -8,7 +8,7 @@ import { resetUserPasswordSchema } from '../../../validators/user.validator'
 
 export default defineEventHandler(async (event) => {
     try {
-        const auth = requirePermission(event, 'users.update')
+        const auth = requirePermission(event, 'system.manage')
         const id = getPositiveIntegerParam(event, 'id')
         const dto = validateDto(resetUserPasswordSchema, await readBody(event))
         const user = await resetUserPassword(id, dto, auth.userId)

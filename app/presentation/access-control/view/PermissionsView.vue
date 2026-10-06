@@ -19,6 +19,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from 'radix-vue'
+import { SYSTEM_PERMISSION_CODE } from '~/presentation/auth/constants/permission.constants'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
@@ -46,6 +48,9 @@ defineOptions({ name: 'PermissionsView' })
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const toast = useAppToast()
+const authStore = useAuthStore()
+// Crear, editar y activar/desactivar permisos es exclusivo del super administrador.
+const canManage = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 const permissionsQuery = usePermissionsQuery()
 const createPermissionMutation = useCreatePermissionMutation()
 const updatePermissionMutation = useUpdatePermissionMutation()
@@ -60,7 +65,7 @@ const stats = computed(() => ({
     custom: permissions.value.filter((permission) => !permission.isSystem).length,
 }))
 
-const columns: DataTableColumn<AccessPermission>[] = [
+const columns = computed<DataTableColumn<AccessPermission>[]>(() => [
     {
         key: 'permission',
         label: 'Permiso',
@@ -106,8 +111,10 @@ const columns: DataTableColumn<AccessPermission>[] = [
         accessor: (row) => row.status,
         width: '130px',
     },
-    { key: 'actions', label: '', width: '70px', align: 'right' },
-]
+    ...(canManage.value
+        ? [{ key: 'actions', label: '', width: '70px', align: 'right' as const }]
+        : []),
+])
 
 function openCreate() {
     editingPermission.value = null
@@ -183,7 +190,12 @@ async function toggleStatus(permission: AccessPermission) {
                     roles se utiliza cada permiso.
                 </p>
             </div>
-            <UiButton type="button" data-testid="permissions-new-button" @click="openCreate">
+            <UiButton
+                v-if="canManage"
+                type="button"
+                data-testid="permissions-new-button"
+                @click="openCreate"
+            >
                 <Plus class="size-4" /> Nuevo permiso
             </UiButton>
         </section>
@@ -192,9 +204,12 @@ async function toggleStatus(permission: AccessPermission) {
             class="mt-5 flex items-start gap-3 rounded border border-primary/25 bg-primary/5 px-4 py-3 text-xs text-on-surface-variant"
         >
             <ShieldCheck class="mt-0.5 size-4 shrink-0 text-primary" />
-            <p>
+            <p v-if="canManage">
                 Vista visual sin conexión al backend. Los permisos base están protegidos; los
                 permisos personalizados pueden editarse o desactivarse.
+            </p>
+            <p v-else>
+                Vista de solo lectura. Solo el super administrador puede crear o modificar permisos.
             </p>
         </div>
 
@@ -267,7 +282,7 @@ async function toggleStatus(permission: AccessPermission) {
                     </span>
                 </template>
 
-                <template #toolbar-end>
+                <template v-if="canManage" #toolbar-end>
                     <UiButton variant="outline" size="sm" type="button" @click="openCreate">
                         <Plus class="size-4" /> Nuevo permiso
                     </UiButton>
@@ -276,7 +291,8 @@ async function toggleStatus(permission: AccessPermission) {
                 <template #cell-permission="{ row }">
                     <button
                         type="button"
-                        class="flex min-w-0 items-center gap-3 text-left"
+                        class="flex min-w-0 items-center gap-3 text-left disabled:cursor-default"
+                        :disabled="!canManage"
                         @click="openEdit(row as AccessPermission)"
                     >
                         <span
@@ -355,7 +371,7 @@ async function toggleStatus(permission: AccessPermission) {
                     </span>
                 </template>
 
-                <template #cell-actions="{ row }">
+                <template v-if="canManage" #cell-actions="{ row }">
                     <DropdownMenuRoot>
                         <DropdownMenuTrigger
                             class="flex size-9 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-primary"

@@ -7,7 +7,8 @@ import { handleApiError } from '../../utils/http/error-handler.util'
 
 export default defineEventHandler(async (event) => {
     try {
-        const auth = requirePermission(event, 'roles.manage')
+        // Gestionar roles y permisos es exclusivo del super administrador (system.manage)
+        const auth = requirePermission(event, 'system.manage')
         const dto = validateDto(createRoleSchema, await readBody(event))
         const data = await createRole(dto, auth.userId)
         return ApiResponseFactory.success(data, 'Rol creado correctamente')

@@ -25,7 +25,10 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from 'radix-vue'
-import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+import {
+    routePermissionCodes,
+    SYSTEM_PERMISSION_CODE,
+} from '~/presentation/auth/constants/permission.constants'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import DataTable, {
     type DataTableColumn,
@@ -74,8 +77,9 @@ const loadError = computed(() => {
 })
 
 const canCreate = computed(() => authStore.hasPermission(routePermissionCodes.usersCreate))
-const canUpdate = computed(() => authStore.hasPermission(routePermissionCodes.usersUpdate))
-const canBlock = computed(() => authStore.hasPermission(routePermissionCodes.usersBlock))
+// Editar, restablecer y bloquear cuentas es exclusivo del super administrador.
+const canUpdate = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
+const canBlock = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 const hasActions = computed(() => canUpdate.value || canBlock.value)
 const formOpen = ref(false)
 const saveError = ref('')

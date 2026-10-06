@@ -1196,7 +1196,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     responses: {
                         200: { description: 'User updated' },
                         400: { description: 'Validation error' },
-                        403: { description: 'Requires users.update' },
+                        403: { description: 'Requires system.manage (super administrador)' },
                         404: { description: 'User not found' },
                         409: { description: 'Email or username already in use' },
                     },
@@ -1228,7 +1228,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     responses: {
                         200: { description: 'Temporary password and invitation resent' },
                         400: { description: 'Validation error' },
-                        403: { description: 'Requires users.update' },
+                        403: { description: 'Requires system.manage (super administrador)' },
                         404: { description: 'User not found' },
                     },
                 },
@@ -1257,7 +1257,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     responses: {
                         200: { description: 'Status updated' },
                         400: { description: 'Validation error' },
-                        403: { description: 'Requires users.block' },
+                        403: { description: 'Requires system.manage (super administrador)' },
                         404: { description: 'User not found' },
                     },
                 },
