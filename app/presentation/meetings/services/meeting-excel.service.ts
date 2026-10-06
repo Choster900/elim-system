@@ -203,7 +203,7 @@ function instructionsSheet() {
         [
             'Co-supervisores',
             'No',
-            'Escribe uno o varios códigos de la pestaña Miembros separados por punto y coma. No incluyas al supervisor principal del sector.',
+            'Escribe uno o varios códigos de la pestaña Supervisores separados por punto y coma. No incluyas al supervisor principal del sector.',
             'MIE-0021; MIE-0035',
         ],
         [
@@ -336,6 +336,14 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
             'Solo estos miembros pueden utilizarse en la columna Líder.',
             ['Código', 'Nombre', 'Estado'],
             catalogs.leaders.map((leader) => [leader.code, leader.fullName, leader.status]),
+            [24, 46, 18],
+        ),
+        catalogSheet(
+            'Anfitriones',
+            'Anfitriones habilitados',
+            'Solo estos miembros pueden utilizarse en la columna Anfitrión.',
+            ['Código', 'Nombre', 'Estado'],
+            catalogs.hosts.map((host) => [host.code, host.fullName, host.status]),
             [24, 46, 18],
         ),
         catalogSheet(
