@@ -35,17 +35,21 @@ npm run format               # prettier over all files
 
 npm run prisma:generate
 npm run prisma:migrate       # prisma migrate dev — local only, creates migrations
-npm run prisma:seed          # full seed with demo data — refuses non-local databases
-npm run prisma:seed:minimal  # catalogs + one admin user, idempotent — safe for a real database
+npm run prisma:seed          # full seed with demo data
+npm run prisma:seed:minimal  # catalogs + one admin user, idempotent — the one meant for a real database
 npm run prisma:studio
 
 npm run db:status            # applied vs pending migrations (read-only)
 npm run db:verify            # diff the live database against schema.prisma (read-only)
 npm run db:deploy            # prisma migrate deploy — the only migration command for a real database
 
-docker compose up --build                             # app + postgres + mailpit (UI on :8025)
-docker compose -f docker-compose.prod.yml up --build
+npm run test:smtp            # send a test mail through the configured SMTP
+npm run reset:admin:local    # regenerate the local admin password (refuses non-local databases)
+
+docker compose up --build    # app + postgres + mailpit (UI on :8025)
 ```
+
+Both seeders (`prisma/seed/seed-target.mjs`) refuse a non-local `DATABASE_URL` unless `SEED_ALLOW_REMOTE=true`, and on a remote database they also require `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (≥12 chars) instead of the public defaults.
 
 There is **no test runner** in this repo — no `npm test`, no framework configured. Verify changes with `npm run lint` + `npm run build` and by exercising the affected routes/endpoints. If you add tests, add the framework and scripts in the same change and use `*.spec.ts`.
 
@@ -53,7 +57,9 @@ There is **no test runner** in this repo — no `npm test`, no framework configu
 
 Copy `.env.example` to `.env`. `config/env.ts` validates `process.env` with Joi at Nuxt startup/build and throws with the full list of problems if anything is invalid.
 
-Required: `DATABASE_URL` (any standard PostgreSQL URI — local, Supabase, Neon…), `JWT_SECRET` (min 32 chars), `NUXT_PUBLIC_APP_NAME`. Everything else has defaults: `NODE_ENV`, `APP_BASE_URL` (used to build invitation links), `SMTP_*` / `MAIL_FROM` (Mailpit defaults on 127.0.0.1:1025). `PORT` is optional; `npm run dev` picks the first available port from 3000 to 3099 unless `PORT` is set to force one. `SEED_ADMIN_*` is read by the seeder only.
+Required: `DATABASE_URL` (any standard PostgreSQL URI — local, Supabase, Neon…), `JWT_SECRET` (min 32 chars), `NUXT_PUBLIC_APP_NAME`. Everything else has defaults: `NODE_ENV`, `APP_BASE_URL` (used to build invitation and password-recovery links), `SMTP_*` / `MAIL_FROM` (Mailpit defaults on 127.0.0.1:1025), `PASSWORD_RESET_TTL_HOURS`, `NUXT_PUBLIC_MAP_*` (Leaflet tile provider; CARTO by default, no API key). `DIRECT_DATABASE_URL` / `SHADOW_DATABASE_URL` are read by the Prisma CLI only (see below).
+
+`JWT_SECRET` also derives the AES-256-GCM key that encrypts stored TOTP secrets — rotating it makes every enrolled TOTP unreadable (see `docs/autenticacion-dos-factores.md`). `PORT` is optional; `npm run dev` picks the first available port from 3000 to 3099 unless `PORT` is set to force one. `SEED_ADMIN_*` is read by the seeder only.
 
 `npm run dev` calls `scripts/setup-db.mjs`, which connects to `DATABASE_URL`, and if the database does not exist creates it and runs `prisma db push`.
 
@@ -83,7 +89,9 @@ Route `meta` drives everything: `layout` (`dashboard` | `auth` | `public` | `def
 
 Login sets **httpOnly cookies** (`access_token` / `refresh_token`, `sameSite: strict`, secure in production) — see `server/utils/auth/auth-cookie.util.ts` and `server/constants/auth.constants.ts`.
 
-`server/middleware/auth.ts` guards every `/api/*` request except an explicit public allowlist (healthcheck, docs, openapi, login, refresh, logout, invitation validate). It verifies the JWT and populates `event.context.auth` with `userId`, `roles`, `permissions`, `mustChangePassword`. When a password change is pending, only `/api/auth/me` and `/api/auth/change-password` are reachable.
+`server/middleware/auth.ts` guards every `/api/*` request except the `PUBLIC_API_PATHS` allowlist at the top of that file (healthcheck, docs, openapi, login, MFA verify, refresh, logout, invitation validate, password recovery) — a new unauthenticated endpoint must be added there. It verifies the JWT, then re-reads the user on **every request** and rejects the token if the user is inactive/blocked or its `mfaVersion` no longer matches the token's; bumping `mfaVersion` is how sessions are revoked (enabling, changing, or disabling MFA does this). It then populates `event.context.auth` with `userId`, `roles`, `permissions`, `mustChangePassword`. When a password change is pending, only `/api/auth/me` and `/api/auth/change-password` are reachable.
+
+Login is two-step when the user has MFA (TOTP or email code, `server/api/auth/mfa/`): `login` checks the password and returns a challenge, and cookies are only issued by `mfa/verify`. Details in `docs/autenticacion-dos-factores.md`.
 
 Handlers then call `requirePermission(event, 'meetings.manage')`. The `system.manage` permission bypasses every check, on both server (`require-permission.util.ts`) and client (`auth.store.ts` `hasPermission`). Keep permission codes in sync between `permission.constants.ts` and the seeded permissions.
 
@@ -121,6 +129,8 @@ The chain is: **service** (plain function taking `apiClient` + optional `AbortSi
 ### Presentation modules
 
 `app/presentation/<feature>/` with `components/`, `composables/`, `constants/`, `interfaces/`, `services/`, `stores/`, `utils/`, `view/`, plus `router.index.ts`. Cross-feature pieces live in `app/presentation/shared/`; design-system primitives (Button, Input, DataTable…) in `app/components/ui/`.
+
+The root `shared/` directory (Nuxt 4 `#shared` alias, not `app/shared`) holds code imported by **both** the frontend and the server, so a rule enforced in two places lives once — e.g. `#shared/utils/dui.util` is used by the member form and by `server/validators/member.validator.ts`. Keep it free of browser- or Node-only APIs.
 
 ### Theme system
 
