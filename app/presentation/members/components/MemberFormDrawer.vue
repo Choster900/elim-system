@@ -20,13 +20,7 @@ import { formatDuiInput, hasDuiFormat, isValidDui, normalizeDui } from '#shared/
 
 type DocumentNumberError = '' | 'invalid'
 type InvalidMemberField =
-    | 'firstName'
-    | 'lastName'
-    | 'documentNumber'
-    | 'gender'
-    | 'sector'
-    | 'email'
-    | 'occupation'
+    'firstName' | 'lastName' | 'documentNumber' | 'gender' | 'sector' | 'email' | 'occupation'
 
 interface FormState {
     firstName: string
@@ -70,6 +64,7 @@ const shouldValidateDuiChecksum = !import.meta.dev
 const catalogs = computed(() => catalogsQuery.data.value)
 const municipalityOptions = computed(() => catalogs.value?.municipalities ?? [])
 const sectorOptions = computed(() => catalogs.value?.sectors ?? [])
+const roleOptions = computed(() => catalogs.value?.roles ?? [])
 
 function emptyForm(): FormState {
     return {
@@ -631,7 +626,7 @@ const currentYear = new Date().getFullYear()
                             <span :class="labelClass">Roles comunitarios</span>
                             <UiSearchSelect
                                 v-model="form.roles"
-                                :options="memberRoleOptions"
+                                :options="roleOptions"
                                 multiple
                                 :max-items="5"
                             />

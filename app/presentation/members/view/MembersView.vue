@@ -54,7 +54,7 @@ import {
 } from '../composables/useMemberMutations'
 import { useMemberCatalogsQuery } from '../composables/useMemberCatalogsQuery'
 import { useMembersQuery } from '../composables/useMembersQuery'
-import { memberRoleOptions, memberStatusOptions } from '../constants/member.constants'
+import { memberStatusOptions } from '../constants/member.constants'
 import type {
     Member,
     MemberImportResult,
@@ -245,7 +245,7 @@ const columns = computed<DataTableColumn<Member>[]>(() => [
         sortable: true,
         filterable: true,
         filterType: 'select',
-        filterOptions: memberRoleOptions,
+        filterOptions: memberCatalogs.value?.roles ?? [],
         accessor: (row) => (row.roles ?? []).join(', '),
         width: '240px',
     },
