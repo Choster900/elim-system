@@ -5,7 +5,7 @@
 export const MEETING_TYPE_SEEDS = [
     {
         codeSegment: 'S',
-        name: 'Servicio Dominical',
+        name: 'Culto General',
         color: '#e9c176',
         description: 'Reunión central de adoración y predicación.',
     },
@@ -29,7 +29,7 @@ export const MEETING_TYPE_SEEDS = [
     },
     {
         codeSegment: 'V',
-        name: 'Vigilia de Oración',
+        name: 'Vigilia',
         color: '#b4a7d6',
         description: 'Noche de oración e intercesión.',
     },
