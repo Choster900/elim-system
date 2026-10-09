@@ -34,6 +34,7 @@ export interface ReconciliationEnvelope {
     receivedByName: string | null
     closedAt: string | null
     closedByName: string | null
+    directEntry: boolean
     pendingDays: number | null
 }
 
