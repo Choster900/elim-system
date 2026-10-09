@@ -33,6 +33,7 @@ export interface OccurrenceFiltersDto {
     status?: 'pendiente' | 'registrada'
     from?: string
     to?: string
+    dateField?: 'reunion' | 'registro'
 }
 
 export interface OccurrenceScopeFilter {
