@@ -82,7 +82,6 @@ function onNativeInput(event: Event) {
             <slot name="preview" :color="modelValue" :text-color="contrastColor(modelValue)" />
         </div>
 
-        <!-- flex-wrap en vez de breakpoints: se acomoda al ancho del contenedor (drawer o página) -->
         <div class="mt-4 flex flex-wrap gap-4">
             <div class="min-w-48 flex-[2_1_14rem]">
                 <p
