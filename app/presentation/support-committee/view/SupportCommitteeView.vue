@@ -98,6 +98,8 @@ function categoriesLabel(envelope: Envelope) {
     return envelope.categories.map((category) => categoryLabel(category.categoryName)).join(' · ')
 }
 
+const NuxtLinkComponent = resolveComponent('NuxtLink')
+
 const pageButtonClass =
     'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant bg-surface px-3 text-sm font-semibold text-on-surface transition-colors hover:border-primary disabled:pointer-events-none disabled:opacity-40'
 
@@ -196,9 +198,17 @@ onMounted(() => draftStore.ensureLoaded())
                     </h2>
                     <ul class="flex flex-col gap-2">
                         <li v-for="envelope in group.items" :key="envelope.occurrenceId">
-                            <NuxtLink
-                                :to="countPath(envelope.occurrenceId)"
-                                class="group flex items-center gap-4 rounded-xl border border-outline-variant bg-surface-container-low px-4 py-4 transition-colors hover:border-primary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:px-5"
+                            <component
+                                :is="envelope.isReady ? NuxtLinkComponent : 'div'"
+                                v-bind="
+                                    envelope.isReady ? { to: countPath(envelope.occurrenceId) } : {}
+                                "
+                                class="group flex items-center gap-4 rounded-xl border border-outline-variant bg-surface-container-low px-4 py-4 transition-colors sm:px-5"
+                                :class="
+                                    envelope.isReady
+                                        ? 'hover:border-primary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                                        : 'opacity-70'
+                                "
                             >
                                 <span
                                     class="h-12 w-1 shrink-0 rounded-full"
@@ -211,6 +221,12 @@ onMounted(() => draftStore.ensureLoaded())
                                         >
                                             {{ envelope.meetingTitle }}
                                         </h3>
+                                        <span
+                                            v-if="envelope.isGeneral"
+                                            class="rounded-full border border-outline-variant bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant"
+                                        >
+                                            Culto general
+                                        </span>
                                         <span
                                             v-if="draftStore.hasDraft(envelope.occurrenceId)"
                                             class="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary"
@@ -227,7 +243,14 @@ onMounted(() => draftStore.ensureLoaded())
                                             {{ envelope.meetingCode }}
                                         </span>
                                     </p>
-                                    <p class="mt-1.5 truncate text-xs text-on-surface">
+                                    <p
+                                        v-if="envelope.directEntry"
+                                        class="mt-1.5 truncate text-xs text-on-surface-variant"
+                                    >
+                                        Sin líder: lo que cuente el comité será la ofrenda
+                                        registrada
+                                    </p>
+                                    <p v-else class="mt-1.5 truncate text-xs text-on-surface">
                                         <span class="text-on-surface-variant">
                                             El líder registró:
                                         </span>
@@ -235,6 +258,7 @@ onMounted(() => draftStore.ensureLoaded())
                                     </p>
                                 </div>
                                 <span
+                                    v-if="envelope.isReady"
                                     class="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs font-semibold uppercase tracking-wider text-primary-foreground transition-opacity group-hover:opacity-90"
                                 >
                                     {{
@@ -244,7 +268,13 @@ onMounted(() => draftStore.ensureLoaded())
                                     }}
                                     <ChevronRight class="size-4" />
                                 </span>
-                            </NuxtLink>
+                                <span
+                                    v-else
+                                    class="shrink-0 text-right text-xs text-on-surface-variant"
+                                >
+                                    Disponible después de las {{ envelope.endTime }}
+                                </span>
+                            </component>
                         </li>
                     </ul>
                 </section>
