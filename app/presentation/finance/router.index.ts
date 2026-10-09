@@ -42,6 +42,16 @@ export default [
         },
     },
     {
+        name: 'support-committee',
+        path: '/finanzas/comite-de-apoyo',
+        component: () => import('~/presentation/finance/view/SupportCommitteeView.vue'),
+        meta: {
+            layout: 'dashboard',
+            requiresAuth: true,
+            requiredPermission: routePermissionCodes.financeView,
+        },
+    },
+    {
         name: 'my-meetings',
         path: '/finanzas/ofrendas/mis-reuniones',
         redirect: '/finanzas/ofrendas',

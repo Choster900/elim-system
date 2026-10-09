@@ -106,6 +106,11 @@ const navItems: DashboardMenuItem[] = [
                 href: '/finanzas/ofrendas/historial',
                 requiredPermission: routePermissionCodes.financeView,
             },
+            {
+                label: 'Comité de apoyo',
+                href: '/finanzas/comite-de-apoyo',
+                requiredPermission: routePermissionCodes.financeView,
+            },
             { label: 'Gastos', href: '#' },
             {
                 label: 'Reportes',
