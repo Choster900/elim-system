@@ -41,13 +41,20 @@ export function businessIsoDate(now = new Date()) {
     return businessDateTime(now).date
 }
 
+export function businessDayStart(isoDate: string) {
+    const utcMidnight = new Date(`${isoDate.slice(0, 10)}T00:00:00.000Z`)
+    const local = businessDateTime(utcMidnight)
+    const localAsUtc = new Date(`${local.date}T${local.time}.000Z`)
+    return new Date(utcMidnight.getTime() * 2 - localAsUtc.getTime())
+}
+
 export interface ScheduledOccurrenceTime {
     date: string
     startTime: string
     endTime: string
 }
 
-function nextIsoDate(isoDate: string) {
+export function nextIsoDate(isoDate: string) {
     const [year, month, day] = isoDate.split('-').map(Number)
     const next = new Date(Date.UTC(year!, month! - 1, day! + 1))
     return next.toISOString().slice(0, 10)
