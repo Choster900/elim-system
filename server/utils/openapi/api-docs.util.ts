@@ -32,6 +32,16 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 name: 'Attendance',
                 description: 'Attendance type catalog used to break down who attended',
             },
+            {
+                name: 'Offering reconciliation',
+                description:
+                    'Finance review: leader records vs. committee counts, undelivered envelopes and closing discrepancies',
+            },
+            {
+                name: 'Offering receptions',
+                description:
+                    'Support committee: blind count of the physical envelope by denomination and comparison with what the leader recorded',
+            },
         ],
         paths: {
             '/api/healthcheck': {
@@ -406,6 +416,244 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     ],
                     responses: {
                         200: { description: 'Every date of the meeting, recorded or pending' },
+                    },
+                },
+            },
+            '/api/offering-reconciliation': {
+                get: {
+                    tags: ['Offering reconciliation'],
+                    summary: 'Reconciliation of a period',
+                    description:
+                        'Requires finance.audit. from/to filter the date the committee received each envelope (business time zone, defaults to the current month). Envelopes not delivered yet have no reception date and are always included. Returns totals, per offering type, per leader and every envelope with its status: cuadra, diferencia_abierta, diferencia_cerrada or sin_entregar.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+                        { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+                        { name: 'zoneId', in: 'query', schema: { type: 'integer' } },
+                        { name: 'sectorId', in: 'query', schema: { type: 'integer' } },
+                    ],
+                    responses: {
+                        200: { description: '{ period, totals, byType, byLeader, envelopes }' },
+                        403: { description: 'Requires finance.audit' },
+                    },
+                },
+            },
+            '/api/offering-reconciliation/sobres/{occurrenceId}': {
+                get: {
+                    tags: ['Offering reconciliation'],
+                    summary: 'One envelope: leader record, committee count and status',
+                    description: 'Requires finance.audit. Includes the leader amounts per type.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'occurrenceId',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'Envelope review' },
+                        409: { description: 'The leader has not recorded this date yet' },
+                    },
+                },
+            },
+            '/api/offering-reconciliation/sobres/{occurrenceId}/cerrar': {
+                post: {
+                    tags: ['Offering reconciliation'],
+                    summary: 'Mark a discrepancy as reviewed',
+                    description:
+                        'Requires finance.audit. Only for received envelopes that do not match and are still open. After closing, the committee can no longer correct the count.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'occurrenceId',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    required: ['notes'],
+                                    properties: {
+                                        notes: { type: 'string', minLength: 5, maxLength: 600 },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Discrepancy closed' },
+                        400: { description: 'Missing note' },
+                        409: { description: 'Not received, already matching or already closed' },
+                    },
+                },
+            },
+            '/api/offering-receptions/pendientes': {
+                get: {
+                    tags: ['Offering receptions'],
+                    summary: 'Envelopes waiting to be received',
+                    description:
+                        'Requires finance.receive. Recorded dates without a reception, oldest first, paginated. Amounts are omitted so the count stays blind. search matches meeting title or code, leader name, sector or zone (case-insensitive).',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+                        {
+                            name: 'limit',
+                            in: 'query',
+                            schema: { type: 'integer', minimum: 1, maximum: 100 },
+                        },
+                        { name: 'search', in: 'query', schema: { type: 'string' } },
+                        { name: 'zoneId', in: 'query', schema: { type: 'integer' } },
+                    ],
+                    responses: {
+                        200: {
+                            description:
+                                'data: { items, zones } with the zones that have pending envelopes; meta.pagination with totals',
+                        },
+                        403: { description: 'Requires finance.receive' },
+                    },
+                },
+            },
+            '/api/offering-receptions': {
+                get: {
+                    tags: ['Offering receptions'],
+                    summary: 'Received envelopes',
+                    description: 'Requires finance.receive. Dates filter the reception date.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'status',
+                            in: 'query',
+                            schema: { type: 'string', enum: ['cuadra', 'con_diferencia'] },
+                        },
+                        { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+                        { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+                    ],
+                    responses: {
+                        200: { description: 'Receptions with their comparison' },
+                        403: { description: 'Requires finance.receive' },
+                    },
+                },
+            },
+            '/api/offering-receptions/sobres/{occurrenceId}': {
+                get: {
+                    tags: ['Offering receptions'],
+                    summary: 'One envelope and its reception, if any',
+                    description:
+                        'Requires finance.receive. While the envelope has not been received, no amounts are returned.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'occurrenceId',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: '{ envelope, reception | null }' },
+                        409: { description: 'The leader has not recorded this date yet' },
+                    },
+                },
+                post: {
+                    tags: ['Offering receptions'],
+                    summary: 'Receive an envelope',
+                    description:
+                        'Requires finance.receive. The server computes every amount from the quantities. A note is required when the count does not match.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'occurrenceId',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ReceiveEnvelopeDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Envelope received' },
+                        409: {
+                            description:
+                                'Already received, or the count differs and there is no note',
+                        },
+                    },
+                },
+                put: {
+                    tags: ['Offering receptions'],
+                    summary: 'Correct the count of a received envelope',
+                    description: 'Requires finance.receive. Records who corrected it and when.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'occurrenceId',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ReceiveEnvelopeDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Count corrected' },
+                        404: { description: 'The envelope has not been received yet' },
+                    },
+                },
+            },
+            '/api/offering-receptions/sobres/{occurrenceId}/comparar': {
+                post: {
+                    tags: ['Offering receptions'],
+                    summary: 'Compare a count without saving it',
+                    description:
+                        'Requires finance.receive. Returns, per offering type, what was recorded, what was counted and the difference.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'occurrenceId',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ReceptionCountDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Comparison' },
+                    },
+                },
+            },
+            '/api/denominations': {
+                get: {
+                    tags: ['Offering receptions'],
+                    summary: 'Active bills and coins, in counting order',
+                    description: 'Requires finance.receive.',
+                    security: [{ BearerAuth: [] }],
+                    responses: {
+                        200: { description: 'Denomination catalog' },
                     },
                 },
             },
@@ -1289,6 +1537,49 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
             },
             schemas: {
+                ReceptionCountDto: {
+                    type: 'object',
+                    required: ['categories'],
+                    properties: {
+                        categories: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                required: ['categoryId'],
+                                properties: {
+                                    categoryId: {
+                                        type: 'integer',
+                                        nullable: true,
+                                        description:
+                                            'Null only when the leader recorded a total without offering types',
+                                    },
+                                    counts: {
+                                        type: 'array',
+                                        items: {
+                                            type: 'object',
+                                            required: ['denominationId', 'quantity'],
+                                            properties: {
+                                                denominationId: { type: 'integer' },
+                                                quantity: { type: 'integer', minimum: 0 },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                ReceiveEnvelopeDto: {
+                    allOf: [
+                        { $ref: '#/components/schemas/ReceptionCountDto' },
+                        {
+                            type: 'object',
+                            properties: {
+                                notes: { type: 'string', maxLength: 600, nullable: true },
+                            },
+                        },
+                    ],
+                },
                 RecordOccurrenceDto: {
                     type: 'object',
                     required: ['attendance'],
