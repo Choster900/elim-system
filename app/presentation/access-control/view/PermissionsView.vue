@@ -49,7 +49,6 @@ withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const toast = useAppToast()
 const authStore = useAuthStore()
-// Crear, editar y activar/desactivar permisos es exclusivo del super administrador.
 const canManage = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 const permissionsQuery = usePermissionsQuery()
 const createPermissionMutation = useCreatePermissionMutation()
