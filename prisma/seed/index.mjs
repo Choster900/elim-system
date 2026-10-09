@@ -10,6 +10,7 @@ import { seedTerritories } from './seeders/territory.seeder.mjs'
 import { seedMeetingTypes, seedMeetings } from './seeders/meeting.seeder.mjs'
 import { seedOfferingCategories, seedOfferings } from './seeders/offering.seeder.mjs'
 import { seedAttendanceTypes } from './seeders/attendance.seeder.mjs'
+import { seedDenominations } from './seeders/denomination.seeder.mjs'
 
 try {
     assertTargetAllowed(describeTarget(), {
@@ -44,6 +45,7 @@ async function seed() {
     const meetings = await seedMeetings(prisma, meetingTypes, sectors, members)
     const offeringCategories = await seedOfferingCategories(prisma)
     const attendanceTypes = await seedAttendanceTypes(prisma)
+    await seedDenominations(prisma)
     const offerings = await seedOfferings(
         prisma,
         meetings,
