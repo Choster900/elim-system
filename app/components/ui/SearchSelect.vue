@@ -15,8 +15,6 @@ import {
 
 type Value = string | number
 
-// radix-vue tipa `filterFunction` como `ArrayOrWrapped<T>`, un condicional distributivo
-// que con `T = string | number` se expande a `string[] | number[]` (arrays homogéneos).
 type ValueList = string[] | number[]
 
 const props = withDefaults(
@@ -124,8 +122,6 @@ function filterValues(values: ValueList, term: string): ValueList {
     const normalizedTerm = normalizeSearch(term.trim())
     if (!normalizedTerm) return values
 
-    // El filtrado preserva el tipo original de cada elemento; el cast solo reconcilia
-    // `(string | number)[]` con la unión de arrays homogéneos que espera radix-vue.
     return (values as Value[]).filter((value) => matchesTerm(value, normalizedTerm)) as ValueList
 }
 
