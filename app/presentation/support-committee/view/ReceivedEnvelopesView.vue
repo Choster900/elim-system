@@ -136,12 +136,20 @@ const resultSummary = computed<ResultSummary>(() => {
         mixedCount: 0,
         registered: 0,
         counted: 0,
+        directCount: 0,
+        directAmount: 0,
     }
     let surplusCents = 0
     let shortageCents = 0
     let registeredCents = 0
     let countedCents = 0
+    let directCents = 0
     for (const reception of receptions.value) {
+        if (reception.directEntry) {
+            summary.directCount += 1
+            directCents += toCents(reception.countedAmount)
+            continue
+        }
         const tone = resultOf(reception).tone
         const difference = toCents(reception.difference)
         registeredCents += toCents(reception.registeredAmount)
@@ -161,6 +169,8 @@ const resultSummary = computed<ResultSummary>(() => {
     summary.shortageAmount = shortageCents / 100
     summary.registered = registeredCents / 100
     summary.counted = countedCents / 100
+    summary.directAmount = directCents / 100
+    summary.envelopes -= summary.directCount
     return summary
 })
 
@@ -174,6 +184,7 @@ function timeOf(value: string) {
 }
 
 function resultOf(reception: ReceptionRecord) {
+    if (reception.directEntry) return { label: 'Registro directo', tone: 'direct' }
     const cents = toCents(reception.difference)
     if (cents < 0) return { label: differenceLabel(reception.difference), tone: 'shortage' }
     if (cents > 0) return { label: differenceLabel(reception.difference), tone: 'surplus' }
@@ -182,6 +193,7 @@ function resultOf(reception: ReceptionRecord) {
 }
 
 const toneDotClass: Record<string, string> = {
+    direct: 'bg-primary',
     matched: 'dot-matched',
     shortage: 'dot-shortage',
     surplus: 'dot-surplus',
@@ -379,10 +391,12 @@ const loadError = computed(() =>
                                     <dl
                                         class="hidden grid-cols-[auto_auto] gap-x-3 text-right text-xs tabular-nums sm:grid"
                                     >
-                                        <dt class="text-on-surface-variant">Líder</dt>
-                                        <dd class="text-on-surface">
-                                            {{ formatMoney(reception.registeredAmount) }}
-                                        </dd>
+                                        <template v-if="!reception.directEntry">
+                                            <dt class="text-on-surface-variant">Líder</dt>
+                                            <dd class="text-on-surface">
+                                                {{ formatMoney(reception.registeredAmount) }}
+                                            </dd>
+                                        </template>
                                         <dt class="text-on-surface-variant">Comité</dt>
                                         <dd class="font-semibold text-on-surface">
                                             {{ formatMoney(reception.countedAmount) }}
