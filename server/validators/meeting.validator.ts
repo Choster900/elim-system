@@ -10,12 +10,12 @@ const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/
 
 const baseFields = {
     typeId: Joi.number().integer().positive(),
-    sectorId: Joi.number().integer().positive(),
-    leaderId: Joi.number().integer().positive(),
-    supervisorId: Joi.number().integer().positive(),
-    hostId: Joi.number().integer().positive(),
+    sectorId: Joi.number().integer().positive().allow(null),
+    leaderId: Joi.number().integer().positive().allow(null),
+    supervisorId: Joi.number().integer().positive().allow(null),
+    hostId: Joi.number().integer().positive().allow(null),
     coSupervisorIds: Joi.array().items(Joi.number().integer().positive()).unique().default([]),
-    title: Joi.string().trim().min(2).max(100),
+    title: Joi.string().trim().min(2).max(100).allow('', null),
     description: Joi.string().trim().max(300).allow('', null),
     date: Joi.string().isoDate(),
     recurrenceEndDate: Joi.string().isoDate().allow(null),
@@ -39,12 +39,12 @@ const baseFields = {
 
 const requiredBaseFields = {
     typeId: baseFields.typeId.required(),
-    sectorId: baseFields.sectorId.required(),
-    leaderId: baseFields.leaderId.required(),
-    supervisorId: baseFields.supervisorId.required(),
-    hostId: baseFields.hostId.required(),
+    sectorId: baseFields.sectorId.default(null),
+    leaderId: baseFields.leaderId.default(null),
+    supervisorId: baseFields.supervisorId.default(null),
+    hostId: baseFields.hostId.default(null),
     coSupervisorIds: baseFields.coSupervisorIds,
-    title: baseFields.title.required(),
+    title: baseFields.title.default(null),
     description: baseFields.description.default(null),
     date: baseFields.date.required(),
     recurrenceEndDate: baseFields.recurrenceEndDate.default(null),
@@ -76,12 +76,14 @@ const meetingTypeBaseFields = {
         .pattern(/^[A-Z]$/),
     name: Joi.string().trim().min(2).max(100),
     isActive: Joi.boolean(),
+    isGeneral: Joi.boolean(),
 }
 
 export const createMeetingTypeSchema = Joi.object<CreateMeetingTypeDto>({
     codeSegment: meetingTypeBaseFields.codeSegment.required(),
     name: meetingTypeBaseFields.name.required(),
     isActive: meetingTypeBaseFields.isActive.default(true),
+    isGeneral: meetingTypeBaseFields.isGeneral.default(false),
 })
 
 export const updateMeetingTypeSchema =

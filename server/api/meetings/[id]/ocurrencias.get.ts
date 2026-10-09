@@ -5,7 +5,6 @@ import { ApiResponseFactory } from '../../../utils/http/api-response.util'
 import { handleApiError } from '../../../utils/http/error-handler.util'
 import { getPositiveIntegerParam } from '../../../utils/http/route-parameter.util'
 
-// Historial completo de una reunión: cada fecha, su asistencia y su ofrenda.
 export default defineEventHandler(async (event) => {
     try {
         const auth = requirePermission(event, 'finance.view')

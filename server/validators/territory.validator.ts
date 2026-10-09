@@ -18,7 +18,7 @@ const polygonSchema = Joi.alternatives().try(
 )
 
 const baseFields = {
-    name: Joi.string().trim().min(2).max(100),
+    name: Joi.string().trim().min(2).max(100).allow('', null),
     leaderId: Joi.number().integer().positive().allow(null),
     leaderName: Joi.string().trim().max(100).allow('', null),
     description: Joi.string().trim().max(300).allow('', null),
@@ -31,7 +31,7 @@ const baseFields = {
 }
 
 const requiredBaseFields = {
-    name: baseFields.name.required(),
+    name: baseFields.name.default(null),
     leaderId: baseFields.leaderId,
     leaderName: baseFields.leaderName.default(null),
     description: baseFields.description.default(null),

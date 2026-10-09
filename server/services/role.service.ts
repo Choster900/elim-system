@@ -39,7 +39,6 @@ async function assertPermissionsExist(permissionIds: number[]) {
     })
 }
 
-/// Forma de administración independiente de los detalles internos de Prisma.
 export async function getRolesForManagement() {
     const roles = await repository.findRolesForManagement()
 

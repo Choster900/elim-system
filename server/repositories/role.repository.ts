@@ -7,7 +7,6 @@ const roleManagementInclude = {
     _count: { select: { userRoles: true } },
 } as const
 
-/// Roles del sistema junto con los contadores que se muestran en administración.
 export function findRolesForManagement() {
     return prisma.role.findMany({
         include: roleManagementInclude,

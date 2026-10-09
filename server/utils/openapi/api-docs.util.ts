@@ -789,7 +789,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Meetings'],
                     summary: 'Create a meeting',
                     description:
-                        'Recurring meetings generate their occurrences from `frequency` and `recurrenceEndDate`.',
+                        'Recurring meetings generate their occurrences from `frequency` and `recurrenceEndDate`. `code` is generated as type segment + sequence within the sector (C1), so it repeats across sectors; `fullCode` prefixes the district, zone and sector codes (D1Z2S3C1). General meetings use IGL + type segment + sequence (IGLS1).',
                     security: [{ BearerAuth: [] }],
                     requestBody: {
                         required: true,
@@ -1003,6 +1003,8 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 post: {
                     tags: ['Territories'],
                     summary: 'Create a zone',
+                    description:
+                        '`code` is generated as Z + sequence within the district (each district starts at Z1).',
                     security: [{ BearerAuth: [] }],
                     requestBody: {
                         required: true,
@@ -1024,6 +1026,8 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 put: {
                     tags: ['Territories'],
                     summary: 'Update a zone',
+                    description:
+                        'Moving the zone to another district regenerates its `code` there.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -1073,7 +1077,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Territories'],
                     summary: 'Create a sector',
                     description:
-                        'The supervisor assigned here defines the row-level visibility of that user over meetings and offerings.',
+                        'The supervisor assigned here defines the row-level visibility of that user over meetings and offerings. `code` is generated as S + sequence within the zone (each zone starts at S1).',
                     security: [{ BearerAuth: [] }],
                     requestBody: {
                         required: true,
@@ -1095,6 +1099,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 put: {
                     tags: ['Territories'],
                     summary: 'Update a sector',
+                    description: 'Moving the sector to another zone regenerates its `code` there.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -1722,29 +1727,27 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
                 CreateMeetingDto: {
                     type: 'object',
-                    required: [
-                        'typeId',
-                        'sectorId',
-                        'leaderId',
-                        'supervisorId',
-                        'title',
-                        'date',
-                        'startTime',
-                        'endTime',
-                        'location',
-                        'color',
-                    ],
+                    description:
+                        'leaderId y hostId son obligatorios en los tipos de sector; sectorId es opcional: sin él la reunión queda sin asignar y no genera fechas pendientes hasta que se le asigne un sector. En los tipos generales (isGeneral) se ignoran y se guardan nulos. supervisorId siempre se hereda del sector.',
+                    required: ['typeId', 'date', 'startTime', 'endTime', 'location', 'color'],
                     properties: {
                         typeId: { type: 'integer', minimum: 1 },
-                        sectorId: { type: 'integer', minimum: 1 },
-                        leaderId: { type: 'integer', minimum: 1 },
-                        supervisorId: { type: 'integer', minimum: 1 },
+                        sectorId: { type: 'integer', minimum: 1, nullable: true },
+                        leaderId: { type: 'integer', minimum: 1, nullable: true },
+                        supervisorId: { type: 'integer', minimum: 1, nullable: true },
+                        hostId: { type: 'integer', minimum: 1, nullable: true },
                         coSupervisorIds: {
                             type: 'array',
                             items: { type: 'integer', minimum: 1 },
                             default: [],
                         },
-                        title: { type: 'string', minLength: 2, maxLength: 100 },
+                        title: {
+                            type: 'string',
+                            maxLength: 100,
+                            nullable: true,
+                            description:
+                                'Empty or null generates it from the sector name and the code (Sector Las Palmeras C1).',
+                        },
                         description: { type: 'string', maxLength: 300, nullable: true },
                         date: { type: 'string', format: 'date', description: 'ISO 8601 date.' },
                         recurrenceEndDate: {
@@ -1825,9 +1828,15 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
                 CreateDistrictDto: {
                     type: 'object',
-                    required: ['name', 'color'],
+                    required: ['color'],
                     properties: {
-                        name: { type: 'string', minLength: 2, maxLength: 100 },
+                        name: {
+                            type: 'string',
+                            maxLength: 100,
+                            nullable: true,
+                            description:
+                                'Empty or null generates it: district = code (D1), zone = district name + code, sector = district + zone name + code.',
+                        },
                         leaderName: { type: 'string', maxLength: 100, nullable: true },
                         description: { type: 'string', maxLength: 300, nullable: true },
                         color: { type: 'string', pattern: '^#[0-9a-f]{6}$', example: '#e9c176' },
@@ -1867,9 +1876,15 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 },
                 CreateSectorDto: {
                     type: 'object',
-                    required: ['name', 'color', 'zoneId'],
+                    required: ['color', 'zoneId'],
                     properties: {
-                        name: { type: 'string', minLength: 2, maxLength: 100 },
+                        name: {
+                            type: 'string',
+                            maxLength: 100,
+                            nullable: true,
+                            description:
+                                'Empty or null generates it: district = code (D1), zone = district name + code, sector = district + zone name + code.',
+                        },
                         description: { type: 'string', maxLength: 300, nullable: true },
                         color: { type: 'string', pattern: '^#[0-9a-f]{6}$', example: '#e9c176' },
                         polygon: { $ref: '#/components/schemas/Polygon' },

@@ -5,8 +5,6 @@ import type {
 } from '../dto/offering/offering.dto'
 import { mapPrismaError } from '../utils/database/prisma-error.util'
 
-// La captura de ofrendas vive en occurrence.repository.ts; aquí solo el catálogo.
-
 export function findOfferingCategories() {
     return prisma.offeringCategory.findMany({
         orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],

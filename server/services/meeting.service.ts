@@ -48,7 +48,7 @@ async function assertMeetingHost(memberId: number) {
 
 async function assertActiveMeetingType(typeId: number) {
     const type = await repo.findMeetingTypeById(typeId)
-    if (type?.isActive) return
+    if (type?.isActive) return type
 
     throw createError({
         statusCode: 400,
@@ -60,8 +60,8 @@ async function assertActiveMeetingType(typeId: number) {
     })
 }
 
-async function assertMeetingCoSupervisors(memberIds: number[], supervisorId: number) {
-    if (memberIds.includes(supervisorId)) {
+async function assertMeetingCoSupervisors(memberIds: number[], supervisorId: number | null) {
+    if (supervisorId !== null && memberIds.includes(supervisorId)) {
         throw createError({
             statusCode: 400,
             message: 'El supervisor principal no puede repetirse como co-supervisor',
@@ -106,6 +106,46 @@ async function sectorSupervisorId(sectorId: number) {
     })
 }
 
+function missingField(field: 'sectorId' | 'leaderId' | 'hostId', message: string): never {
+    throw createError({
+        statusCode: 400,
+        message,
+        data: { code: ApiErrorCode.VALIDATION_ERROR, fields: { [field]: [message] } },
+    })
+}
+
+interface MeetingAssignment {
+    sectorId: number | null
+    leaderId: number | null
+    hostId: number | null
+    coSupervisorIds: number[]
+}
+
+const GENERAL_ASSIGNMENT = {
+    leaderId: null,
+    supervisorId: null,
+    hostId: null,
+    coSupervisorIds: [] as number[],
+}
+
+async function resolveSectorAssignment(
+    input: MeetingAssignment,
+    checks = { leader: true, host: true, coSupervisors: true },
+) {
+    if (checks.leader) {
+        if (input.leaderId === null) missingField('leaderId', 'Selecciona el líder de la reunión')
+        await assertMeetingLeader(input.leaderId)
+    }
+    if (checks.host) {
+        if (input.hostId === null) missingField('hostId', 'Selecciona el anfitrión de la reunión')
+        await assertMeetingHost(input.hostId)
+    }
+    const supervisorId = input.sectorId === null ? null : await sectorSupervisorId(input.sectorId)
+    if (checks.coSupervisors) await assertMeetingCoSupervisors(input.coSupervisorIds, supervisorId)
+
+    return { ...input, supervisorId }
+}
+
 function assertValidRecurrence(
     date: string,
     frequency: MeetingFrequencyValue,
@@ -126,7 +166,6 @@ function assertValidRecurrence(
     })
 }
 
-/// El modo ordinal necesita saber qué día y en qué posición del mes cae la reunión.
 function assertValidMonthlyRule(
     frequency: MeetingFrequencyValue,
     monthlyMode: MonthlyModeValue | null,
@@ -172,14 +211,13 @@ export function getMeetingHosts() {
 }
 
 export async function createMeeting(dto: CreateMeetingDto) {
-    await assertActiveMeetingType(dto.typeId)
-    await assertMeetingLeader(dto.leaderId)
-    await assertMeetingHost(dto.hostId)
-    const supervisorId = await sectorSupervisorId(dto.sectorId)
-    await assertMeetingCoSupervisors(dto.coSupervisorIds, supervisorId)
+    const type = await assertActiveMeetingType(dto.typeId)
+    const assignment = type.isGeneral
+        ? { ...GENERAL_ASSIGNMENT, sectorId: null }
+        : await resolveSectorAssignment(dto)
     const normalizedDto = {
         ...dto,
-        supervisorId,
+        ...assignment,
         recurrenceEndDate: dto.frequency === 'unica' ? null : dto.recurrenceEndDate,
     }
     assertValidRecurrence(
@@ -195,27 +233,21 @@ export async function createMeeting(dto: CreateMeetingDto) {
     )
 
     const meeting = await repo.createMeeting(normalizedDto)
-    // Las fechas pasadas de una reunión recién creada ya son pendientes.
     await resyncMeetingOccurrences(meeting.id)
     return meeting
 }
 
 export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     const existing = await getMeetingById(id)
-    if (dto.typeId !== undefined) await assertActiveMeetingType(dto.typeId)
-    if (dto.leaderId !== undefined) await assertMeetingLeader(dto.leaderId)
-    if (dto.hostId !== undefined) await assertMeetingHost(dto.hostId)
-    const supervisorId = await sectorSupervisorId(dto.sectorId ?? existing.sectorId)
-    if (dto.coSupervisorIds !== undefined) {
-        await assertMeetingCoSupervisors(dto.coSupervisorIds, supervisorId)
-    }
+    const type =
+        dto.typeId !== undefined
+            ? await assertActiveMeetingType(dto.typeId)
+            : { isGeneral: existing.isGeneral }
     const frequency = dto.frequency ?? existing.frequency
     const normalizedDto = {
         ...dto,
-        // Toda edición reactiva la reunión por defecto. La desactivación solo
-        // ocurre cuando la petición envía explícitamente isActive: false.
+        ...(await resolveUpdatedAssignment(existing, dto, type.isGeneral)),
         isActive: dto.isActive ?? true,
-        supervisorId,
         ...(frequency === 'unica' ? { recurrenceEndDate: null } : {}),
     }
     assertValidRecurrence(
@@ -233,17 +265,52 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     )
 
     const meeting = await repo.updateMeeting(id, normalizedDto)
-    // Cambiar la regla recalcula los pendientes; lo ya registrado no se toca.
     await resyncMeetingOccurrences(id)
     return meeting
+}
+
+async function resolveUpdatedAssignment(
+    existing: Awaited<ReturnType<typeof getMeetingById>>,
+    dto: UpdateMeetingDto,
+    isGeneral: boolean,
+) {
+    if (isGeneral) {
+        return {
+            ...GENERAL_ASSIGNMENT,
+            ...(existing.sectorId !== null ? { sectorId: null } : {}),
+        }
+    }
+
+    const wasGeneral = existing.isGeneral
+    const assignment = await resolveSectorAssignment(
+        {
+            sectorId: dto.sectorId !== undefined ? dto.sectorId : existing.sectorId,
+            leaderId: dto.leaderId !== undefined ? dto.leaderId : existing.leaderId,
+            hostId: dto.hostId !== undefined ? dto.hostId : existing.hostId,
+            coSupervisorIds: dto.coSupervisorIds ?? existing.coSupervisorIds,
+        },
+        {
+            leader: wasGeneral || dto.leaderId !== undefined,
+            host: wasGeneral || dto.hostId !== undefined,
+            coSupervisors: wasGeneral || dto.coSupervisorIds !== undefined,
+        },
+    )
+
+    return {
+        supervisorId: assignment.supervisorId,
+        ...(wasGeneral || dto.sectorId !== undefined ? { sectorId: assignment.sectorId } : {}),
+        ...(wasGeneral || dto.leaderId !== undefined ? { leaderId: assignment.leaderId } : {}),
+        ...(wasGeneral || dto.hostId !== undefined ? { hostId: assignment.hostId } : {}),
+        ...(wasGeneral || dto.coSupervisorIds !== undefined
+            ? { coSupervisorIds: assignment.coSupervisorIds }
+            : {}),
+    }
 }
 
 export async function deleteMeeting(id: number) {
     await getMeetingById(id)
     return repo.deleteMeeting(id)
 }
-
-// --- Meeting types ---
 
 export function getMeetingTypes() {
     return repo.findMeetingTypes()
@@ -303,6 +370,17 @@ export async function updateMeetingType(id: number, dto: UpdateMeetingTypeDto) {
                 data: { code: ApiErrorCode.BUSINESS_RULE_ERROR },
             })
         }
+    }
+    if (
+        normalizedDto.isGeneral !== undefined &&
+        normalizedDto.isGeneral !== existing.isGeneral &&
+        (await repo.countMeetingsForType(id))
+    ) {
+        throw createError({
+            statusCode: 409,
+            message: 'No se puede cambiar el alcance de un tipo con reuniones registradas',
+            data: { code: ApiErrorCode.BUSINESS_RULE_ERROR },
+        })
     }
     if (normalizedDto.name || normalizedDto.codeSegment) {
         await assertMeetingTypeUnique(

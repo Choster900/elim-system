@@ -8,6 +8,7 @@ import type {
     RecordOccurrenceDto,
     UpdateOccurrenceDto,
 } from '../dto/offering/occurrence.dto'
+import { meetingFullCode } from '../utils/code/entity-code.util'
 import { mapPrismaError } from '../utils/database/prisma-error.util'
 
 const occurrenceInclude = {
@@ -17,6 +18,7 @@ const occurrenceInclude = {
             sector: { include: { zone: { include: { district: true } } } },
         },
     },
+    sector: { include: { zone: { include: { district: true } } } },
     leader: true,
     recordedBy: { include: { member: true } },
     updatedBy: { include: { member: true } },
@@ -40,13 +42,11 @@ function round2(value: number) {
     return Math.round(value * 100) / 100
 }
 
-/// El desglose de asistencia manda sobre el total escrito a mano.
 function resolveAttendance(details: { quantity: number }[], attendance: number) {
     if (details.length === 0) return attendance
     return details.reduce((sum, detail) => sum + detail.quantity, 0)
 }
 
-/// El desglose manda sobre el total capturado a mano; sin desglose se usa el global.
 function resolveTotal(details: OccurrenceDetailDto[], totalAmount: number | null) {
     if (details.length > 0) {
         return round2(details.reduce((sum, detail) => sum + detail.amount, 0))
@@ -67,13 +67,13 @@ function personName(
 }
 
 export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
-    const sector = occurrence.meeting.sector
+    const sector = occurrence.sector
 
     return {
         id: occurrence.id,
         meetingId: occurrence.meetingId,
         meetingTitle: occurrence.meeting.title,
-        meetingCode: occurrence.meeting.code,
+        meetingCode: meetingFullCode(occurrence.meeting.code, occurrence.meeting.sector),
         meetingTypeName: occurrence.meeting.type?.name ?? null,
         meetingColor: occurrence.meeting.color,
         startTime: occurrence.meeting.startTime.toISOString().slice(11, 16),
@@ -85,11 +85,11 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
         currency: occurrence.currency,
         notes: occurrence.notes,
         sectorId: occurrence.sectorId,
-        sectorName: sector.name,
-        zoneId: sector.zone.id,
-        zoneName: sector.zone.name,
-        districtId: sector.zone.district.id,
-        districtName: sector.zone.district.name,
+        sectorName: sector?.name ?? null,
+        zoneId: sector?.zone.id ?? null,
+        zoneName: sector?.zone.name ?? null,
+        districtId: sector?.zone.district.id ?? null,
+        districtName: sector?.zone.district.name ?? null,
         leaderId: occurrence.leaderId,
         leaderName: occurrence.leader
             ? [occurrence.leader.firstName, occurrence.leader.lastName].filter(Boolean).join(' ')
@@ -123,7 +123,6 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
 
 export type OccurrenceRecord = ReturnType<typeof toOccurrenceRecord>
 
-/// Traduce el alcance del usuario a un filtro de Prisma. Sin alcance no ve nada.
 function scopeWhere(scope: OccurrenceScopeFilter): Prisma.MeetingOccurrenceWhereInput {
     if (scope.seesAll) return {}
 
@@ -152,13 +151,11 @@ function filtersWhere(filters: OccurrenceFiltersDto): Prisma.MeetingOccurrenceWh
     }
 }
 
-// --- Generación ---
-
-/// Reuniones activas con los datos que necesita la regla de recurrencia.
 export function findMeetingsForGeneration(meetingIds?: number[]) {
     return prisma.meeting.findMany({
         where: {
             isActive: true,
+            OR: [{ sectorId: { not: null } }, { type: { isGeneral: true } }],
             ...(meetingIds ? { id: { in: meetingIds } } : {}),
         },
         select: {
@@ -175,9 +172,8 @@ export function findMeetingsForGeneration(meetingIds?: number[]) {
     })
 }
 
-/// Inserta solo las fechas que faltan; el índice único la hace idempotente.
 export async function createMissingOccurrences(
-    rows: { meetingId: number; date: string; sectorId: number; leaderId: number | null }[],
+    rows: { meetingId: number; date: string; sectorId: number | null; leaderId: number | null }[],
 ) {
     if (rows.length === 0) return 0
 
@@ -196,14 +192,11 @@ export async function createMissingOccurrences(
     return result.count
 }
 
-/// Al cambiar la recurrencia solo se descartan las fechas que nadie capturó.
 export function deletePendingOccurrences(meetingId: number) {
     return prisma.meetingOccurrence
         .deleteMany({ where: { meetingId, status: 'PENDING' } })
         .catch(mapPrismaError)
 }
-
-// --- Consulta ---
 
 export async function findOccurrences(
     scope: OccurrenceScopeFilter,
@@ -217,7 +210,6 @@ export async function findOccurrences(
     return occurrences.map(toOccurrenceRecord)
 }
 
-/// Pendientes en orden ascendente: lo más atrasado primero.
 export async function findPendingOccurrences(scope: OccurrenceScopeFilter, from?: string) {
     const occurrences = await prisma.meetingOccurrence.findMany({
         where: {
@@ -240,8 +232,6 @@ export async function findOccurrenceById(id: number) {
     })
     return occurrence ? toOccurrenceRecord(occurrence) : null
 }
-
-// --- Captura ---
 
 function recordData(dto: RecordOccurrenceDto, userId: number | null) {
     return {
@@ -277,7 +267,6 @@ export function recordOccurrence(id: number, dto: RecordOccurrenceDto, userId: n
         .catch(mapPrismaError)
 }
 
-/// Captura parcial: cada entrada es independiente, pero todas viajan en una transacción.
 export async function recordOccurrencesBulk(entries: BulkRecordEntryDto[], userId: number | null) {
     try {
         const occurrences = await prisma.$transaction(
@@ -295,7 +284,6 @@ export async function recordOccurrencesBulk(entries: BulkRecordEntryDto[], userI
     }
 }
 
-/// Corrección de lo ya registrado; deja rastro de quién la hizo.
 export function updateOccurrence(id: number, dto: UpdateOccurrenceDto, userId: number | null) {
     const data: Prisma.MeetingOccurrenceUpdateInput = {
         updatedBy: { connect: { id: userId ?? 0 } },

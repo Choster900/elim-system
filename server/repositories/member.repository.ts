@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { territoryPathCode } from '#shared/utils/territory-code.util'
 import {
     MEMBER_COUNTRIES,
     MEMBER_DEPARTMENTS,
@@ -110,8 +111,10 @@ function serializeMember(member: MemberWithRelations) {
         zone: linkedZone?.name ?? null,
         sector: linkedSector?.name ?? null,
         districtCode: linkedDistrict?.code ?? null,
-        zoneCode: linkedZone?.code ?? null,
-        sectorCode: linkedSector?.code ?? null,
+        zoneCode: linkedZone ? territoryPathCode(linkedDistrict?.code, linkedZone.code) : null,
+        sectorCode: linkedSector
+            ? territoryPathCode(linkedDistrict?.code, linkedZone?.code, linkedSector.code)
+            : null,
         smallGroup: member.smallGroup,
         emergencyContactName: member.emergencyContactName,
         emergencyContactPhone: member.emergencyContactPhone,
@@ -209,16 +212,40 @@ export async function findMemberCatalogs() {
         prisma.zone.findMany({
             where: { isActive: true },
             orderBy: { name: 'asc' },
-            select: { id: true, districtId: true, code: true, name: true },
+            select: {
+                id: true,
+                districtId: true,
+                code: true,
+                name: true,
+                district: { select: { code: true } },
+            },
         }),
         prisma.territorySector.findMany({
             where: { isActive: true },
             orderBy: { name: 'asc' },
-            select: { id: true, zoneId: true, code: true, name: true },
+            select: {
+                id: true,
+                zoneId: true,
+                code: true,
+                name: true,
+                zone: { select: { code: true, district: { select: { code: true } } } },
+            },
         }),
     ])
 
-    return { roles, ministries, districts, zones, sectors }
+    return {
+        roles,
+        ministries,
+        districts,
+        zones: zones.map(({ district, ...zone }) => ({
+            ...zone,
+            code: territoryPathCode(district.code, zone.code),
+        })),
+        sectors: sectors.map(({ zone, ...sector }) => ({
+            ...sector,
+            code: territoryPathCode(zone.district.code, zone.code, sector.code),
+        })),
+    }
 }
 
 export async function createMember(

@@ -11,8 +11,6 @@ import { seedMeetingTypes, seedMeetings } from './seeders/meeting.seeder.mjs'
 import { seedOfferingCategories, seedOfferings } from './seeders/offering.seeder.mjs'
 import { seedAttendanceTypes } from './seeders/attendance.seeder.mjs'
 
-// Este seed inserta datos de prueba (miembros, reuniones, ofrendas). Contra una
-// base remota casi nunca es lo que se quiere: ahí va `npm run prisma:seed:minimal`.
 try {
     assertTargetAllowed(describeTarget(), {
         scriptName: 'seed:full',
@@ -26,8 +24,6 @@ try {
 const adapter = new PrismaPg({ connectionString: resolveSeedConnectionString() })
 const prisma = new PrismaClient({
     adapter,
-    // Sobre una base remota cada sentencia cuesta latencia de red y los lotes
-    // superan el timeout de transacción de 5 s que Prisma aplica por defecto.
     transactionOptions: { maxWait: 15_000, timeout: 60_000 },
 })
 
@@ -42,7 +38,6 @@ async function seed() {
 
     await seedAdminRoleAssignment(prisma, adminUser.id, superAdminRole.id)
 
-    // Datos de prueba de la comunidad y su operación.
     const members = await seedMembers(prisma)
     const { sectors } = await seedTerritories(prisma, members)
     const meetingTypes = await seedMeetingTypes(prisma)

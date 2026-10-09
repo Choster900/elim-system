@@ -8,7 +8,6 @@ const __dirname = dirname(__filename)
 const env = validateEnv()
 const devServer = env.PORT ? { host: '0.0.0.0', port: env.PORT } : { host: '0.0.0.0' }
 
-// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
     modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', '@nuxt/eslint'],
     devtools: { enabled: true },
@@ -16,13 +15,8 @@ export default defineNuxtConfig({
         head: {
             title: env.NUXT_PUBLIC_APP_NAME,
             link: [
-                // El emblema va en blanco y sin fondo, tal como fue entregado. En una
-                // barra de pestañas clara se distingue poco: es una decisión tomada
-                // a la vista de la comparativa, no un descuido.
                 { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' },
-                // El mismo trazo en 16, 32 y 48 px; es el que el navegador pide solo.
                 { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
-                // iOS pinta de negro cualquier transparencia, así que este va con fondo.
                 { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
             ],
             script: [
@@ -39,10 +33,8 @@ export default defineNuxtConfig({
         '~/assets/styles/themes/light/theme.css',
         '~/assets/styles/themes/dark/theme.css',
         'vue-sonner/style.css',
-        // Después de vue-sonner: adapta los toasts a la paleta del sistema.
         '~/assets/styles/base/toast.css',
         'leaflet/dist/leaflet.css',
-        // main.css is injected by @nuxtjs/tailwindcss via cssPath above
     ],
     runtimeConfig: {
         databaseUrl: env.DATABASE_URL,
@@ -70,5 +62,11 @@ export default defineNuxtConfig({
     tailwindcss: {
         configPath: 'tailwind.config.ts',
         cssPath: '~/assets/styles/tailwind/main.css',
+    },
+    typescript: {
+        nodeTsConfig: {
+            include: ['../prisma.config.ts'],
+            compilerOptions: { types: ['node'] },
+        },
     },
 })

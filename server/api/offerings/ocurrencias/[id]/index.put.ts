@@ -7,7 +7,6 @@ import { getPositiveIntegerParam } from '../../../../utils/http/route-parameter.
 import { validateDto } from '../../../../utils/validation/dto-validation.util'
 import { updateOccurrenceSchema } from '../../../../validators/offering.validator'
 
-// Corrección de una fecha ya registrada; queda registrado quién la hizo.
 export default defineEventHandler(async (event) => {
     try {
         const auth = requirePermission(event, 'finance.manage')

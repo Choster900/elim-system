@@ -196,7 +196,6 @@ async function issueTokensAndSession(
         expiresAt: buildRefreshTokenExpiresAt(),
     })
 
-    // Keep session table small and avoid stale rows accumulation.
     await deleteExpiredOrRevokedAuthSessions(user.id)
 
     return {
@@ -436,7 +435,5 @@ export async function logout(refreshToken: string) {
         if (session && !session.revokedAt) {
             await revokeAuthSessionById(session.id)
         }
-    } catch {
-        // Logout is idempotent. Invalid/expired token still clears cookies.
-    }
+    } catch {}
 }

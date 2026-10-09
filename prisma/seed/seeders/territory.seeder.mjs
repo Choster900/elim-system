@@ -1,14 +1,6 @@
-// Datos de prueba de la jerarquía territorial: distritos -> zonas -> sectores.
-// Los polígonos son arreglos de pares [lat, lng] (formato usado por el mapa en
-// app/presentation/territories). Las coordenadas se ubican en el área metropolitana
-// de San Salvador, El Salvador.
-//
-// En distritos y zonas, `leaderCode` identifica al líder. En sectores identifica
-// al supervisor responsable de todas sus reuniones.
-
 export const DISTRICT_SEEDS = [
     {
-        code: 'DIS-001',
+        code: 'D1',
         name: 'Distrito Norte',
         description: 'Cobertura de los municipios al norte del área metropolitana.',
         color: '#2563eb',
@@ -21,7 +13,7 @@ export const DISTRICT_SEEDS = [
         ],
     },
     {
-        code: 'DIS-002',
+        code: 'D2',
         name: 'Distrito Sur',
         description: 'Cobertura de los municipios al sur y poniente del área metropolitana.',
         color: '#16a34a',
@@ -37,8 +29,8 @@ export const DISTRICT_SEEDS = [
 
 export const ZONE_SEEDS = [
     {
-        code: 'ZON-001',
-        districtCode: 'DIS-001',
+        code: 'Z1',
+        districtCode: 'D1',
         name: 'Zona Noroeste',
         description: 'Mejicanos y Cuscatancingo.',
         color: '#3b82f6',
@@ -51,8 +43,8 @@ export const ZONE_SEEDS = [
         ],
     },
     {
-        code: 'ZON-002',
-        districtCode: 'DIS-001',
+        code: 'Z2',
+        districtCode: 'D1',
         name: 'Zona Noreste',
         description: 'Ciudad Delgado y Apopa.',
         color: '#6366f1',
@@ -65,8 +57,8 @@ export const ZONE_SEEDS = [
         ],
     },
     {
-        code: 'ZON-003',
-        districtCode: 'DIS-002',
+        code: 'Z1',
+        districtCode: 'D2',
         name: 'Zona Suroeste',
         description: 'Santa Tecla y Antiguo Cuscatlán.',
         color: '#22c55e',
@@ -79,8 +71,8 @@ export const ZONE_SEEDS = [
         ],
     },
     {
-        code: 'ZON-004',
-        districtCode: 'DIS-002',
+        code: 'Z2',
+        districtCode: 'D2',
         name: 'Zona Sureste',
         description: 'San Marcos e Ilopango.',
         color: '#14b8a6',
@@ -96,8 +88,8 @@ export const ZONE_SEEDS = [
 
 export const SECTOR_SEEDS = [
     {
-        code: 'SEC-001',
-        zoneCode: 'ZON-001',
+        code: 'S1',
+        zoneCode: 'D1Z1',
         name: 'Sector Las Palmeras',
         description: 'Colonias del sector norte de Mejicanos.',
         color: '#60a5fa',
@@ -110,8 +102,8 @@ export const SECTOR_SEEDS = [
         ],
     },
     {
-        code: 'SEC-002',
-        zoneCode: 'ZON-001',
+        code: 'S2',
+        zoneCode: 'D1Z1',
         name: 'Sector El Progreso',
         description: 'Colonias del sector sur de Mejicanos.',
         color: '#93c5fd',
@@ -124,8 +116,8 @@ export const SECTOR_SEEDS = [
         ],
     },
     {
-        code: 'SEC-003',
-        zoneCode: 'ZON-002',
+        code: 'S1',
+        zoneCode: 'D1Z2',
         name: 'Sector San Antonio',
         description: 'Zona central de Ciudad Delgado.',
         color: '#818cf8',
@@ -138,8 +130,8 @@ export const SECTOR_SEEDS = [
         ],
     },
     {
-        code: 'SEC-004',
-        zoneCode: 'ZON-002',
+        code: 'S2',
+        zoneCode: 'D1Z2',
         name: 'Sector Los Ángeles',
         description: 'Zona periférica hacia Apopa.',
         color: '#a5b4fc',
@@ -152,8 +144,8 @@ export const SECTOR_SEEDS = [
         ],
     },
     {
-        code: 'SEC-005',
-        zoneCode: 'ZON-003',
+        code: 'S1',
+        zoneCode: 'D2Z1',
         name: 'Sector El Cafetalón',
         description: 'Zona central de Santa Tecla.',
         color: '#4ade80',
@@ -166,8 +158,8 @@ export const SECTOR_SEEDS = [
         ],
     },
     {
-        code: 'SEC-006',
-        zoneCode: 'ZON-003',
+        code: 'S2',
+        zoneCode: 'D2Z1',
         name: 'Sector La Sabana',
         description: 'Zona hacia Antiguo Cuscatlán.',
         color: '#86efac',
@@ -180,8 +172,8 @@ export const SECTOR_SEEDS = [
         ],
     },
     {
-        code: 'SEC-007',
-        zoneCode: 'ZON-004',
+        code: 'S1',
+        zoneCode: 'D2Z2',
         name: 'Sector San Marcos Centro',
         description: 'Casco urbano de San Marcos.',
         color: '#2dd4bf',
@@ -194,8 +186,8 @@ export const SECTOR_SEEDS = [
         ],
     },
     {
-        code: 'SEC-008',
-        zoneCode: 'ZON-004',
+        code: 'S2',
+        zoneCode: 'D2Z2',
         name: 'Sector Altavista',
         description: 'Comunidad Altavista, Ilopango.',
         color: '#5eead4',
@@ -260,14 +252,14 @@ export async function seedZones(prisma, districts, members) {
                 isActive: true,
             }
             return prisma.zone.upsert({
-                where: { code: seed.code },
+                where: { districtId_code: { districtId: district.id, code: seed.code } },
                 create: data,
                 update: data,
             })
         }),
     )
 
-    return new Map(zones.map((zone) => [zone.code, zone]))
+    return new Map(zones.map((zone, index) => [ZONE_SEEDS[index].districtCode + zone.code, zone]))
 }
 
 export async function seedSectors(prisma, zones, members) {
@@ -291,14 +283,16 @@ export async function seedSectors(prisma, zones, members) {
                 isActive: true,
             }
             return prisma.territorySector.upsert({
-                where: { code: seed.code },
+                where: { zoneId_code: { zoneId: zone.id, code: seed.code } },
                 create: data,
                 update: data,
             })
         }),
     )
 
-    return new Map(sectors.map((sector) => [sector.code, sector]))
+    return new Map(
+        sectors.map((sector, index) => [SECTOR_SEEDS[index].zoneCode + sector.code, sector]),
+    )
 }
 
 export async function seedTerritories(prisma, members) {

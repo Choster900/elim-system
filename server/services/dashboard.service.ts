@@ -9,6 +9,7 @@ import type {
 import { findDashboardData } from '../repositories/dashboard.repository'
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const GENERAL_SCOPE = { id: 0, name: 'Toda la iglesia' }
 const TREND_BUCKETS = 6
 
 function startOfUtcDay(value: Date) {
@@ -170,7 +171,7 @@ function buildUpcomingMeetings(
         sector: {
             name: string
             zone: { district: { name: string } }
-        }
+        } | null
     }>,
     today: Date,
 ) {
@@ -183,8 +184,8 @@ function buildUpcomingMeetings(
                 id: meeting.id,
                 title: meeting.title,
                 typeName: meeting.type.name,
-                districtName: meeting.sector.zone.district.name,
-                sectorName: meeting.sector.name,
+                districtName: meeting.sector?.zone.district.name ?? GENERAL_SCOPE.name,
+                sectorName: meeting.sector?.name ?? GENERAL_SCOPE.name,
                 occurrenceDate: toIsoDate(occurrence),
                 startTime: meeting.startTime.toISOString().slice(11, 16),
                 location: meeting.location,
@@ -215,7 +216,6 @@ export async function getDashboardSummary(
         ? new Date(`${query.startDate}T00:00:00Z`)
         : addUtcDays(endExclusive, -query.periodDays)
     const periodDays = Math.round((endExclusive.getTime() - currentStart.getTime()) / DAY_MS)
-    // El período de comparación tiene la misma duración y termina justo antes del actual.
     const previousStart = addUtcDays(currentStart, -periodDays)
     const data = await findDashboardData({
         rangeStart: previousStart,
@@ -245,7 +245,7 @@ export async function getDashboardSummary(
         { name: string; attendance: number; offerings: number; meetingCount: number }
     >()
     for (const offering of currentOfferings) {
-        const district = offering.meeting.sector.zone.district
+        const district = offering.meeting.sector?.zone.district ?? GENERAL_SCOPE
         const current = districtTotals.get(district.id) ?? {
             name: district.name,
             attendance: 0,
@@ -288,7 +288,6 @@ export async function getDashboardSummary(
                 expectedAttendance > 0 ? round2((currentAttendance / expectedAttendance) * 100) : 0,
             offeringPerAttendee:
                 currentAttendance > 0 ? round2(currentAmount / currentAttendance) : 0,
-            // Disciplina de captura: qué porcentaje de las fechas esperadas fue registrado.
             recordingCoverage:
                 data.expectedOccurrences > 0
                     ? round2((data.offerings.length / data.expectedOccurrences) * 100)
@@ -314,7 +313,7 @@ export async function getDashboardSummary(
             id: offering.id,
             meetingId: offering.meetingId,
             meetingTitle: offering.meeting.title,
-            districtName: offering.meeting.sector.zone.district.name,
+            districtName: offering.meeting.sector?.zone.district.name ?? GENERAL_SCOPE.name,
             date: toIsoDate(offering.date),
             attendance: offering.attendance,
             totalAmount: Number(offering.totalAmount),

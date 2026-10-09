@@ -1,6 +1,3 @@
-// Datos de prueba de miembros de la comunidad.
-// Los códigos (`code`) son la clave de idempotencia usada en el upsert y también
-// permiten que los seeders de territorios y reuniones referencien a un miembro.
 const COMMUNITY_ROLE_SEEDS = [
     ['MEMBER', 'Miembro', 'Persona que forma parte de la comunidad.'],
     ['PASTOR', 'Pastor', 'Responsable pastoral de la comunidad.'],
@@ -70,7 +67,6 @@ const MINISTRY_SEEDS = [
     isActive: true,
 }))
 
-// Estos miembros ya conducen territorios o reuniones dentro de los datos semilla.
 const COMMUNITY_LEADER_CODES = new Set([
     'MIE-0001',
     'MIE-0002',
@@ -376,7 +372,6 @@ function buildMemberData(seed) {
     }
 }
 
-// Devuelve un Map<code, member> para que otros seeders resuelvan líderes/supervisores.
 export async function seedMembers(prisma) {
     const communityRoles = await prisma.$transaction(
         COMMUNITY_ROLE_SEEDS.map((role) =>

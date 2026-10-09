@@ -6,16 +6,6 @@ import {
 import type { OccurrenceScopeFilter } from '../dto/offering/occurrence.dto'
 import type { AuthenticatedUserContext } from '../types/auth.types'
 
-/**
- * Resuelve qué ocurrencias puede ver y capturar el usuario autenticado.
- * - Administración y finanzas ven todo.
- * - El supervisor ve los sectores que tiene asignados.
- * - El líder y el co-supervisor ven únicamente sus reuniones, que no se pueden
- *   expresar por sector porque conviven con las del supervisor en el mismo sector.
- *
- * Los dos alcances se suman: un supervisor que además lidera una reunión de otro
- * sector ve ambas cosas.
- */
 export async function resolveOccurrenceScope(
     auth: AuthenticatedUserContext,
 ): Promise<OccurrenceScopeFilter> {

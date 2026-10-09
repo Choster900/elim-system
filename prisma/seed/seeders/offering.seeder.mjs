@@ -1,7 +1,3 @@
-// Catálogo de categorías de ofrenda y ofrendas de ejemplo por reunión.
-// Cada ofrenda documenta la asistencia desglosada por tipo de persona y lo recogido
-// por categoría. El total de asistencia se calcula del desglose, como en la captura.
-
 export const OFFERING_CATEGORY_SEEDS = [
     { code: 'COF-DIEZMOS', name: 'Diezmos', sortOrder: 1, description: 'Diezmos de los miembros.' },
     {
@@ -25,8 +21,6 @@ export const OFFERING_CATEGORY_SEEDS = [
     { code: 'COF-OTROS', name: 'Otros', sortOrder: 5, description: 'Otros ingresos y donaciones.' },
 ]
 
-// Ofrendas de ejemplo, referenciadas por el título de la reunión.
-// details: [{ categoryCode, amount }] · attendance: { typeCode: cantidad }
 export const OFFERING_SEEDS = [
     {
         meetingTitle: 'Servicio Dominical de Adoración',
@@ -113,7 +107,6 @@ function round2(value) {
     return Math.round(value * 100) / 100
 }
 
-// Idempotente: una ocurrencia por (reunión, fecha). Si ya existe registrada, se omite.
 export async function seedOfferings(prisma, meetings, categories, attendanceTypes, recordedById) {
     let created = 0
 
@@ -141,7 +134,6 @@ export async function seedOfferings(prisma, meetings, categories, attendanceType
             return { typeId: type.id, quantity }
         })
 
-        // La ocurrencia puede existir ya como pendiente si la generación corrió antes.
         const captureData = {
             status: 'RECORDED',
             attendance: attendanceTotal(seed.attendance),

@@ -8,7 +8,6 @@ export interface CreateAttendanceTypeDto {
 
 export type UpdateAttendanceTypeDto = Partial<CreateAttendanceTypeDto>
 
-/// Cuántas personas de un tipo asistieron a una fecha.
 export interface AttendanceDetailDto {
     typeId: number
     quantity: number

@@ -6,8 +6,6 @@ import type {
 import * as repo from '../repositories/offering.repository'
 import { ApiErrorCode } from '../types/api-response.types'
 
-// La captura de ofrendas vive en meeting-occurrence.service.ts; aquí solo el catálogo.
-
 function resourceNotFound(): never {
     throw createError({
         statusCode: 404,

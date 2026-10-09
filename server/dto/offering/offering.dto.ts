@@ -1,5 +1,3 @@
-// Catálogo de categorías de ofrenda. La captura vive en occurrence.dto.ts.
-
 export interface CreateOfferingCategoryDto {
     code: string
     name: string

@@ -24,7 +24,6 @@ const attendanceDetailSchema = Joi.object({
 const captureFields = {
     attendance: Joi.number().integer().min(0).max(1000000),
     attendanceDetails: Joi.array().items(attendanceDetailSchema),
-    // Solo se usa cuando no hay desglose por categoría.
     totalAmount: Joi.number().min(0).precision(2).allow(null),
     currency: Joi.string().trim().uppercase().min(3).max(10),
     notes: Joi.string().trim().max(600).allow('', null),
@@ -39,7 +38,6 @@ export const recordOccurrenceSchema = Joi.object<RecordOccurrenceDto>({
     notes: captureFields.notes.default(null),
     details: captureFields.details.default([]),
 })
-    // Sin desglose hay que dar el total global; con desglose, el total se calcula.
     .custom((value: RecordOccurrenceDto, helpers) => {
         if (value.details.length === 0 && value.totalAmount === null) {
             return helpers.error('any.invalid')

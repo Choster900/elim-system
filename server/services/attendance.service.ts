@@ -33,10 +33,6 @@ export async function updateAttendanceType(id: number, dto: UpdateAttendanceType
     return repo.updateAttendanceType(id, dto)
 }
 
-/**
- * Un tipo con fechas ya registradas no se borra: eso reescribiría el histórico.
- * Para sacarlo de la captura se desactiva, y las fechas viejas lo conservan.
- */
 export async function deleteAttendanceType(id: number) {
     await getAttendanceTypeById(id)
 

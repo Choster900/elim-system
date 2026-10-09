@@ -19,7 +19,6 @@ import {
 } from '../utils/date/recurrence.util'
 import { hasOccurrenceEnded } from '../utils/date/business-time.util'
 
-/// Cuánto historial se reconstruye la primera vez que se sincroniza una reunión.
 const GENERATION_FLOOR_MONTHS = 3
 
 const FREQUENCY_FROM_DB: Record<string, RecurrenceFrequency> = {
@@ -94,11 +93,6 @@ async function assertAttendanceTypesExist(details: { typeId: number }[]) {
     }
 }
 
-/**
- * Materializa las fechas que la regla de recurrencia debía producir hasta hoy y que
- * todavía no existen como fila. Nunca genera fechas futuras: una fecha que no ha
- * ocurrido no es un pendiente.
- */
 export async function syncOccurrences(options: { meetingIds?: number[] } = {}, now = new Date()) {
     const today = todayIsoDate(now)
     const floor = isoDateMonthsAgo(today, GENERATION_FLOOR_MONTHS)
@@ -133,7 +127,6 @@ export async function syncOccurrences(options: { meetingIds?: number[] } = {}, n
     return { created, meetings: meetings.length }
 }
 
-/// Al cambiar la recurrencia se descartan los pendientes y se regeneran; lo registrado no se toca.
 export async function resyncMeetingOccurrences(meetingId: number) {
     await repo.deletePendingOccurrences(meetingId)
     return syncOccurrences({ meetingIds: [meetingId] })
@@ -163,14 +156,13 @@ export async function getOccurrences(
     }))
 }
 
-/// Carga una ocurrencia comprobando que caiga dentro del alcance del usuario.
 async function getScopedOccurrence(id: number, scope: OccurrenceScopeFilter) {
     const occurrence = await repo.findOccurrenceById(id)
     if (!occurrence) resourceNotFound()
 
     const allowed =
         scope.seesAll ||
-        scope.sectorIds.includes(occurrence.sectorId) ||
+        (occurrence.sectorId !== null && scope.sectorIds.includes(occurrence.sectorId)) ||
         scope.meetingIds.includes(occurrence.meetingId)
 
     if (!allowed) forbidden('No tienes acceso a esta reunión')
@@ -182,11 +174,6 @@ export function getOccurrenceById(id: number, scope: OccurrenceScopeFilter) {
     return getScopedOccurrence(id, scope)
 }
 
-/**
- * Captura una ocurrencia pendiente. Registrar es una sola vez: corregir lo ya
- * capturado exige `finance.manage`, que es lo que impide al líder reescribir su
- * propio registro.
- */
 export async function recordOccurrence(
     id: number,
     dto: RecordOccurrenceDto,
@@ -206,7 +193,6 @@ export async function recordOccurrence(
     return repo.recordOccurrence(id, dto, userId)
 }
 
-/// Guardado parcial: registrar 2 de 4 pendientes es un caso normal, no un error.
 export async function recordOccurrencesBulk(
     dto: BulkRecordOccurrencesDto,
     scope: OccurrenceScopeFilter,
@@ -234,7 +220,6 @@ export async function recordOccurrencesBulk(
     return repo.recordOccurrencesBulk(dto.entries, userId)
 }
 
-/// Corrección de una ocurrencia ya registrada. Requiere `finance.manage` en el handler.
 export async function updateOccurrence(
     id: number,
     dto: UpdateOccurrenceDto,

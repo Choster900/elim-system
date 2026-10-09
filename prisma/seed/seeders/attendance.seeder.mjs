@@ -1,7 +1,3 @@
-// Catálogo de tipos de asistencia. Los códigos son los mismos que inserta la
-// migración `20260819140000_attendance_types`: el seed debe reconciliar esas filas,
-// no crear un segundo juego con otro código (el nombre es único y chocaría).
-
 export const ATTENDANCE_TYPE_SEEDS = [
     { code: 'HERMANOS', name: 'Hermanos', sortOrder: 1, description: 'Miembros de la iglesia.' },
     {

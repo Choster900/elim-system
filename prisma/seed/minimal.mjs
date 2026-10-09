@@ -1,12 +1,3 @@
-/**
- * Seed mínimo: catálogos del sistema y un único usuario administrador.
- *
- * A diferencia de `index.mjs`, no inserta miembros, territorios, reuniones ni
- * ofrendas de prueba. Es el seed pensado para una base recién migrada.
- *
- * Todas las operaciones son upsert idempotente: volver a ejecutarlo no duplica
- * filas ni borra datos existentes.
- */
 import 'dotenv/config'
 import process from 'node:process'
 import { PrismaClient } from '@prisma/client'
@@ -26,8 +17,6 @@ import {
 
 const SCRIPT_NAME = 'seed:minimal'
 
-// Sobre una base remota cada sentencia cuesta decenas de milisegundos de red y el
-// lote de permisos supera el timeout de 5 s que Prisma aplica por defecto.
 const TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 60_000 }
 
 try {
@@ -42,10 +31,6 @@ try {
 const adapter = new PrismaPg({ connectionString: resolveSeedConnectionString() })
 const prisma = new PrismaClient({ adapter, transactionOptions: TRANSACTION_OPTIONS })
 
-/**
- * El esquema debe existir antes de sembrar. Sin esta comprobación el error que
- * aparece es un "table does not exist" difícil de interpretar.
- */
 async function assertSchemaPresent() {
     const [row] = await prisma.$queryRaw`
         SELECT COUNT(*)::int AS total
@@ -61,11 +46,6 @@ async function assertSchemaPresent() {
     }
 }
 
-/**
- * `seedAdminUser` reescribe el hash de contraseña del usuario existente. En una
- * base que ya está en uso eso equivale a resetear el acceso del administrador,
- * así que solo se hace cuando se pide de forma explícita.
- */
 async function resolveAdminUser() {
     const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@local.test'
     const existing = await prisma.user.findUnique({ where: { email } })

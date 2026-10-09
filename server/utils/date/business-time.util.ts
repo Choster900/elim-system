@@ -1,5 +1,3 @@
-/// Zona horaria oficial de la operación. No se usa la zona del servidor porque
-/// puede ser distinta entre desarrollo, contenedores y producción.
 export const BUSINESS_TIME_ZONE = 'America/El_Salvador'
 
 const businessDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -19,7 +17,6 @@ function requiredPart(parts: Record<string, string>, name: string) {
     return value
 }
 
-/// Fecha y hora de un instante expresadas como valores comparables en la zona oficial.
 export function businessDateTime(now = new Date()) {
     const parts = Object.fromEntries(
         businessDateTimeFormatter
@@ -56,10 +53,6 @@ function nextIsoDate(isoDate: string) {
     return next.toISOString().slice(0, 10)
 }
 
-/**
- * Una ocurrencia se habilita al alcanzar su hora de fin, nunca por el solo hecho
- * de haber comenzado el día. También tolera reuniones que crucen medianoche.
- */
 export function hasOccurrenceEnded(occurrence: ScheduledOccurrenceTime, now = new Date()) {
     const startTime = occurrence.startTime.slice(0, 5)
     const endTime = occurrence.endTime.slice(0, 5)

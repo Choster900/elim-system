@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { meetingAutoTitle } from '#shared/utils/territory-name.util'
 import { prisma } from '../database/prisma'
 import type {
     CreateMeetingDto,
@@ -8,7 +9,11 @@ import type {
     UpdateMeetingDto,
     UpdateMeetingTypeDto,
 } from '../dto/meeting/meeting.dto'
-import { nextMeetingCode } from '../utils/code/entity-code.util'
+import {
+    meetingFullCode,
+    nextGeneralMeetingCode,
+    nextMeetingCode,
+} from '../utils/code/entity-code.util'
 import { mapPrismaError } from '../utils/database/prisma-error.util'
 
 const FREQUENCY_TO_DB = {
@@ -88,6 +93,7 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         title: meeting.title,
         description: meeting.description,
         code: meeting.code,
+        fullCode: meetingFullCode(meeting.code, meeting.sector),
         date: toIsoDate(meeting.date),
         recurrenceEndDate:
             meeting.recurrenceEndDate === null ? null : toIsoDate(meeting.recurrenceEndDate),
@@ -109,11 +115,12 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
         color: meeting.color,
         typeName: meeting.type?.name ?? null,
         typeColor: meeting.type?.color ?? null,
+        isGeneral: meeting.type.isGeneral,
         sectorName: meeting.sector?.name ?? null,
-        zoneId: meeting.sector.zone.id,
-        zoneName: meeting.sector.zone.name,
-        districtId: meeting.sector.zone.district.id,
-        districtName: meeting.sector.zone.district.name,
+        zoneId: meeting.sector?.zone.id ?? null,
+        zoneName: meeting.sector?.zone.name ?? null,
+        districtId: meeting.sector?.zone.district.id ?? null,
+        districtName: meeting.sector?.zone.district.name ?? null,
         leaderName: fullName(meeting.leader),
         supervisorName: fullName(meeting.supervisor),
         hostName: fullName(meeting.host),
@@ -122,9 +129,20 @@ export function toMeetingRecord(meeting: MeetingWithRelations) {
     }
 }
 
+function meetingCodeFor(meeting: MeetingWithRelations, existingCodes: string[]) {
+    if (meeting.type.isGeneral) {
+        return nextGeneralMeetingCode(meeting.type.codeSegment, existingCodes)
+    }
+    return nextMeetingCode(meeting.type.codeSegment, existingCodes)
+}
+
+function relationOf(id: number | null) {
+    return id === null ? { disconnect: true } : { connect: { id } }
+}
+
 function buildScalarData(dto: UpdateMeetingDto) {
     const data: Prisma.MeetingUpdateInput = {}
-    if (dto.title !== undefined) data.title = dto.title
+    if (dto.title) data.title = dto.title
     if (dto.description !== undefined) data.description = dto.description
     if (dto.date !== undefined) data.date = dateOf(dto.date)
     if (dto.recurrenceEndDate !== undefined) {
@@ -150,7 +168,6 @@ function buildScalarData(dto: UpdateMeetingDto) {
 }
 
 export async function findMeetings(filters: { sectorIds?: number[]; meetingIds?: number[] } = {}) {
-    // Sector y reunión se suman: un líder ve las suyas aunque no supervise el sector.
     const scopeClauses: Prisma.MeetingWhereInput[] = []
     if (filters.sectorIds) scopeClauses.push({ sectorId: { in: filters.sectorIds } })
     if (filters.meetingIds) scopeClauses.push({ id: { in: filters.meetingIds } })
@@ -250,8 +267,6 @@ async function hasActiveCommunityRole(memberId: number, roleCode: string) {
 }
 
 export async function createMeeting(dto: CreateMeetingDto) {
-    // El consecutivo está delimitado por distrito, zona, sector y tipo. La transacción
-    // serializable evita que dos altas simultáneas reciban el mismo código.
     for (let attempt = 0; attempt < 3; attempt += 1) {
         const placeholder = `TMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         try {
@@ -265,11 +280,19 @@ export async function createMeeting(dto: CreateMeetingDto) {
                         data: {
                             code: placeholder,
                             type: { connect: { id: dto.typeId } },
-                            sector: { connect: { id: dto.sectorId } },
-                            leader: { connect: { id: dto.leaderId } },
-                            supervisor: { connect: { id: dto.supervisorId } },
-                            host: { connect: { id: dto.hostId } },
-                            title: dto.title,
+                            ...(dto.sectorId !== null
+                                ? { sector: { connect: { id: dto.sectorId } } }
+                                : {}),
+                            ...(dto.leaderId !== null
+                                ? { leader: { connect: { id: dto.leaderId } } }
+                                : {}),
+                            ...(dto.supervisorId !== null
+                                ? { supervisor: { connect: { id: dto.supervisorId } } }
+                                : {}),
+                            ...(dto.hostId !== null
+                                ? { host: { connect: { id: dto.hostId } } }
+                                : {}),
+                            title: dto.title || '',
                             description: dto.description,
                             date: dateOf(dto.date),
                             recurrenceEndDate: dto.recurrenceEndDate
@@ -304,16 +327,16 @@ export async function createMeeting(dto: CreateMeetingDto) {
                         include: meetingInclude,
                     })
 
+                    const code = meetingCodeFor(
+                        created,
+                        existingCodes.map((item) => item.code),
+                    )
                     return transaction.meeting.update({
                         where: { id: created.id },
                         data: {
-                            code: nextMeetingCode(
-                                created.sector.zone.district.code,
-                                created.sector.zone.code,
-                                created.sector.code,
-                                created.type.codeSegment,
-                                existingCodes.map((item) => item.code),
-                            ),
+                            code,
+                            title:
+                                dto.title || meetingAutoTitle(code, created.sector?.name ?? null),
                         },
                         include: meetingInclude,
                     })
@@ -332,10 +355,10 @@ export async function createMeeting(dto: CreateMeetingDto) {
 export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
     const data = buildScalarData(dto)
     if (dto.typeId !== undefined) data.type = { connect: { id: dto.typeId } }
-    if (dto.sectorId !== undefined) data.sector = { connect: { id: dto.sectorId } }
-    if (dto.leaderId !== undefined) data.leader = { connect: { id: dto.leaderId } }
-    if (dto.supervisorId !== undefined) data.supervisor = { connect: { id: dto.supervisorId } }
-    if (dto.hostId !== undefined) data.host = { connect: { id: dto.hostId } }
+    if (dto.sectorId !== undefined) data.sector = relationOf(dto.sectorId)
+    if (dto.leaderId !== undefined) data.leader = relationOf(dto.leaderId)
+    if (dto.supervisorId !== undefined) data.supervisor = relationOf(dto.supervisorId)
+    if (dto.hostId !== undefined) data.host = relationOf(dto.hostId)
     if (dto.coSupervisorIds !== undefined) {
         data.coSupervisors = {
             deleteMany: {},
@@ -343,40 +366,62 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
         }
     }
 
-    const mustRegenerateCode = dto.sectorId !== undefined || dto.typeId !== undefined
+    const titleCleared = dto.title !== undefined && !dto.title
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
             const meeting = await prisma.$transaction(
                 async (transaction) => {
+                    const previous = await transaction.meeting.findUniqueOrThrow({
+                        where: { id },
+                        include: meetingInclude,
+                    })
+                    const targetSectorId =
+                        dto.sectorId !== undefined ? dto.sectorId : previous.sectorId
+                    const targetTypeId = dto.typeId ?? previous.typeId
+                    const scopeChanged =
+                        targetSectorId !== previous.sectorId || targetTypeId !== previous.typeId
                     const updated = await transaction.meeting.update({
                         where: { id },
-                        data,
+                        data: {
+                            ...data,
+                            ...(scopeChanged
+                                ? {
+                                      code: `TMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                                  }
+                                : {}),
+                        },
                         include: meetingInclude,
                     })
 
-                    if (!mustRegenerateCode) return updated
+                    let code = updated.code
+                    if (scopeChanged) {
+                        const existingCodes = await transaction.meeting.findMany({
+                            where: {
+                                sectorId: updated.sectorId,
+                                typeId: updated.typeId,
+                                id: { not: updated.id },
+                            },
+                            select: { code: true },
+                        })
+                        code = meetingCodeFor(
+                            updated,
+                            existingCodes.map((item) => item.code),
+                        )
+                    }
 
-                    const existingCodes = await transaction.meeting.findMany({
-                        where: {
-                            sectorId: updated.sectorId,
-                            typeId: updated.typeId,
-                            id: { not: updated.id },
-                        },
-                        select: { code: true },
-                    })
-                    const expectedCode = nextMeetingCode(
-                        updated.sector.zone.district.code,
-                        updated.sector.zone.code,
-                        updated.sector.code,
-                        updated.type.codeSegment,
-                        existingCodes.map((item) => item.code),
-                    )
-                    if (updated.code === expectedCode) return updated
+                    const hadAutoTitle =
+                        previous.title ===
+                        meetingAutoTitle(previous.code, previous.sector?.name ?? null)
+                    const title =
+                        titleCleared || (dto.title === undefined && hadAutoTitle)
+                            ? meetingAutoTitle(code, updated.sector?.name ?? null)
+                            : updated.title
+                    if (code === updated.code && title === updated.title) return updated
 
                     return transaction.meeting.update({
                         where: { id },
-                        data: { code: expectedCode },
+                        data: { code, title },
                         include: meetingInclude,
                     })
                 },
@@ -384,9 +429,7 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
             )
             return toMeetingRecord(meeting)
         } catch (error) {
-            if (!mustRegenerateCode || !isRetryableCodeError(error) || attempt === 2) {
-                mapPrismaError(error)
-            }
+            if (!isRetryableCodeError(error) || attempt === 2) mapPrismaError(error)
         }
     }
 
@@ -396,8 +439,6 @@ export async function updateMeeting(id: number, dto: UpdateMeetingDto) {
 export function deleteMeeting(id: number) {
     return prisma.meeting.delete({ where: { id } }).catch(mapPrismaError)
 }
-
-// --- Meeting types ---
 
 export function findMeetingTypes() {
     return prisma.meetingType.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] })

@@ -44,7 +44,6 @@ enum SystemUserStatus {
   @@map("eus_estado_usuario")
 }
 
-/// Segundo factor elegido por el propietario de la cuenta.
 enum MfaMethod {
   NONE  @map("ninguno")
   TOTP  @map("totp")
@@ -53,7 +52,6 @@ enum MfaMethod {
   @@map("emu_metodo_doble_factor")
 }
 
-/// Operación autorizada por un desafío de segundo factor.
 enum MfaChallengePurpose {
   LOGIN         @map("ingreso")
   ENABLE_EMAIL  @map("activar_correo")
@@ -80,35 +78,24 @@ enum MeetingFrequency {
   @@map("fre_frecuencia_reunion")
 }
 
-/// Modo de cálculo de una recurrencia mensual.
 enum MonthlyMode {
-  /// Mismo número de día que la fecha ancla; se ajusta al último día en meses cortos.
   FIXED_DAY @map("dia_fijo")
-  /// N-ésimo día de semana del mes, por ejemplo el tercer sábado.
   ORDINAL   @map("ordinal")
 
   @@map("mme_modo_mensual")
 }
 
-/// Estado de captura de una fecha concreta en que la reunión debía realizarse.
 enum OccurrenceStatus {
-  /// La fecha ya pasó y nadie registró asistencia ni ofrenda.
   PENDING  @map("pendiente")
-  /// Asistencia y ofrenda capturadas.
   RECORDED @map("registrada")
 
   @@map("eoc_estado_ocurrencia")
 }
 
-/// Estado de recepción y revisión del sobre de ofrenda entregado en la iglesia.
 enum OfferingReceptionStatus {
-  /// El sobre fue recibido en iglesia y queda pendiente de revisión final.
   RECEIVED    @map("recibida")
-  /// Tesorería revisó el sobre y coincide con lo registrado en el sistema.
   VERIFIED    @map("verificada")
-  /// Tesorería revisó el sobre y encontró diferencia contra lo registrado.
   DISCREPANCY @map("con_disparidad")
-  /// Registro anulado por error operativo.
   CANCELLED   @map("anulada")
 
   @@map("ero_estado_recepcion_ofrenda")
@@ -238,17 +225,11 @@ model User {
   isActive               Boolean              @default(true) @map("usu_activo")
   status                 SystemUserStatus     @default(ACTIVE) @map("usu_estado")
   twoFactorEnabled       Boolean              @default(false) @map("usu_doble_factor")
-  /// Método activo; el indicador anterior se conserva para compatibilidad.
   mfaMethod              MfaMethod            @default(NONE) @map("usu_metodo_doble_factor")
-  /// Secreto TOTP cifrado con AES-256-GCM; nunca se devuelve después del alta.
   mfaTotpSecret          String?              @map("usu_secreto_totp") @db.VarChar(300)
-  /// Secreto pendiente de validar antes de activar TOTP.
   mfaPendingTotpSecret   String?              @map("usu_secreto_totp_pendiente") @db.VarChar(300)
-  /// Fecha límite para confirmar el secreto TOTP pendiente.
   mfaPendingExpiresAt    DateTime?            @map("usu_fecha_expiracion_totp_pendiente")
-  /// Último período TOTP consumido para impedir reutilización.
   mfaLastUsedStep        Int?                 @map("usu_paso_totp_ultimo")
-  /// Versión de seguridad: invalida tokens emitidos antes de cambiar el factor.
   mfaVersion             Int                  @default(0) @map("usu_version_doble_factor")
   mustChangePassword     Boolean              @default(true) @map("usu_cambiar_clave")
   lastAccessAt           DateTime?            @map("usu_fecha_ultimo_acceso")
@@ -266,9 +247,7 @@ model User {
   receivedInvitations    UserInvitation[]     @relation("UserInvitationRecipient")
   createdInvitations     UserInvitation[]     @relation("UserInvitationCreator")
   passwordResetTokens    PasswordResetToken[]
-  /// Desafíos de segundo factor solicitados por esta cuenta.
   mfaChallenges          MfaChallenge[]
-  /// Códigos de recuperación pertenecientes a esta cuenta.
   mfaRecoveryCodes       MfaRecoveryCode[]
 
   @@index([isActive], map: "ix_usu_activo")
@@ -277,28 +256,16 @@ model User {
   @@map("usu_usuario")
 }
 
-/// Desafío de un solo uso para ingreso o cambio de factor por correo.
 model MfaChallenge {
-  /// Identificador interno del desafío.
   id         Int                 @id(map: "pk_dfa_desafio_factor") @default(autoincrement()) @map("dfa_id")
-  /// Usuario que debe verificar el segundo factor.
   userId     Int                 @map("dfa_id_usu")
-  /// Resumen del identificador público; el original solo se muestra al solicitante.
   tokenHash  String              @unique(map: "uk_dfa_resumen_token") @map("dfa_resumen_token") @db.VarChar(100)
-  /// Resumen HMAC del código enviado por correo; nulo para TOTP.
-  /// Resumen HMAC del código de correo; vacío cuando se usa TOTP.
   codeHash   String?             @map("dfa_resumen_codigo") @db.VarChar(100)
-  /// Operación autorizada por este desafío.
   purpose    MfaChallengePurpose @map("dfa_destino")
-  /// Número de intentos fallidos.
   attempts   Int                 @default(0) @map("dfa_intento")
-  /// Fecha límite para verificar el desafío.
   expiresAt  DateTime            @map("dfa_fecha_expiracion")
-  /// Fecha en que se consumió el desafío.
   consumedAt DateTime?           @map("dfa_fecha_uso")
-  /// Fecha de creación del desafío.
   createdAt  DateTime            @default(now()) @map("dfa_fecha_creacion")
-  /// Cuenta propietaria del desafío.
   user       User                @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_dfa_id_usu")
 
   @@index([userId, createdAt], map: "ix_dfa_usuario_fecha")
@@ -306,44 +273,27 @@ model MfaChallenge {
   @@map("dfa_desafio_factor")
 }
 
-/// Código de recuperación TOTP, mostrado una sola vez al activarlo.
 model MfaRecoveryCode {
-  /// Identificador interno del código.
   id        Int       @id(map: "pk_crf_codigo_recuperacion_factor") @default(autoincrement()) @map("crf_id")
-  /// Cuenta propietaria del código.
   userId    Int       @map("crf_id_usu")
-  /// Resumen HMAC del código de recuperación.
   codeHash  String    @unique(map: "uk_crf_resumen_codigo") @map("crf_resumen_codigo") @db.VarChar(100)
-  /// Fecha en que el código fue consumido.
   usedAt    DateTime? @map("crf_fecha_uso")
-  /// Fecha de creación del código.
   createdAt DateTime  @default(now()) @map("crf_fecha_creacion")
-  /// Cuenta propietaria del código.
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_crf_id_usu")
 
   @@index([userId], map: "ix_crf_usuario")
   @@map("crf_codigo_recuperacion_factor")
 }
 
-/// Invitación de acceso de un solo uso enviada a un usuario del sistema.
 model UserInvitation {
-  /// Identificador interno de la invitación.
   id          Int       @id(map: "pk_inv_invitacion_usuario") @default(autoincrement()) @map("inv_id")
-  /// Usuario que debe completar el primer acceso.
   userId      Int       @map("inv_id_usu")
-  /// Resumen SHA-256 del token; el token original solo se entrega por correo.
   tokenHash   String    @unique(map: "uk_inv_resumen_token") @map("inv_resumen_token") @db.VarChar(100)
-  /// Momento límite para utilizar la invitación.
   expiresAt   DateTime  @map("inv_fecha_expiracion")
-  /// Momento en que el token fue consumido correctamente.
   usedAt      DateTime? @map("inv_fecha_uso")
-  /// Momento en que una invitación anterior fue invalidada.
   revokedAt   DateTime? @map("inv_fecha_revocacion")
-  /// Administrador que creó o reenvió la invitación.
   createdById Int?      @map("inv_id_usu_creador")
-  /// Momento en que se generó la invitación.
   createdAt   DateTime  @default(now()) @map("inv_fecha_creacion")
-  /// Momento de la última modificación de la invitación.
   updatedAt   DateTime  @updatedAt @map("inv_fecha_modificacion")
   user        User      @relation("UserInvitationRecipient", fields: [userId], references: [id], onDelete: Cascade, map: "fk_inv_id_usu")
   createdBy   User?     @relation("UserInvitationCreator", fields: [createdById], references: [id], onDelete: SetNull, map: "fk_inv_id_usu_creador")
@@ -354,23 +304,14 @@ model UserInvitation {
   @@map("inv_invitacion_usuario")
 }
 
-/// Recuperación de contraseña de un solo uso solicitada por un usuario del sistema.
 model PasswordResetToken {
-  /// Identificador interno de la recuperación de contraseña.
   id        Int       @id(map: "pk_rcu_recuperacion_clave_usuario") @default(autoincrement()) @map("rcu_id")
-  /// Usuario que solicitó recuperar su contraseña.
   userId    Int       @map("rcu_id_usu")
-  /// Resumen SHA-256 del token; el token original solo se entrega por correo.
   tokenHash String    @unique(map: "uk_rcu_resumen_token") @map("rcu_resumen_token") @db.VarChar(100)
-  /// Momento límite para utilizar el enlace de recuperación.
   expiresAt DateTime  @map("rcu_fecha_expiracion")
-  /// Momento en que el token fue consumido correctamente.
   usedAt    DateTime? @map("rcu_fecha_uso")
-  /// Momento en que una recuperación anterior fue invalidada.
   revokedAt DateTime? @map("rcu_fecha_revocacion")
-  /// Momento en que se generó la recuperación.
   createdAt DateTime  @default(now()) @map("rcu_fecha_creacion")
-  /// Momento de la última modificación de la recuperación.
   updatedAt DateTime  @updatedAt @map("rcu_fecha_modificacion")
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_rcu_id_usu")
 
@@ -472,10 +413,9 @@ model District {
   code        String   @unique(map: "uk_dis_codigo") @map("dis_codigo") @db.VarChar(100)
   name        String   @unique(map: "uk_dis_nombre") @map("dis_nombre") @db.VarChar(100)
   description String?  @map("dis_descripcion") @db.VarChar(300)
-  /// Dirección general o referencia del distrito.
   address     String?  @map("dis_direccion") @db.VarChar(300)
   leaderName  String?  @map("dis_nombre_lider") @db.VarChar(100)
-  leaderId    Int?     @map("dis_id_mie") // TODO: no deberia de ir aqui
+  leaderId    Int?     @map("dis_id_mie")
   color       String   @map("dis_color") @db.VarChar(100)
   polygon     Json     @map("dis_poligono") @db.JsonB
   isActive    Boolean  @default(true) @map("dis_activo")
@@ -492,13 +432,12 @@ model District {
 model Zone {
   id          Int               @id(map: "pk_zon_zona") @default(autoincrement()) @map("zon_id")
   districtId  Int               @map("zon_id_dis")
-  code        String            @unique(map: "uk_zon_codigo") @map("zon_codigo") @db.VarChar(100)
+  code        String            @map("zon_codigo") @db.VarChar(100)
   name        String            @map("zon_nombre") @db.VarChar(100)
   description String?           @map("zon_descripcion") @db.VarChar(300)
-  /// Dirección general o referencia de la zona.
   address     String?           @map("zon_direccion") @db.VarChar(300)
   leaderName  String?           @map("zon_nombre_lider") @db.VarChar(100)
-  leaderId    Int?              @map("zon_id_mie") // TODO: no deberia de ir aqui
+  leaderId    Int?              @map("zon_id_mie")
   color       String            @map("zon_color") @db.VarChar(100)
   polygon     Json              @map("zon_poligono") @db.JsonB
   isActive    Boolean           @default(true) @map("zon_activo")
@@ -509,6 +448,7 @@ model Zone {
   sectors     TerritorySector[]
 
   @@unique([districtId, name], map: "uk_zon_distrito_nombre")
+  @@unique([districtId, code], map: "uk_zon_distrito_codigo")
   @@index([districtId], map: "ix_zon_distrito")
   @@index([leaderId], map: "ix_zon_lider")
   @@index([isActive], map: "ix_zon_activo")
@@ -518,14 +458,11 @@ model Zone {
 model TerritorySector {
   id             Int                 @id(map: "pk_sec_sector") @default(autoincrement()) @map("sec_id")
   zoneId         Int                 @map("sec_id_zon")
-  code           String              @unique(map: "uk_sec_codigo") @map("sec_codigo") @db.VarChar(100)
+  code           String              @map("sec_codigo") @db.VarChar(100)
   name           String              @map("sec_nombre") @db.VarChar(100)
   description    String?             @map("sec_descripcion") @db.VarChar(300)
-  /// Dirección general o referencia del sector.
   address        String?             @map("sec_direccion") @db.VarChar(300)
-  /// Nombre histórico conservado junto con la relación al catálogo de supervisores.
   supervisorName String?             @map("sec_nombre_supervisor") @db.VarChar(100)
-  /// Miembro con rol comunitario SUPERVISOR responsable de las reuniones del sector.
   supervisorId   Int?                @map("sec_id_mie_supervisor")
   color          String              @map("sec_color") @db.VarChar(100)
   polygon        Json                @map("sec_poligono") @db.JsonB
@@ -539,6 +476,7 @@ model TerritorySector {
   occurrences    MeetingOccurrence[]
 
   @@unique([zoneId, name], map: "uk_sec_zona_nombre")
+  @@unique([zoneId, code], map: "uk_sec_zona_codigo")
   @@index([zoneId], map: "ix_sec_zona")
   @@index([supervisorId], map: "ix_sec_supervisor")
   @@index([isActive], map: "ix_sec_activo")
@@ -547,12 +485,12 @@ model TerritorySector {
 
 model MeetingType {
   id          Int       @id(map: "pk_tir_tipo_reunion") @default(autoincrement()) @map("tir_id")
-  /// Segmento único de una letra que se concatena en el código de la reunión.
   codeSegment String    @unique(map: "uk_tir_codigo") @map("tir_codigo") @db.Char(1)
   name        String    @unique(map: "uk_tir_nombre") @map("tir_nombre") @db.VarChar(100)
   description String?   @map("tir_descripcion") @db.VarChar(300)
   color       String    @map("tir_color") @db.VarChar(100)
   isActive    Boolean   @default(true) @map("tir_activo")
+  isGeneral   Boolean   @default(false) @map("tir_general")
   createdAt   DateTime  @default(now()) @map("tir_fecha_creacion")
   updatedAt   DateTime  @updatedAt @map("tir_fecha_modificacion")
   meetings    Meeting[]
@@ -563,21 +501,15 @@ model MeetingType {
 
 model Meeting {
   id                Int                   @id(map: "pk_reu_reunion") @default(autoincrement()) @map("reu_id")
-  /// Código autogenerado: distrito + zona + sector + segmento de tipo + consecutivo.
-  /// Solo se recalcula al cambiar el sector o el tipo de reunión.
-  code              String                @unique(map: "uk_reu_codigo") @map("reu_codigo") @db.VarChar(100)
+  code              String                @map("reu_codigo") @db.VarChar(100)
   typeId            Int                   @map("reu_id_tir")
-  sectorId          Int                   @map("reu_id_sec")
-  /// Miembro con rol comunitario LEADER responsable de conducir la reunión.
-  leaderId          Int                   @map("reu_id_mie_lider")
-  supervisorId      Int                   @map("reu_id_mie_supervisor")
-  /// Miembro con rol comunitario HOST que recibe la reunión.
+  sectorId          Int?                  @map("reu_id_sec")
+  leaderId          Int?                  @map("reu_id_mie_lider")
+  supervisorId      Int?                  @map("reu_id_mie_supervisor")
   hostId            Int?                  @map("reu_id_mie_anfitrion")
   title             String                @map("reu_titulo") @db.VarChar(100)
   description       String?               @map("reu_descripcion") @db.VarChar(300)
-  /// Fecha inicial de la reunión y ancla del día para su regla de recurrencia.
   date              DateTime              @map("reu_fecha") @db.Date
-  /// Fecha final inclusiva de la recurrencia; null indica que no tiene finalización.
   recurrenceEndDate DateTime?             @map("reu_fecha_fin_recurrencia") @db.Date
   startTime         DateTime              @map("reu_hora_inicio") @db.Time(0)
   endTime           DateTime              @map("reu_hora_fin") @db.Time(0)
@@ -585,14 +517,10 @@ model Meeting {
   latitude          Decimal?              @map("reu_latitud") @db.Decimal(10, 7)
   longitude         Decimal?              @map("reu_longitud") @db.Decimal(10, 7)
   frequency         MeetingFrequency      @default(ONCE) @map("reu_frecuencia")
-  /// Modo de la recurrencia mensual; nulo para el resto de frecuencias.
   monthlyMode       MonthlyMode?          @map("reu_modo_mensual")
-  /// Posición del día dentro del mes (1 a 4, o 5 para el último) en modo ordinal.
   weekOrdinal       Int?                  @map("reu_ordinal_semana") @db.SmallInt
-  /// Día de la semana (0 domingo a 6 sábado) en modo ordinal.
   weekday           Int?                  @map("reu_dia_semana") @db.SmallInt
   expectedAttendees Int                   @default(0) @map("reu_asistente_esperado")
-  /// Una reunión inactiva deja de generar ocurrencias pendientes.
   isActive          Boolean               @default(true) @map("reu_activa")
   isPublic          Boolean               @default(false) @map("reu_publica")
   notes             String?               @map("reu_nota") @db.VarChar(600)
@@ -600,13 +528,14 @@ model Meeting {
   createdAt         DateTime              @default(now()) @map("reu_fecha_creacion")
   updatedAt         DateTime              @updatedAt @map("reu_fecha_modificacion")
   type              MeetingType           @relation(fields: [typeId], references: [id], onDelete: Restrict, map: "fk_reu_id_tir")
-  sector            TerritorySector       @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reu_id_sec")
-  leader            Member                @relation("MeetingLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_lider")
-  supervisor        Member                @relation("MeetingSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_supervisor")
+  sector            TerritorySector?      @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reu_id_sec")
+  leader            Member?               @relation("MeetingLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_lider")
+  supervisor        Member?               @relation("MeetingSupervisor", fields: [supervisorId], references: [id], onDelete: Restrict, map: "fk_reu_id_mie_supervisor")
   host              Member?               @relation("MeetingHost", fields: [hostId], references: [id], onDelete: SetNull, map: "fk_reu_id_mie_anfitrion")
   coSupervisors     MeetingCoSupervisor[]
   occurrences       MeetingOccurrence[]
 
+  @@unique([sectorId, code], map: "uk_reu_sector_codigo")
   @@index([typeId], map: "ix_reu_tipo")
   @@index([sectorId], map: "ix_reu_sector")
   @@index([leaderId], map: "ix_reu_lider")
@@ -646,32 +575,24 @@ model OfferingCategory {
   @@map("cof_categoria_ofrenda")
 }
 
-/// Cada fecha en que una reunión debía realizarse, con su captura de asistencia y ofrenda.
 model MeetingOccurrence {
   id                Int                @id(map: "pk_reo_reunion_ocurrencia") @default(autoincrement()) @map("reo_id")
   meetingId         Int                @map("reo_id_reu")
-  /// Fecha programada según la regla de recurrencia de la reunión.
   date              DateTime           @map("reo_fecha") @db.Date
   status            OccurrenceStatus   @default(PENDING) @map("reo_estado")
-  /// Personas que asistieron; nulo mientras la ocurrencia siga pendiente.
   attendance        Int?               @map("reo_asistencia")
-  /// Ofrenda total del día; nulo mientras la ocurrencia siga pendiente.
   totalAmount       Decimal?           @map("reo_monto_total") @db.Decimal(12, 2)
   currency          String             @default("USD") @map("reo_moneda") @db.VarChar(10)
   notes             String?            @map("reo_nota") @db.VarChar(600)
-  /// Sector responsable en esa fecha; se conserva aunque la reunión cambie de sector.
-  sectorId          Int                @map("reo_id_sec")
-  /// Líder responsable en esa fecha; se conserva aunque la reunión cambie de líder.
+  sectorId          Int?               @map("reo_id_sec")
   leaderId          Int?               @map("reo_id_mie_lider")
-  /// Usuario que capturó los datos por primera vez.
   recordedById      Int?               @map("reo_id_usu_registro")
   recordedAt        DateTime?          @map("reo_fecha_registro")
-  /// Último usuario que corrigió los datos ya capturados.
   updatedById       Int?               @map("reo_id_usu_modificacion")
   createdAt         DateTime           @default(now()) @map("reo_fecha_creacion")
   updatedAt         DateTime           @updatedAt @map("reo_fecha_modificacion")
   meeting           Meeting            @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "fk_reo_id_reu")
-  sector            TerritorySector    @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reo_id_sec")
+  sector            TerritorySector?   @relation(fields: [sectorId], references: [id], onDelete: Restrict, map: "fk_reo_id_sec")
   leader            Member?            @relation("OccurrenceLeader", fields: [leaderId], references: [id], onDelete: Restrict, map: "fk_reo_id_mie_lider")
   recordedBy        User?              @relation("OccurrenceRecorder", fields: [recordedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_registro")
   updatedBy         User?              @relation("OccurrenceEditor", fields: [updatedById], references: [id], onDelete: SetNull, map: "fk_reo_id_usu_modificacion")
@@ -687,7 +608,6 @@ model MeetingOccurrence {
   @@map("reo_reunion_ocurrencia")
 }
 
-/// Catálogo de tipos de asistencia: hermanos, amigos, nuevos, niños, jóvenes.
 model AttendanceType {
   id          Int                @id(map: "pk_tas_tipo_asistencia") @default(autoincrement()) @map("tas_id")
   code        String             @unique(map: "uk_tas_codigo") @map("tas_codigo") @db.VarChar(100)
@@ -703,7 +623,6 @@ model AttendanceType {
   @@map("tas_tipo_asistencia")
 }
 
-/// Cuántas personas de cada tipo asistieron a una fecha concreta.
 model AttendanceDetail {
   id           Int               @id(map: "pk_dea_detalle_asistencia") @default(autoincrement()) @map("dea_id")
   occurrenceId Int               @map("dea_id_reo")
@@ -738,31 +657,20 @@ model OfferingDetail {
   @@map("dof_detalle_ofrenda")
 }
 
-/// Recepción física en iglesia del sobre de ofrenda de una ocurrencia ya registrada.
 model OfferingReception {
   id                   Int                       @id(map: "pk_rof_recepcion_ofrenda") @default(autoincrement()) @map("rof_id")
-  /// Ocurrencia capturada por el líder y corregible por supervisión.
   occurrenceId         Int                       @unique(map: "uk_rof_ocurrencia") @map("rof_id_reo")
-  /// Código o folio escrito en el sobre físico, si se usa uno.
   envelopeCode         String?                   @unique(map: "uk_rof_codigo_sobre") @map("rof_codigo_sobre") @db.VarChar(100)
-  /// Asistencia registrada en el sistema al momento de recibir o revisar el sobre.
   systemAttendance     Int?                      @map("rof_asistencia_sistema")
-  /// Monto registrado en el sistema al momento de recibir o revisar el sobre.
   systemAmount         Decimal?                  @map("rof_monto_sistema") @db.Decimal(19, 2)
-  /// Asistencia escrita en el sobre entregado en iglesia.
   receivedAttendance   Int?                      @map("rof_asistencia_recibida")
-  /// Monto contado o declarado desde el sobre entregado en iglesia.
   receivedAmount       Decimal                   @map("rof_monto_recibido") @db.Decimal(19, 2)
-  /// Diferencia entre asistencia recibida y asistencia registrada; nula si no se comparó.
   attendanceDifference Int?                      @map("rof_diferencia_asistencia")
-  /// Diferencia entre monto recibido y monto registrado; nula si no se comparó.
   amountDifference     Decimal?                  @map("rof_diferencia_monto") @db.Decimal(19, 2)
   currency             String                    @default("USD") @map("rof_moneda") @db.VarChar(10)
   status               OfferingReceptionStatus   @default(RECEIVED) @map("rof_estado")
-  /// Usuario que recibió el sobre en ventanilla o iglesia.
   receivedById         Int?                      @map("rof_id_usu_receptor")
   receivedAt           DateTime                  @default(now()) @map("rof_fecha_recepcion")
-  /// Usuario de tesorería que revisó la coincidencia contra el sistema.
   reviewedById         Int?                      @map("rof_id_usu_revisor")
   reviewedAt           DateTime?                 @map("rof_fecha_revision")
   notes                String?                   @map("rof_nota") @db.VarChar(600)
@@ -779,7 +687,6 @@ model OfferingReception {
   @@map("rof_recepcion_ofrenda")
 }
 
-/// Desglose opcional del monto recibido físicamente por categoría de ofrenda.
 model OfferingReceptionDetail {
   id          Int               @id(map: "pk_dro_detalle_recepcion_ofrenda") @default(autoincrement()) @map("dro_id")
   receptionId Int               @map("dro_id_rof")

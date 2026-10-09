@@ -135,12 +135,6 @@ export function seedRolePermissionAssignments(prisma, roles, permissions) {
         return { roleId: role.id, permissionIds }
     })
 
-    // Dos sentencias, no una por rol más una por permiso: sobre una base remota
-    // cada ida y vuelta cuesta decenas de milisegundos y el lote completo excedía
-    // el timeout de transacción.
-    //
-    // Quitar un permiso del seed tiene que revocarlo de verdad: sin esta limpieza
-    // un rol conserva para siempre los permisos que tuvo en una siembra anterior.
     const revocation = prisma.rolePermission.deleteMany({
         where: {
             OR: desired.map(({ roleId, permissionIds }) => ({
@@ -150,8 +144,6 @@ export function seedRolePermissionAssignments(prisma, roles, permissions) {
         },
     })
 
-    // `skipDuplicates` sustituye al upsert: la tabla puente no tiene más campos
-    // que actualizar, así que crear lo que falta equivale a la siembra anterior.
     const assignment = prisma.rolePermission.createMany({
         data: desired.flatMap(({ roleId, permissionIds }) =>
             permissionIds.map((permissionId) => ({ roleId, permissionId })),

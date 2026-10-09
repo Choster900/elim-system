@@ -1,13 +1,7 @@
-const DUI_DIGITS = 9
 const DUI_PATTERN = /^\d{8}-\d$/
 
 function formatDigits(digits: string) {
     return `${digits.slice(0, 8)}-${digits.slice(8)}`
-}
-
-export function formatDuiInput(value: string) {
-    const digits = value.replace(/\D/g, '').slice(0, DUI_DIGITS)
-    return digits.length <= 8 ? digits : formatDigits(digits)
 }
 
 export function normalizeDui(value: string) {

@@ -1,13 +1,10 @@
-// Datos de prueba de tipos de reunión y reuniones.
-// Las reuniones referencian sectores (por code SEC-***) y miembros líderes/supervisores
-// (por code MIE-****) sembrados en territory.seeder.mjs y member.seeder.mjs.
-
 export const MEETING_TYPE_SEEDS = [
     {
         codeSegment: 'S',
         name: 'Culto General',
         color: '#e9c176',
         description: 'Reunión central de adoración y predicación.',
+        isGeneral: true,
     },
     {
         codeSegment: 'C',
@@ -32,6 +29,7 @@ export const MEETING_TYPE_SEEDS = [
         name: 'Vigilia',
         color: '#b4a7d6',
         description: 'Noche de oración e intercesión.',
+        isGeneral: true,
     },
     {
         codeSegment: 'E',
@@ -47,13 +45,12 @@ export const MEETING_TYPE_SEEDS = [
     },
 ]
 
-// frequency: ONCE | WEEKLY | BIWEEKLY | MONTHLY
 export const MEETING_SEEDS = [
     {
         title: 'Servicio Dominical de Adoración',
         description: 'Encuentro central de la semana. Adoración y exposición de la Palabra.',
         typeCode: 'S',
-        sectorCode: 'SEC-004',
+        sectorCode: 'D1Z2S2',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0002'],
         date: '2026-08-09',
@@ -70,7 +67,7 @@ export const MEETING_SEEDS = [
         title: 'Célula del Buen Pastor',
         description: 'Grupo pequeño de familias del sector norte.',
         typeCode: 'C',
-        sectorCode: 'SEC-001',
+        sectorCode: 'D1Z1S1',
         supervisorCode: 'MIE-0002',
         coSupervisorCodes: [],
         date: '2026-08-12',
@@ -87,7 +84,7 @@ export const MEETING_SEEDS = [
         title: 'Reunión de Líderes de Sector',
         description: 'Revisión mensual del avance ministerial por sector.',
         typeCode: 'L',
-        sectorCode: 'SEC-004',
+        sectorCode: 'D1Z2S2',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0001'],
         date: '2026-08-10',
@@ -104,7 +101,7 @@ export const MEETING_SEEDS = [
         title: 'Capacitación de Voluntarios',
         description: 'Inducción para nuevos servidores en el área de hospitalidad.',
         typeCode: 'A',
-        sectorCode: 'SEC-005',
+        sectorCode: 'D2Z1S1',
         supervisorCode: 'MIE-0008',
         coSupervisorCodes: [],
         date: '2026-08-05',
@@ -121,7 +118,7 @@ export const MEETING_SEEDS = [
         title: 'Estudio Bíblico de Jueves',
         description: 'Recorrido por el libro de Hechos.',
         typeCode: 'E',
-        sectorCode: 'SEC-003',
+        sectorCode: 'D1Z2S1',
         supervisorCode: 'MIE-0007',
         coSupervisorCodes: [],
         date: '2026-08-13',
@@ -138,7 +135,7 @@ export const MEETING_SEEDS = [
         title: 'Servicio de Sanidad y Liberación',
         description: 'Servicio especial de oración por enfermos.',
         typeCode: 'S',
-        sectorCode: 'SEC-005',
+        sectorCode: 'D2Z1S1',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0005'],
         date: '2026-08-02',
@@ -155,7 +152,7 @@ export const MEETING_SEEDS = [
         title: 'Servicio Dominical (próximo)',
         description: 'Servicio dominical de la próxima semana.',
         typeCode: 'S',
-        sectorCode: 'SEC-004',
+        sectorCode: 'D1Z2S2',
         supervisorCode: 'MIE-0009',
         coSupervisorCodes: ['MIE-0002'],
         date: '2026-08-23',
@@ -172,7 +169,7 @@ export const MEETING_SEEDS = [
         title: 'Vigilia de Inicio de Mes',
         description: 'Noche de oración intercesora abierta a toda la congregación.',
         typeCode: 'V',
-        sectorCode: 'SEC-004',
+        sectorCode: 'D1Z2S2',
         supervisorCode: 'MIE-0005',
         coSupervisorCodes: ['MIE-0007'],
         date: '2026-09-01',
@@ -189,7 +186,7 @@ export const MEETING_SEEDS = [
         title: 'Ensayo del Equipo de Alabanza',
         description: 'Preparación de repertorio para el servicio dominical.',
         typeCode: 'N',
-        sectorCode: 'SEC-004',
+        sectorCode: 'D1Z2S2',
         supervisorCode: 'MIE-0002',
         coSupervisorCodes: [],
         date: '2026-08-21',
@@ -206,7 +203,7 @@ export const MEETING_SEEDS = [
         title: 'Célula de Jóvenes "Renuevo"',
         description: 'Encuentro semanal de jóvenes adultos.',
         typeCode: 'C',
-        sectorCode: 'SEC-007',
+        sectorCode: 'D2Z2S1',
         supervisorCode: 'MIE-0007',
         coSupervisorCodes: ['MIE-0014'],
         date: '2026-08-22',
@@ -239,6 +236,7 @@ export async function seedMeetingTypes(prisma) {
                 description: seed.description ?? null,
                 color: seed.color,
                 isActive: true,
+                isGeneral: seed.isGeneral ?? false,
             }
             return prisma.meetingType.upsert({
                 where: { codeSegment: seed.codeSegment },
@@ -251,24 +249,26 @@ export async function seedMeetingTypes(prisma) {
     return new Map(types.map((type) => [type.codeSegment, type]))
 }
 
-// Devuelve un Map<title, meeting>. Idempotente: usa el título como clave natural
-// (Meeting no tiene un unique de negocio), buscando primero y creando si no existe.
 export async function seedMeetings(prisma, types, sectors, members) {
     const result = new Map()
 
     for (const seed of MEETING_SEEDS) {
         const type = types.get(seed.typeCode)
         if (!type) throw new Error(`Seed meeting type not found: ${seed.typeCode}`)
-        const sector = sectors.get(seed.sectorCode)
-        if (!sector) throw new Error(`Seed sector not found: ${seed.sectorCode}`)
-        const supervisor = members.get(seed.supervisorCode)
-        if (!supervisor) throw new Error(`Seed supervisor member not found: ${seed.supervisorCode}`)
+        const isGeneral = type.isGeneral
+        const sector = isGeneral ? null : sectors.get(seed.sectorCode)
+        if (!isGeneral && !sector) throw new Error(`Seed sector not found: ${seed.sectorCode}`)
+        const supervisor = isGeneral ? null : members.get(seed.supervisorCode)
+        if (!isGeneral && !supervisor) {
+            throw new Error(`Seed supervisor member not found: ${seed.supervisorCode}`)
+        }
 
         const baseData = {
             typeId: type.id,
-            sectorId: sector.id,
-            leaderId: supervisor.id,
-            supervisorId: supervisor.id,
+            sectorId: sector?.id ?? null,
+            leaderId: supervisor?.id ?? null,
+            supervisorId: supervisor?.id ?? null,
+            ...(isGeneral ? { hostId: null } : {}),
             title: seed.title,
             description: seed.description ?? null,
             date: dateOf(seed.date),
@@ -287,11 +287,15 @@ export async function seedMeetings(prisma, types, sectors, members) {
 
         let meeting
         if (existing) {
-            meeting = await prisma.meeting.update({ where: { id: existing.id }, data: baseData })
+            meeting = await prisma.meeting.update({
+                where: { id: existing.id },
+                data: {
+                    ...baseData,
+                    ...(isGeneral ? { coSupervisors: { deleteMany: {} } } : {}),
+                },
+            })
         } else {
-            // El código necesita el id, que aún no existe: se crea con un valor
-            // temporal irrepetible y se reemplaza enseguida, igual que hace la API.
-            const coSupervisorIds = seed.coSupervisorCodes
+            const coSupervisorIds = (isGeneral ? [] : seed.coSupervisorCodes)
                 .map((code) => members.get(code))
                 .filter(Boolean)
                 .map((member) => ({ memberId: member.id }))
@@ -307,21 +311,10 @@ export async function seedMeetings(prisma, types, sectors, members) {
             })
         }
 
-        const sectorWithHierarchy = await prisma.territorySector.findUniqueOrThrow({
-            where: { id: sector.id },
-            include: { zone: { include: { district: true } } },
-        })
-        const compact = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, '')
-        const prefix = [
-            sectorWithHierarchy.zone.district.code,
-            sectorWithHierarchy.zone.code,
-            sectorWithHierarchy.code,
-            type.codeSegment,
-        ]
-            .map(compact)
-            .join('')
+        const segment = type.codeSegment.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        const prefix = isGeneral ? `IGL${segment}` : segment
         const codes = await prisma.meeting.findMany({
-            where: { sectorId: sector.id, typeId: type.id, id: { not: meeting.id } },
+            where: { sectorId: sector?.id ?? null, typeId: type.id, id: { not: meeting.id } },
             select: { code: true },
         })
         const pattern = new RegExp(`^${prefix}(\\d+)$`)
@@ -329,7 +322,9 @@ export async function seedMeetings(prisma, types, sectors, members) {
             const match = pattern.exec(item.code)
             return match ? Math.max(current, Number(match[1])) : current
         }, 0)
-        const code = `${prefix}${maximum + 1}`
+        const keepsCode =
+            pattern.test(meeting.code) && !codes.some((item) => item.code === meeting.code)
+        const code = keepsCode ? meeting.code : `${prefix}${maximum + 1}`
 
         if (meeting.code !== code) {
             meeting = await prisma.meeting.update({ where: { id: meeting.id }, data: { code } })

@@ -66,6 +66,7 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
             where: {
                 ...meetingWhere,
                 isActive: true,
+                OR: [{ sectorId: { not: null } }, { type: { isGeneral: true } }],
             },
             include: {
                 type: true,
@@ -93,7 +94,6 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
     ])
 
     return {
-        // Una ocurrencia registrada siempre trae ambos datos; el ?? satisface al tipo.
         offerings: offerings.map((occurrence) => ({
             ...occurrence,
             attendance: occurrence.attendance ?? 0,

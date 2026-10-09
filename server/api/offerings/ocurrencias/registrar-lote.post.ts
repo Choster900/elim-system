@@ -6,8 +6,6 @@ import { handleApiError } from '../../../utils/http/error-handler.util'
 import { validateDto } from '../../../utils/validation/dto-validation.util'
 import { bulkRecordOccurrencesSchema } from '../../../validators/offering.validator'
 
-// Captura masiva desde la matriz. Enviar solo algunas de las fechas pendientes es
-// el caso normal: nadie recuerda las cuatro con la misma certeza.
 export default defineEventHandler(async (event) => {
     try {
         const auth = requirePermission(event, 'finance.record')

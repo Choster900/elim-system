@@ -45,7 +45,6 @@ async function main() {
     const client = makeClient(DATABASE_URL)
 
     try {
-        // Driver adapters can initialize lazily; a real query verifies host, database and credentials.
         await client.$queryRaw`SELECT 1`
         console.log('[setup-db] Database connection verified')
         return
@@ -61,8 +60,6 @@ async function main() {
         await client.$disconnect().catch(() => {})
     }
 
-    // Contra una base remota (Supabase, Neon…) no se crea nada ni se aplica `db push`:
-    // ese comando sincroniza el esquema por diferencia y puede eliminar columnas con datos.
     if (!isLocalDatabase(DATABASE_URL)) {
         console.error(
             '[setup-db] La base de datos remota no respondió y este script solo prepara bases locales.\n' +
@@ -71,7 +68,6 @@ async function main() {
         process.exit(1)
     }
 
-    // DB no existe → crearla y aplicar schema
     try {
         await createDatabase()
         console.log('[setup-db] Applying schema...')

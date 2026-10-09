@@ -7,7 +7,6 @@ import { requirePermission } from '../../utils/auth/require-permission.util'
 
 export default defineEventHandler(async (event) => {
     try {
-        // Gestionar roles y permisos es exclusivo del super administrador (system.manage)
         requirePermission(event, 'system.manage')
         const dto = validateDto(createPermissionSchema, await readBody(event))
         const data = await createPermission(dto)

@@ -7,8 +7,6 @@ import { getPositiveIntegerParam } from '../../../../utils/http/route-parameter.
 import { validateDto } from '../../../../utils/validation/dto-validation.util'
 import { recordOccurrenceSchema } from '../../../../validators/offering.validator'
 
-// Registrar es una sola vez. Corregir después exige finance.manage, que es lo que
-// impide al líder reescribir su propio registro.
 export default defineEventHandler(async (event) => {
     try {
         const auth = requirePermission(event, 'finance.record')

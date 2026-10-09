@@ -33,7 +33,6 @@ export function deleteAttendanceType(id: number) {
     return prisma.attendanceType.delete({ where: { id } }).catch(mapPrismaError)
 }
 
-/// Cuántas fechas ya usan este tipo: un tipo con historial no se puede borrar.
 export function countAttendanceDetailsByType(typeId: number) {
     return prisma.attendanceDetail.count({ where: { typeId } })
 }
