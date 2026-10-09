@@ -52,8 +52,16 @@ useHead({
     ),
 })
 
+const isDirectEntry = computed(
+    () => !!(detail.value?.envelope.directEntry || detail.value?.reception?.directEntry),
+)
+const isNotReady = computed(() => detail.value?.envelope.isReady === false)
+
 const isLoading = computed(
-    () => envelopeQuery.isPending.value || denominationsQuery.isPending.value || !draft.value,
+    () =>
+        envelopeQuery.isPending.value ||
+        denominationsQuery.isPending.value ||
+        (!draft.value && !isNotReady.value),
 )
 const loadError = computed(() => {
     const error = envelopeQuery.error.value ?? denominationsQuery.error.value
@@ -81,6 +89,12 @@ function initDraft() {
         return
     }
 
+    if (!current.envelope.isReady) return
+
+    const registered =
+        current.envelope.directEntry || current.reception?.directEntry
+            ? current.availableCategories
+            : current.envelope.categories
     const mode = isCorrection.value ? 'corregir' : 'recibir'
     const existing = draftStore.draftFor(id)
     if (!existing || existing.mode !== mode) {
@@ -88,14 +102,14 @@ function initDraft() {
             draftStore.startCorrection(
                 id,
                 current.reception.categories,
-                current.envelope.categories,
+                registered,
                 current.reception.notes,
             )
         } else {
-            draftStore.startDraft(id, current.envelope.categories)
+            draftStore.startDraft(id, registered)
         }
     }
-    draftStore.syncCategories(id, current.envelope.categories)
+    draftStore.syncCategories(id, registered)
 }
 
 onMounted(() => {
@@ -204,6 +218,24 @@ function onPrimaryAction() {
         </div>
 
         <div
+            v-else-if="isNotReady && envelope"
+            class="flex flex-col items-center gap-3 rounded-xl border border-outline-variant bg-surface-container-low px-6 py-12 text-center"
+        >
+            <p class="font-display text-xl font-semibold text-on-surface">
+                {{ envelope.meetingTitle }} todavía no termina
+            </p>
+            <p class="text-sm text-on-surface-variant">
+                Podrás registrar su ofrenda después de las {{ envelope.endTime }}.
+            </p>
+            <NuxtLink
+                :to="SUPPORT_COMMITTEE_HOME"
+                class="text-sm font-semibold text-primary hover:underline"
+            >
+                Volver a la bandeja
+            </NuxtLink>
+        </div>
+
+        <div
             v-else-if="isLoading || !envelope || !currentCategory"
             class="rounded-xl border border-outline-variant bg-surface-container-low px-6 py-16 text-center text-sm text-on-surface-variant"
         >
@@ -275,9 +307,11 @@ function onPrimaryAction() {
                             >
                                 <EyeOff class="size-3.5 text-primary" />
                                 {{
-                                    isCorrection
-                                        ? 'Corrigiendo un conteo guardado'
-                                        : 'Lo del líder lo verás al revisar'
+                                    isDirectEntry
+                                        ? 'Culto general: lo que cuentes será la ofrenda registrada'
+                                        : isCorrection
+                                          ? 'Corrigiendo un conteo guardado'
+                                          : 'Lo del líder lo verás al revisar'
                                 }}
                             </p>
                             <button
