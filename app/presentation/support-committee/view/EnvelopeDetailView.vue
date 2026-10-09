@@ -10,6 +10,7 @@ import {
 } from '@lucide/vue'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import EnvelopeHeader from '../components/EnvelopeHeader.vue'
+import DirectCountSummary from '../components/DirectCountSummary.vue'
 import ReceptionComparison from '../components/ReceptionComparison.vue'
 import ReceptionStatusBadge from '../components/ReceptionStatusBadge.vue'
 import ReceptionSteps from '../components/ReceptionSteps.vue'
@@ -117,7 +118,9 @@ watch(
                             {{
                                 finishedAs === 'corregido'
                                     ? 'Conteo corregido'
-                                    : 'Sobre recibido y guardado'
+                                    : reception.directEntry
+                                      ? 'Ofrenda del culto registrada'
+                                      : 'Sobre recibido y guardado'
                             }}
                         </h1>
                         <p class="mt-1 text-sm text-on-surface-variant">
@@ -160,7 +163,13 @@ watch(
                 class="mt-6 flex flex-col gap-4 rounded-xl border border-outline-variant bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
             >
                 <div class="flex flex-wrap items-center gap-3">
-                    <ReceptionStatusBadge :status="reception.status" />
+                    <span
+                        v-if="reception.directEntry"
+                        class="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary"
+                    >
+                        Culto general · registro directo
+                    </span>
+                    <ReceptionStatusBadge v-else :status="reception.status" />
                     <span class="text-sm text-on-surface">
                         Contado
                         <strong class="tabular-nums">
@@ -195,7 +204,13 @@ watch(
             </section>
 
             <div class="mt-6">
+                <DirectCountSummary
+                    v-if="reception.directEntry"
+                    :categories="reception.categories"
+                    :total="reception.countedAmount"
+                />
                 <ReceptionComparison
+                    v-else
                     :categories="reception.categories"
                     :registered-amount="reception.registeredAmount"
                     :counted-amount="reception.countedAmount"
