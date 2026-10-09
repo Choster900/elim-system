@@ -44,7 +44,6 @@
     }
 }
 
-/* Landing pública */
 @layer components {
     .landing-btn-gold {
         transition:
@@ -59,9 +58,6 @@
         box-shadow: 0 14px 34px -14px var(--primary);
     }
 
-    /* Mapa de la landing (Leaflet) */
-    /* El estilo oscuro de CARTO es casi negro: se aclara y entibia para que las calles
-       se lean y combinen con el dorado del sistema. */
     .landing-map .leaflet-tile-pane {
         filter: brightness(1.9) contrast(1.08) sepia(0.45) saturate(0.85);
     }
@@ -103,10 +99,6 @@
         color: var(--primary);
     }
 
-    /*
-     * Pin de la iglesia. El punto (0,0) del ícono de Leaflet es la ubicación exacta:
-     * la punta de la gota apunta ahí y el pulso se dibuja sobre el suelo.
-     */
     .landing-map-pin {
         position: relative;
     }
@@ -146,7 +138,6 @@
         animation: landing-pin-float 3.2s ease-in-out infinite;
     }
 
-    /* Gota: un cuadrado con tres esquinas redondas, girado -45° para que la punta mire abajo. */
     .landing-map-pin__drop {
         left: -23px;
         top: -56px;
