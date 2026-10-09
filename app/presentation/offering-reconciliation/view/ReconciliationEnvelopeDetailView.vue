@@ -10,6 +10,7 @@ import {
 } from '@lucide/vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import EnvelopeHeader from '~/presentation/support-committee/components/EnvelopeHeader.vue'
+import DirectCountSummary from '~/presentation/support-committee/components/DirectCountSummary.vue'
 import ReceptionComparison from '~/presentation/support-committee/components/ReceptionComparison.vue'
 import {
     categoryLabel,
@@ -161,8 +162,21 @@ async function onClose() {
             </section>
 
             <template v-if="reception">
+                <p
+                    v-if="reception.directEntry"
+                    class="mt-4 rounded-xl border border-primary/30 bg-primary/[0.06] px-5 py-3 text-sm text-on-surface"
+                >
+                    Culto general sin líder: el comité de apoyo registró la ofrenda directamente con
+                    su conteo, así que no hay comparación.
+                </p>
                 <div class="mt-6">
+                    <DirectCountSummary
+                        v-if="reception.directEntry"
+                        :categories="reception.categories"
+                        :total="reception.countedAmount"
+                    />
                     <ReceptionComparison
+                        v-else
                         :categories="reception.categories"
                         :registered-amount="reception.registeredAmount"
                         :counted-amount="reception.countedAmount"
