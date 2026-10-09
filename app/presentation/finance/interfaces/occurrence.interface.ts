@@ -87,11 +87,14 @@ export interface BulkRecordEntry extends RecordOccurrenceInput {
     occurrenceId: number
 }
 
+export type OccurrenceDateField = 'reunion' | 'registro'
+
 export interface OccurrenceFilters {
     meetingId?: number
     status?: OccurrenceStatus
     from?: string
     to?: string
+    dateField?: OccurrenceDateField
 }
 
 export interface PendingGroup {
