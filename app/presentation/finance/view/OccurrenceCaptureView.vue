@@ -377,7 +377,7 @@ async function onSubmit() {
 }
 
 const cellInputClass =
-    'h-11 w-full min-w-[120px] border-0 bg-transparent px-3 text-right text-sm font-semibold tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/35 focus:bg-primary/[0.07] focus:ring-2 focus:ring-inset focus:ring-primary/60'
+    'h-9 w-full min-w-[84px] border-0 bg-transparent px-2 text-right text-sm font-semibold tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/35 focus:bg-primary/[0.07] focus:ring-2 focus:ring-inset focus:ring-primary/60'
 </script>
 
 <template>
@@ -665,7 +665,7 @@ const cellInputClass =
                                         <th
                                             rowspan="2"
                                             scope="col"
-                                            class="sticky left-0 z-40 w-[240px] min-w-[240px] border-b border-r border-outline-variant bg-surface-container px-4 py-3 text-left"
+                                            class="sticky left-0 z-40 w-[190px] min-w-[190px] border-b border-r border-outline-variant bg-surface-container px-3 py-2 text-left"
                                         >
                                             <label class="flex cursor-pointer items-center gap-2.5">
                                                 <input
@@ -686,7 +686,7 @@ const cellInputClass =
                                         <th
                                             :colspan="attendanceColumnCount"
                                             scope="colgroup"
-                                            class="border-b border-r border-outline-variant bg-secondary/10 px-4 py-2.5 text-left"
+                                            class="border-b border-r border-outline-variant bg-secondary/10 px-3 py-1.5 text-left"
                                         >
                                             <span
                                                 class="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface"
@@ -698,7 +698,7 @@ const cellInputClass =
                                         <th
                                             :colspan="offeringColumnCount"
                                             scope="colgroup"
-                                            class="border-b border-outline-variant bg-primary/10 px-4 py-2.5 text-left"
+                                            class="border-b border-outline-variant bg-primary/10 px-3 py-1.5 text-left"
                                         >
                                             <span
                                                 class="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface"
@@ -714,14 +714,14 @@ const cellInputClass =
                                                 v-for="type in attendanceTypes"
                                                 :key="`attendance-heading-${type.id}`"
                                                 scope="col"
-                                                class="min-w-[112px] border-b border-r border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
+                                                class="min-w-[84px] border-b border-r border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
                                                 :title="type.description ?? undefined"
                                             >
                                                 {{ type.name }}
                                             </th>
                                             <th
                                                 scope="col"
-                                                class="min-w-[104px] border-b border-r border-outline-variant bg-secondary/10 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
+                                                class="min-w-[76px] border-b border-r border-outline-variant bg-secondary/10 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
                                             >
                                                 Total
                                             </th>
@@ -729,7 +729,7 @@ const cellInputClass =
                                         <th
                                             v-else
                                             scope="col"
-                                            class="min-w-[130px] border-b border-r border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
+                                            class="min-w-[100px] border-b border-r border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
                                         >
                                             Total personas
                                         </th>
@@ -739,14 +739,14 @@ const cellInputClass =
                                                 v-for="category in categories"
                                                 :key="`offering-heading-${category.id}`"
                                                 scope="col"
-                                                class="min-w-[132px] border-b border-r border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant last:border-r-0"
+                                                class="min-w-[96px] border-b border-r border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant last:border-r-0"
                                                 :title="category.description ?? undefined"
                                             >
                                                 {{ category.name }}
                                             </th>
                                             <th
                                                 scope="col"
-                                                class="min-w-[122px] border-b border-outline-variant bg-primary/10 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
+                                                class="min-w-[90px] border-b border-outline-variant bg-primary/10 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
                                             >
                                                 Total
                                             </th>
@@ -754,7 +754,7 @@ const cellInputClass =
                                         <th
                                             v-else
                                             scope="col"
-                                            class="min-w-[140px] border-b border-outline-variant bg-surface px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
+                                            class="min-w-[104px] border-b border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
                                         >
                                             Total ofrenda
                                         </th>
@@ -784,7 +784,7 @@ const cellInputClass =
                                             "
                                         >
                                             <label
-                                                class="flex min-h-[64px] items-center gap-3 px-3 py-2"
+                                                class="flex min-h-[44px] items-center gap-2.5 px-3 py-1"
                                                 :class="
                                                     row.recordable
                                                         ? 'cursor-pointer'
@@ -799,7 +799,7 @@ const cellInputClass =
                                                     :aria-label="`Seleccionar ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
                                                 />
                                                 <span
-                                                    class="flex size-10 shrink-0 flex-col items-center justify-center rounded-md border"
+                                                    class="flex size-8 shrink-0 flex-col items-center justify-center rounded-md border"
                                                     :class="
                                                         row.selected
                                                             ? 'border-primary/40 bg-primary/10 text-primary'
@@ -807,7 +807,7 @@ const cellInputClass =
                                                     "
                                                 >
                                                     <strong
-                                                        class="font-display text-base leading-none tabular-nums"
+                                                        class="font-display text-sm leading-none tabular-nums"
                                                     >
                                                         {{ dayOf(row.date) }}
                                                     </strong>
@@ -973,7 +973,7 @@ const cellInputClass =
                                     <tr>
                                         <th
                                             scope="row"
-                                            class="sticky left-0 z-30 border-r border-t border-outline-variant bg-surface-container px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface"
+                                            class="sticky left-0 z-30 border-r border-t border-outline-variant bg-surface-container px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface"
                                         >
                                             Totales seleccionados
                                         </th>
@@ -981,19 +981,19 @@ const cellInputClass =
                                             <td
                                                 v-for="type in attendanceTypes"
                                                 :key="`attendance-total-${type.id}`"
-                                                class="border-r border-t border-outline-variant px-3 py-3 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
+                                                class="border-r border-t border-outline-variant px-2 py-2 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
                                             >
                                                 {{ attendanceTypeTotal(type.id) }}
                                             </td>
                                             <td
-                                                class="border-r border-t border-outline-variant bg-secondary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-on-surface"
+                                                class="border-r border-t border-outline-variant bg-secondary/10 px-2 py-2 text-right text-sm font-bold tabular-nums text-on-surface"
                                             >
                                                 {{ totalAttendance }}
                                             </td>
                                         </template>
                                         <td
                                             v-else
-                                            class="border-r border-t border-outline-variant bg-secondary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-on-surface"
+                                            class="border-r border-t border-outline-variant bg-secondary/10 px-2 py-2 text-right text-sm font-bold tabular-nums text-on-surface"
                                         >
                                             {{ totalAttendance }}
                                         </td>
@@ -1002,19 +1002,19 @@ const cellInputClass =
                                             <td
                                                 v-for="category in categories"
                                                 :key="`offering-total-${category.id}`"
-                                                class="border-r border-t border-outline-variant px-3 py-3 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
+                                                class="border-r border-t border-outline-variant px-2 py-2 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
                                             >
                                                 ${{ formatMoney(categoryTotal(category.id)) }}
                                             </td>
                                             <td
-                                                class="border-t border-outline-variant bg-primary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-primary"
+                                                class="border-t border-outline-variant bg-primary/10 px-2 py-2 text-right text-sm font-bold tabular-nums text-primary"
                                             >
                                                 ${{ formatMoney(grandTotal) }}
                                             </td>
                                         </template>
                                         <td
                                             v-else
-                                            class="border-t border-outline-variant bg-primary/10 px-3 py-3 text-right text-sm font-bold tabular-nums text-primary"
+                                            class="border-t border-outline-variant bg-primary/10 px-2 py-2 text-right text-sm font-bold tabular-nums text-primary"
                                         >
                                             ${{ formatMoney(grandTotal) }}
                                         </td>
