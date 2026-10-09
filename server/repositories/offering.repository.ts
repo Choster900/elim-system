@@ -21,6 +21,13 @@ export function findOfferingCategoryIdsByIds(ids: number[]) {
         .then((rows) => rows.map((row) => row.id))
 }
 
+export function findOfferingCategoriesByIds(ids: number[]) {
+    return prisma.offeringCategory.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true, isActive: true },
+    })
+}
+
 export function createOfferingCategory(dto: CreateOfferingCategoryDto) {
     return prisma.offeringCategory.create({ data: dto }).catch(mapPrismaError)
 }
