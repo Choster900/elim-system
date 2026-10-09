@@ -71,9 +71,7 @@ export function publishAuthSessionEvent(event: AuthSessionSyncEventPayload) {
 
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(eventWithId))
-    } catch {
-        // BroadcastChannel ya cubre navegadores que no permiten almacenamiento local.
-    }
+    } catch {}
 }
 
 export function subscribeToAuthSessionEvents(listener: Listener) {
@@ -83,9 +81,7 @@ export function subscribeToAuthSessionEvents(listener: Listener) {
         if (event.key !== STORAGE_KEY || !event.newValue) return
         try {
             notifyListeners(JSON.parse(event.newValue))
-        } catch {
-            // Un valor externo inválido no debe interrumpir la sesión.
-        }
+        } catch {}
     }
 
     getChannel()
