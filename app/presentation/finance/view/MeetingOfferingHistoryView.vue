@@ -26,6 +26,7 @@ import { useMeetingHistoryQuery } from '../composables/useOccurrenceQueries'
 import type { OccurrenceRecord } from '../interfaces/occurrence.interface'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+import { getMeetingScopeLabel } from '~/presentation/meetings/utils/meeting-format.util'
 
 defineOptions({ name: 'MeetingOfferingHistoryView' })
 
@@ -106,7 +107,6 @@ const occurrenceDetailOpen = computed({
 
 useHead({ title: computed(() => `${meetingTitle.value} · Historial · Sistema`) })
 
-/// Serie cronológica: la tendencia se lee de izquierda a derecha.
 const series = computed(() =>
     [...recorded.value].sort((left, right) => left.date.localeCompare(right.date)),
 )
@@ -116,7 +116,6 @@ const stats = computed(() => {
     const attendance = recorded.value.reduce((sum, item) => sum + (item.attendance ?? 0), 0)
     const count = recorded.value.length
 
-    // Comparar la mitad reciente contra la anterior dice más que un promedio suelto.
     const half = Math.floor(series.value.length / 2)
     const earlier = series.value.slice(0, half)
     const later = series.value.slice(half)
@@ -155,7 +154,6 @@ const attendanceSeries = computed(() =>
     })),
 )
 
-/// Reparto acumulado por categoría en toda la historia de la reunión.
 const byCategory = computed(() => {
     const map = new Map<number, { label: string; value: number }>()
 
@@ -173,7 +171,6 @@ const byCategory = computed(() => {
     return [...map.entries()].map(([id, entry]) => ({ id, ...entry }))
 })
 
-/// Quiénes llenan la reunión: acumulado por tipo de asistencia en toda su historia.
 const byAttendanceType = computed(() => {
     const map = new Map<number, { label: string; value: number }>()
 
@@ -294,7 +291,7 @@ function availableAfter(occurrence: OccurrenceRecord) {
                         >
                             <span class="inline-flex items-center gap-1.5">
                                 <MapPin class="size-3.5" />
-                                {{ meeting?.sectorName }} · {{ meeting?.zoneName }}
+                                {{ meeting ? getMeetingScopeLabel(meeting) : '' }}
                             </span>
                             <span
                                 v-if="meeting?.leaderName"
@@ -353,7 +350,6 @@ function availableAfter(occurrence: OccurrenceRecord) {
                 </div>
             </section>
 
-            <!-- Cifras de cabecera -->
             <section class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <UiCard class="p-5">
                     <HandCoins class="mb-3 size-5 text-primary" />
@@ -427,7 +423,6 @@ function availableAfter(occurrence: OccurrenceRecord) {
                 </UiCard>
             </section>
 
-            <!-- Dos medidas de escala distinta: dos gráficos, un eje cada uno -->
             <section v-if="series.length > 1" class="mt-6 grid gap-4 xl:grid-cols-2">
                 <UiCard class="p-6">
                     <div class="mb-5 flex items-center gap-2">
@@ -453,7 +448,6 @@ function availableAfter(occurrence: OccurrenceRecord) {
                 </UiCard>
             </section>
 
-            <!-- Con un solo registro no hay tendencia que dibujar: se dice, no se esconde. -->
             <section v-else-if="series.length === 1" class="mt-6">
                 <UiCard
                     class="flex items-center gap-3 border-dashed p-6 text-sm text-on-surface-variant"
@@ -491,7 +485,6 @@ function availableAfter(occurrence: OccurrenceRecord) {
                 </UiCard>
             </section>
 
-            <!-- Detalle -->
             <section class="mt-8">
                 <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
                     <div>

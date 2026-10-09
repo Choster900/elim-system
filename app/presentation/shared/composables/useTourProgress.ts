@@ -16,9 +16,7 @@ export function useTourProgress(tourId: string, version: number) {
         if (!import.meta.client) return
         try {
             localStorage.setItem(storageKey(userId), 'done')
-        } catch {
-            // El recorrido sigue funcionando aunque el navegador bloquee el almacenamiento.
-        }
+        } catch {}
     }
 
     return { hasSeen, markSeen }

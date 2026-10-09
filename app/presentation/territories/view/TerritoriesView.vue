@@ -2,18 +2,25 @@
 import {
     AlertTriangle,
     ChevronRight,
+    Clock,
     Compass,
     Download,
+    Expand,
     ExternalLink,
     HandCoins,
+    MapPin,
     MapPinned,
+    Minimize,
     MoreHorizontal,
     Plus,
     RefreshCw,
     Search,
     Upload,
+    User,
+    Users,
     X,
 } from '@lucide/vue'
+import type { Component } from 'vue'
 import {
     DialogContent,
     DialogDescription,
@@ -22,6 +29,8 @@ import {
     DialogRoot,
     DialogTitle,
 } from 'radix-vue'
+import { nextTerritoryCode, territoryPathCode } from '#shared/utils/territory-code.util'
+import { districtAutoName, sectorAutoName, zoneAutoName } from '#shared/utils/territory-name.util'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useUpdateMeetingMutation } from '~/presentation/meetings/composables/useMeetingMutations'
 import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
@@ -55,6 +64,7 @@ import {
     zonePalette,
 } from '~/presentation/territories/constants/territory.constants'
 import type {
+    AssignableMeeting,
     District,
     LatLng,
     Polygon,
@@ -83,7 +93,6 @@ useHead({
 type Level = 'distrito' | 'zona' | 'sector' | 'reunion'
 type EntityLevel = 'distrito' | 'zona' | 'sector'
 
-// Level accent colors, drawn from the app palette so they harmonize with the gold primary.
 const LEVEL_ACCENT: Record<Level, string> = {
     distrito: '#e9c176',
     zona: '#f4a261',
@@ -233,6 +242,7 @@ function startFirstVisitTour() {
 onMounted(() => {
     isClientReady.value = true
     startFirstVisitTour()
+    window.addEventListener('keydown', onDrawerKeydown)
 })
 
 watch([() => authStore.user?.id, catalogLoading, catalogError], startFirstVisitTour)
@@ -267,22 +277,20 @@ const selS = ref<string | null>(null)
 const selM = ref<string | null>(null)
 const query = ref('')
 
-// Context menu
 const menuFor = ref<string | null>(null)
 const menuLevel = ref<Level | null>(null)
 const menuPos = reactive({ left: 0, top: 0 })
 const menuMode = ref<'normal' | 'confirm' | 'move'>('normal')
 
-// Detail drawer
 const drawer = ref<{ level: Level; id: string } | null>(null)
 
-// Entity form drawer (create/edit district/zone/sector)
 const formOpen = ref(false)
 const formLevel = ref<EntityLevel>('distrito')
 const formMode = ref<'create' | 'edit'>('create')
 const formEntity = ref<TerritoryInput | null>(null)
 const formParentCentroid = ref<LatLng | null>(null)
 const formParentLabel = ref<string | null>(null)
+const formAutoName = ref<string | null>(null)
 const formUsedColors = ref<string[]>([])
 let formEditId: string | null = null
 let formParentDistrictId: string | null = null
@@ -294,7 +302,6 @@ const supervisorConflict = ref<{
 } | null>(null)
 const pendingTerritorySave = ref<TerritoryInput | null>(null)
 
-// Assign-meeting drawer
 const assignOpen = ref(false)
 
 function requestErrorMessage(error: unknown, fallback: string) {
@@ -586,7 +593,6 @@ async function confirmTerritoryImport() {
     }
 }
 
-// ===== lookups =====
 function zonesOf(districtId: string) {
     return zones.value.filter((z) => z.districtId === districtId)
 }
@@ -605,9 +611,6 @@ function districtSectors(district: District) {
 function districtMeetings(district: District) {
     return zonesOf(district.id).reduce((acc, z) => acc + zoneMeetings(z), 0)
 }
-function sectorLabelOf(sectorId: string) {
-    return sectors.value.find((s) => s.id === sectorId)?.name ?? 'Sin sector'
-}
 
 const selDist = computed(() =>
     selD.value ? (districts.value.find((d) => d.id === selD.value) ?? null) : null,
@@ -623,7 +626,6 @@ const selSector = computed(() =>
         : null,
 )
 
-// ===== formatting & geometry =====
 function plural(n: number, singular: string, pluralWord: string) {
     return `${n} ${n === 1 ? singular : pluralWord}`
 }
@@ -652,14 +654,12 @@ function paletteFor(level: EntityLevel) {
     return sectorPalette
 }
 
-// ===== search =====
 const normalizedQuery = computed(() => query.value.trim().toLowerCase())
 function matches(...values: string[]) {
     const q = normalizedQuery.value
     return !q || values.some((value) => value.toLowerCase().includes(q))
 }
 
-// ===== columns =====
 interface ColumnItem {
     id: string
     level: Level
@@ -667,7 +667,9 @@ interface ColumnItem {
     code: string
     color: string
     sub: string
+    details?: { icon: Component; text: string }[]
     badge: string
+    badgeTitle?: string
     selected: boolean
 }
 interface Column {
@@ -685,7 +687,6 @@ interface Column {
 const columns = computed<Column[]>(() => {
     const cols: Column[] = []
 
-    // Distritos
     const dItems = districts.value.filter((d) => matches(d.name, d.code))
     cols.push({
         level: 'distrito',
@@ -708,7 +709,6 @@ const columns = computed<Column[]>(() => {
         })),
     })
 
-    // Zonas
     const dist = selDist.value
     const zItems = dist ? zonesOf(dist.id).filter((z) => matches(z.name, z.code)) : []
     cols.push({
@@ -737,7 +737,6 @@ const columns = computed<Column[]>(() => {
         })),
     })
 
-    // Sectores
     const zone = selZone.value
     const sItems = zone ? sectorsOf(zone.id).filter((s) => matches(s.name, s.code)) : []
     cols.push({
@@ -766,9 +765,12 @@ const columns = computed<Column[]>(() => {
         })),
     })
 
-    // Reuniones
     const sector = selSector.value
-    const mItems = sector ? meetingsOf(sector.id).filter((m) => matches(m.title)) : []
+    const mItems = sector
+        ? meetingsOf(sector.id).filter((m) =>
+              matches(m.title, m.code, m.leaderName ?? '', m.location),
+          )
+        : []
     cols.push({
         level: 'reunion',
         label: 'Reuniones',
@@ -789,8 +791,19 @@ const columns = computed<Column[]>(() => {
             name: m.title,
             code: m.code,
             color: m.color,
-            sub: `${meetingDay(m)} · ${fmtTime(m.startTime)}`,
+            sub: [m.typeName, getMeetingFrequencyLabel(m.frequency), m.isActive ? '' : 'Inactiva']
+                .filter(Boolean)
+                .join(' · '),
+            details: [
+                {
+                    icon: Clock,
+                    text: `${meetingDay(m)} · ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}`,
+                },
+                ...(m.leaderName ? [{ icon: User, text: m.leaderName }] : []),
+                ...(m.location ? [{ icon: MapPin, text: m.location }] : []),
+            ],
             badge: String(m.expectedAttendees),
+            badgeTitle: 'Asistentes esperados',
             selected: selM.value === String(m.id),
         })),
     })
@@ -798,7 +811,6 @@ const columns = computed<Column[]>(() => {
     return cols
 })
 
-// ===== totals & breadcrumb =====
 const totals = computed(() => ({
     d: districts.value.length,
     z: zones.value.length,
@@ -820,8 +832,6 @@ const crumbs = computed(() => {
     return list
 })
 
-// ===== selection =====
-// En móvil solo cabe una columna: se muestra la que el usuario está recorriendo.
 const LEVEL_ORDER: Level[] = ['distrito', 'zona', 'sector', 'reunion']
 const mobileLevel = ref<Level>('distrito')
 const mobileSteps = computed(() =>
@@ -837,7 +847,6 @@ const mobileSteps = computed(() =>
     })),
 )
 
-// Si se borra o mueve lo seleccionado, regresa al último nivel que sigue disponible.
 watch(mobileSteps, (steps) => {
     if (steps.find((step) => step.level === mobileLevel.value)?.enabled) return
     mobileLevel.value = [...steps].reverse().find((step) => step.enabled)?.level ?? 'distrito'
@@ -875,7 +884,6 @@ function clearSelection() {
     mobileLevel.value = 'distrito'
 }
 
-// ===== context menu =====
 function openMenu(level: Level, id: string, event: MouseEvent) {
     event.stopPropagation()
     if (menuFor.value === id) {
@@ -907,7 +915,6 @@ const menuName = computed(() => {
     return findEntity(menuLevel.value, menuFor.value)?.name ?? ''
 })
 
-// ===== detail drawer =====
 function openDetail(level: Level, id: string) {
     drawer.value = { level, id }
     closeMenu()
@@ -916,9 +923,23 @@ function closeDrawer() {
     drawer.value = null
 }
 
+const drawerExpanded = ref(false)
+function toggleDrawerExpanded() {
+    drawerExpanded.value = !drawerExpanded.value
+}
+function refreshDrawerMap() {
+    map?.invalidateSize()
+}
+function onDrawerKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || !drawer.value || formOpen.value || assignOpen.value) return
+    if (drawerExpanded.value) drawerExpanded.value = false
+    else closeDrawer()
+}
+
 interface DetailField {
     label: string
     value: string
+    wide?: boolean
 }
 interface EntityLike {
     name: string
@@ -970,12 +991,14 @@ const detail = computed(() => {
             { label: 'Reuniones', value: String(districtMeetings(d)) },
             { label: 'Creado', value: new Date(d.createdAt).getFullYear().toString() },
         ]
-        if (d.description) fields.push({ label: 'Descripción', value: d.description })
+        if (d.description) fields.push({ label: 'Descripción', value: d.description, wide: true })
         return {
             level,
             levelLabel: LEVEL_LABEL.distrito,
             accent: LEVEL_ACCENT.distrito,
             name: d.name,
+            chips: [d.code, d.isActive ? 'Activo' : 'Inactivo'],
+            summary: null,
             fields,
         }
     }
@@ -997,6 +1020,8 @@ const detail = computed(() => {
             levelLabel: LEVEL_LABEL.zona,
             accent: LEVEL_ACCENT.zona,
             name: z.name,
+            chips: [territoryPathCode(parent?.code, z.code), z.isActive ? 'Activo' : 'Inactivo'],
+            summary: null,
             fields,
         }
     }
@@ -1018,6 +1043,11 @@ const detail = computed(() => {
             levelLabel: LEVEL_LABEL.sector,
             accent: LEVEL_ACCENT.sector,
             name: s.name,
+            chips: [
+                territoryPathCode(parent.district?.code, parent.zone?.code, s.code),
+                s.isActive ? 'Activo' : 'Inactivo',
+            ],
+            summary: null,
             fields,
         }
     }
@@ -1026,27 +1056,33 @@ const detail = computed(() => {
     if (!parent?.meeting) return null
     const m = parent.meeting
     const fields: DetailField[] = [
-        { label: 'Tipo', value: m.typeName ?? '—' },
-        { label: 'Supervisor', value: m.supervisorName ?? '—' },
         { label: 'Día', value: meetingDay(m) },
         { label: 'Hora', value: `${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}` },
-        { label: 'Ubicación', value: m.location || '—' },
         { label: 'Frecuencia', value: getMeetingFrequencyLabel(m.frequency) },
-        { label: 'Estado', value: m.isActive ? 'Activa' : 'Inactiva' },
-        { label: 'Asistentes', value: String(m.expectedAttendees) },
+        { label: 'Asistentes esperados', value: String(m.expectedAttendees) },
+        { label: 'Líder', value: m.leaderName ?? '—' },
+        { label: 'Anfitrión', value: m.hostName ?? '—' },
+        { label: 'Supervisor', value: m.supervisorName ?? '—' },
+        { label: 'Visibilidad', value: m.isPublic ? 'Pública' : 'Interna' },
         { label: 'Sector', value: parent.sector?.name ?? '—' },
         { label: 'Zona', value: parent.zone?.name ?? '—' },
+        { label: 'Distrito', value: parent.district?.name ?? '—' },
+        { label: 'Tipo', value: m.typeName ?? '—' },
+        { label: 'Ubicación', value: m.location || '—', wide: true },
     ]
+    if (m.description) fields.push({ label: 'Descripción', value: m.description, wide: true })
+    if (m.notes) fields.push({ label: 'Notas', value: m.notes, wide: true })
     return {
         level,
         levelLabel: LEVEL_LABEL.reunion,
         accent: LEVEL_ACCENT.reunion,
         name: m.title,
+        chips: [m.fullCode, m.typeName ?? 'Sin tipo', m.isActive ? 'Activa' : 'Inactiva'],
+        summary: `${meetingDay(m)} · ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)} · ${getMeetingFrequencyLabel(m.frequency)}`,
         fields,
     }
 })
 
-// ===== move =====
 interface MoveTarget {
     id: string
     name: string
@@ -1139,7 +1175,6 @@ async function moveEntity(targetId: string) {
     }
 }
 
-// ===== delete (district/zone/sector) =====
 async function removeEntity() {
     if (!canManage.value || !menuFor.value || !menuLevel.value) return
     const level = menuLevel.value
@@ -1171,7 +1206,6 @@ async function removeEntity() {
     }
 }
 
-// ===== reunion actions =====
 function goToMeeting(id: string) {
     closeMenu()
     navigateTo(`/catalogos/reuniones/${id}/editar`)
@@ -1183,7 +1217,6 @@ function goToOfferingRegistration(id: string) {
     navigateTo(`/finanzas/ofrendas/registrar/${id}`)
 }
 
-// ===== entity form (create/edit) =====
 function toEntityInput(e: District | Zone | TerritorySector): TerritoryInput {
     const sector = 'supervisorId' in e ? e : null
     return {
@@ -1210,15 +1243,18 @@ function openCreate(level: EntityLevel) {
     formParentDistrictId = null
     formParentZoneId = null
 
+    const codesOf = (items: { code: string }[]) => items.map((item) => item.code)
     if (level === 'distrito') {
         formParentCentroid.value = EL_SALVADOR_CENTER
         formParentLabel.value = null
+        formAutoName.value = districtAutoName(nextTerritoryCode('D', codesOf(districts.value)))
     } else if (level === 'zona') {
         const d = selDist.value
         if (!d) return
         formParentDistrictId = d.id
         formParentCentroid.value = centroid(d.polygon)
         formParentLabel.value = d.name
+        formAutoName.value = zoneAutoName(d.name, nextTerritoryCode('Z', codesOf(zonesOf(d.id))))
     } else {
         const z = selZone.value
         const d = selDist.value
@@ -1226,8 +1262,12 @@ function openCreate(level: EntityLevel) {
         formParentZoneId = z.id
         formParentCentroid.value = centroid(z.polygon)
         formParentLabel.value = d ? `${d.name} · ${z.name}` : z.name
+        formAutoName.value = sectorAutoName(
+            d?.name ?? '',
+            z.name,
+            nextTerritoryCode('S', codesOf(sectorsOf(z.id))),
+        )
     }
-    // Colores de los hermanos: el formulario sugiere uno que todavía no se use.
     formUsedColors.value = (
         level === 'distrito'
             ? districts.value
@@ -1250,17 +1290,25 @@ function openEdit(level: EntityLevel, id: string) {
     closeMenu()
     let entity: District | Zone | TerritorySector | undefined
     let parentLabel: string | null = null
+    let autoName: string | null = null
     if (level === 'distrito') {
         entity = districts.value.find((d) => d.id === id)
+        autoName = entity ? districtAutoName(entity.code) : null
     } else if (level === 'zona') {
         entity = zones.value.find((z) => z.id === id)
-        parentLabel = entity ? (zoneParent(entity.id)?.name ?? null) : null
+        const district = entity ? zoneParent(entity.id) : null
+        parentLabel = district?.name ?? null
+        autoName = entity ? zoneAutoName(district?.name ?? '', entity.code) : null
     } else {
         entity = sectors.value.find((s) => s.id === id)
         const p = entity ? sectorParent(entity.id) : null
         parentLabel = p ? `${p.district?.name ?? '—'} · ${p.zone?.name ?? '—'}` : null
+        autoName = entity
+            ? sectorAutoName(p?.district?.name ?? '', p?.zone?.name ?? '', entity.code)
+            : null
     }
     if (!entity) return
+    formAutoName.value = autoName
 
     formMode.value = 'edit'
     formLevel.value = level
@@ -1374,25 +1422,25 @@ function confirmSupervisorConflict() {
     if (payload) void persistTerritory(payload)
 }
 
-// ===== assign meetings =====
-interface AssignItem {
-    id: string
-    title: string
-    meta: string
-    color: string
-    assigned: boolean
-}
-const assignItems = computed<AssignItem[]>(() => {
-    const sector = selSector.value
-    if (!sector) return []
-    return meetings.value.map((m) => ({
-        id: String(m.id),
-        title: m.title,
-        color: m.color,
-        meta: `${sectorLabelOf(String(m.sectorId))} · ${meetingDay(m)} ${fmtTime(m.startTime)}`,
-        assigned: String(m.sectorId) === sector.id,
-    }))
-})
+const assignItems = computed<AssignableMeeting[]>(() =>
+    meetings.value
+        .filter((m) => !m.isGeneral && m.sectorId === null)
+        .map((m) => ({
+            id: String(m.id),
+            title: m.title,
+            code: m.code,
+            color: m.color,
+            typeId: m.typeId,
+            typeName: m.typeName ?? 'Sin tipo',
+            weekday: new Date(`${m.date}T00:00:00`).getDay(),
+            dayLabel: meetingDay(m),
+            startTime: m.startTime,
+            timeLabel: fmtTime(m.startTime),
+            frequencyLabel: getMeetingFrequencyLabel(m.frequency),
+            leaderName: m.leaderName,
+            location: m.location,
+        })),
+)
 
 function openAssign() {
     closeMenu()
@@ -1401,18 +1449,20 @@ function openAssign() {
 }
 async function assignMeeting(id: string) {
     const sector = selSector.value
-    if (!sector) return
+    if (!sector) return false
     const meeting = meetings.value.find((item) => String(item.id) === id)
-    if (!meeting) return
+    if (!meeting) return false
 
     try {
         await updateMeetingMutation.mutateAsync({
             id: meeting.id,
             input: { sectorId: Number(sector.id) },
         })
-        toast.success('Reunión asignada')
+        toast.success(`«${meeting.title}» asignada a ${sector.name}`)
+        return true
     } catch (error) {
         toast.error(requestErrorMessage(error, 'No fue posible asignar la reunión.'))
+        return false
     }
 }
 
@@ -1424,7 +1474,6 @@ function onColumnAdd(level: Level) {
     if (canManage.value) openCreate(level)
 }
 
-// ===== locator map (Leaflet, detail drawer) =====
 const mapEl = ref<HTMLElement | null>(null)
 let map: import('leaflet').Map | null = null
 let L: typeof import('leaflet') | null = null
@@ -1457,7 +1506,6 @@ async function renderMap() {
     const { level, id } = drawer.value
     const drawerKey = `${level}:${id}`
 
-    // A meeting shows a single point: its saved position, or its sector's centroid as a fallback.
     const meetingPoint =
         level === 'reunion'
             ? (() => {
@@ -1554,13 +1602,13 @@ watch(
 
 onBeforeUnmount(() => {
     isUnmounted = true
+    window.removeEventListener('keydown', onDrawerKeydown)
     destroyMap()
 })
 </script>
 
 <template>
-    <div class="flex h-screen flex-col bg-surface-container-lowest pt-[72px]">
-        <!-- Toolbar: breadcrumb, totals, search -->
+    <div class="flex min-h-0 flex-1 flex-col bg-surface-container-lowest pt-[72px]">
         <div
             data-tour="territories-summary"
             class="flex flex-none flex-col gap-3 border-b border-outline-variant bg-surface-container px-4 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:px-10"
@@ -1822,9 +1870,7 @@ onBeforeUnmount(() => {
             </div>
         </div>
 
-        <!-- Miller columns -->
         <template v-else>
-            <!-- Móvil: una columna a la vez, con pasos para moverse entre niveles -->
             <nav
                 class="flex flex-none items-center gap-1 overflow-x-auto border-b border-outline-variant bg-surface-container-low px-3 py-2 md:hidden"
                 aria-label="Nivel de la jerarquía"
@@ -1955,10 +2001,28 @@ onBeforeUnmount(() => {
                                     class="mt-0.5 block truncate text-xs text-on-surface-variant"
                                     >{{ it.sub }}</span
                                 >
+                                <span
+                                    v-if="it.details?.length"
+                                    class="mt-1 flex flex-col gap-0.5 text-[11px] text-on-surface-variant"
+                                >
+                                    <span
+                                        v-for="detail in it.details"
+                                        :key="detail.text"
+                                        class="flex min-w-0 items-center gap-1.5"
+                                    >
+                                        <component
+                                            :is="detail.icon"
+                                            class="size-3 shrink-0 opacity-70"
+                                        />
+                                        <span class="truncate">{{ detail.text }}</span>
+                                    </span>
+                                </span>
                             </span>
                             <span
-                                class="shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
+                                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
+                                :title="it.badgeTitle"
                             >
+                                <Users v-if="it.level === 'reunion'" class="size-3" />
                                 {{ it.badge }}
                             </span>
                             <span
@@ -1975,7 +2039,6 @@ onBeforeUnmount(() => {
             </main>
         </template>
 
-        <!-- Context menu -->
         <template v-if="menuFor">
             <div class="fixed inset-0 z-40" @click="closeMenu" />
             <div
@@ -2084,65 +2147,123 @@ onBeforeUnmount(() => {
             </div>
         </template>
 
-        <!-- Detail drawer -->
         <template v-if="drawer && detail">
             <div class="fixed inset-0 z-40 bg-black/50" @click="closeDrawer" />
             <aside
-                class="hierarchy-drawer fixed inset-y-0 right-0 z-50 flex w-[430px] max-w-[92vw] flex-col bg-surface-container-low shadow-2xl"
+                class="hierarchy-drawer fixed inset-y-0 right-0 z-50 flex flex-col bg-surface-container-low shadow-2xl transition-[width] duration-300 ease-out"
+                :class="drawerExpanded ? 'w-screen max-w-none' : 'w-[680px] max-w-[96vw]'"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="hierarchy-drawer-title"
+                @transitionend.self="refreshDrawerMap"
             >
-                <div class="flex-none border-b border-outline-variant px-6 py-5">
-                    <div class="flex items-center justify-between">
+                <div class="flex-none border-b border-outline-variant px-6 py-5 lg:px-8">
+                    <div class="flex items-center justify-between gap-3">
                         <span
                             class="text-[11px] font-bold uppercase tracking-[0.2em]"
                             :style="{ color: detail.accent }"
                         >
                             {{ detail.levelLabel }}
                         </span>
-                        <button
-                            type="button"
-                            class="text-on-surface-variant hover:text-on-surface"
-                            aria-label="Cerrar detalle"
-                            @click="closeDrawer"
-                        >
-                            <X class="size-4" />
-                        </button>
+                        <div class="flex items-center gap-1">
+                            <button
+                                type="button"
+                                class="hidden size-8 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface sm:flex"
+                                :aria-label="
+                                    drawerExpanded ? 'Reducir panel' : 'Ver en pantalla completa'
+                                "
+                                :title="drawerExpanded ? 'Reducir' : 'Pantalla completa'"
+                                @click="toggleDrawerExpanded"
+                            >
+                                <Minimize v-if="drawerExpanded" class="size-4" />
+                                <Expand v-else class="size-4" />
+                            </button>
+                            <button
+                                type="button"
+                                class="flex size-8 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                                aria-label="Cerrar detalle"
+                                @click="closeDrawer"
+                            >
+                                <X class="size-4" />
+                            </button>
+                        </div>
                     </div>
-                    <h2 class="mt-1.5 font-display text-2xl font-semibold text-on-surface">
+                    <h2
+                        id="hierarchy-drawer-title"
+                        class="mt-1.5 font-display text-2xl font-semibold text-on-surface lg:text-3xl"
+                    >
                         {{ detail.name }}
                     </h2>
+                    <p v-if="detail.summary" class="mt-1 text-sm text-on-surface-variant">
+                        {{ detail.summary }}
+                    </p>
+                    <div class="mt-3 flex flex-wrap gap-1.5">
+                        <span
+                            v-for="(chip, index) in detail.chips"
+                            :key="chip"
+                            class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                            :class="
+                                index === 0
+                                    ? 'bg-surface-container-high font-mono text-on-surface'
+                                    : 'border border-outline-variant text-on-surface-variant'
+                            "
+                        >
+                            {{ chip }}
+                        </span>
+                    </div>
                 </div>
 
                 <div class="min-h-0 flex-1 overflow-y-auto">
-                    <div class="px-6 pt-5">
-                        <p
-                            class="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant"
-                        >
-                            Ubicación
-                        </p>
-                        <div
-                            ref="mapEl"
-                            class="hierarchy-map h-44 w-full overflow-hidden rounded-2xl border border-outline-variant bg-surface-container"
-                        />
+                    <div
+                        class="grid gap-6 px-6 py-5 lg:px-8"
+                        :class="
+                            drawerExpanded ? 'lg:grid-cols-[minmax(0,1.5fr)_minmax(380px,1fr)]' : ''
+                        "
+                    >
+                        <section class="min-w-0">
+                            <p
+                                class="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant"
+                            >
+                                Ubicación
+                            </p>
+                            <div
+                                ref="mapEl"
+                                class="hierarchy-map w-full overflow-hidden rounded-2xl border border-outline-variant bg-surface-container"
+                                :class="drawerExpanded ? 'h-80 lg:h-[calc(100vh-17rem)]' : 'h-60'"
+                            />
+                        </section>
+                        <section class="min-w-0">
+                            <p
+                                class="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant"
+                            >
+                                Detalle
+                            </p>
+                            <dl class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                                <div
+                                    v-for="f in detail.fields"
+                                    :key="f.label"
+                                    class="rounded-xl border border-outline-variant/60 bg-surface px-3.5 py-3"
+                                    :class="f.wide ? 'sm:col-span-2' : ''"
+                                >
+                                    <dt
+                                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                    >
+                                        {{ f.label }}
+                                    </dt>
+                                    <dd
+                                        class="mt-1 break-words text-sm font-medium text-on-surface"
+                                    >
+                                        {{ f.value }}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </section>
                     </div>
-                    <dl class="px-6 pb-8 pt-2">
-                        <div
-                            v-for="f in detail.fields"
-                            :key="f.label"
-                            class="flex justify-between gap-5 border-b border-outline-variant/60 py-3.5"
-                        >
-                            <dt class="flex-none text-sm text-on-surface-variant">
-                                {{ f.label }}
-                            </dt>
-                            <dd class="text-right text-sm font-medium text-on-surface">
-                                {{ f.value }}
-                            </dd>
-                        </div>
-                    </dl>
                 </div>
 
                 <div
                     v-if="drawer.level === 'reunion'"
-                    class="flex-none space-y-2 border-t border-outline-variant px-6 py-4"
+                    class="flex flex-none flex-col gap-2 border-t border-outline-variant px-6 py-4 sm:flex-row lg:px-8 [&>button]:flex-1"
                 >
                     <button
                         v-if="canManageOfferings"
@@ -2252,7 +2373,6 @@ onBeforeUnmount(() => {
             </template>
         </ExcelImportDialog>
 
-        <!-- Create / edit drawer (district · zone · sector) -->
         <TerritoryFormDrawer
             :open="formOpen"
             :level="formLevel"
@@ -2260,6 +2380,7 @@ onBeforeUnmount(() => {
             :entity="formEntity"
             :parent-centroid="formParentCentroid"
             :parent-label="formParentLabel"
+            :auto-name="formAutoName"
             :palette="paletteFor(formLevel)"
             :used-colors="formUsedColors"
             :accent="LEVEL_ACCENT[formLevel]"
@@ -2330,14 +2451,13 @@ onBeforeUnmount(() => {
             </DialogPortal>
         </DialogRoot>
 
-        <!-- Assign existing catalog meetings to the selected sector -->
         <AssignMeetingDrawer
             :open="assignOpen"
             :sector-name="selSector?.name ?? ''"
             :accent="LEVEL_ACCENT.reunion"
             :items="assignItems"
+            :assign="assignMeeting"
             @close="assignOpen = false"
-            @assign="assignMeeting"
             @go="goToMeeting"
         />
 
@@ -2359,7 +2479,6 @@ onBeforeUnmount(() => {
         opacity: 1;
     }
 }
-/* Contain Leaflet panes/controls in their own stacking context. */
 .hierarchy-map {
     position: relative;
     z-index: 0;

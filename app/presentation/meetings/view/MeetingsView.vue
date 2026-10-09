@@ -41,7 +41,6 @@ import {
     useMeetingLeadersQuery,
     useMeetingHostsQuery,
     useMeetingSectorsQuery,
-    useMeetingSupervisorsQuery,
     useMeetingTypesQuery,
 } from '~/presentation/meetings/composables/useMeetingCatalogQueries'
 import {
@@ -59,6 +58,7 @@ import {
     formatMeetingTimeRange,
     getMeetingDateDay,
     getMeetingFrequencyLabel,
+    getMeetingSectorLabel,
 } from '~/presentation/meetings/utils/meeting-format.util'
 import type {
     MeetingInput,
@@ -90,7 +90,6 @@ const meetingTypesQuery = useMeetingTypesQuery()
 const sectorsQuery = useMeetingSectorsQuery()
 const leadersQuery = useMeetingLeadersQuery(canManage)
 const hostsQuery = useMeetingHostsQuery(canManage)
-const supervisorsQuery = useMeetingSupervisorsQuery(canManage)
 const createMeetingMutation = useCreateMeetingMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
 const deleteMeetingMutation = useDeleteMeetingMutation()
@@ -101,11 +100,9 @@ const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
 const hosts = computed(() => hostsQuery.data.value ?? [])
-const supervisors = computed(() => supervisorsQuery.data.value ?? [])
 const importCatalogs = computed<MeetingImportCatalogs>(() => ({
     meetingTypes: meetingTypes.value,
     sectors: sectors.value,
-    supervisors: supervisors.value,
     leaders: leaders.value,
     hosts: hosts.value,
 }))
@@ -114,8 +111,7 @@ const importCatalogsLoading = computed(
         meetingTypesQuery.isPending.value ||
         sectorsQuery.isPending.value ||
         leadersQuery.isPending.value ||
-        hostsQuery.isPending.value ||
-        supervisorsQuery.isPending.value,
+        hostsQuery.isPending.value,
 )
 const isLoading = computed(
     () =>
@@ -146,7 +142,6 @@ if (import.meta.client) {
             sectorsQuery.error.value,
             leadersQuery.error.value,
             hostsQuery.error.value,
-            supervisorsQuery.error.value,
         ],
         (errors) => {
             const error = errors.find(Boolean)
@@ -198,7 +193,7 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         sortable: true,
         filterable: true,
         filterType: 'text',
-        accessor: (row) => row.code,
+        accessor: (row) => row.fullCode,
         width: '170px',
     },
     {
@@ -420,7 +415,7 @@ function toInput(m: MeetingRecord): MeetingInput {
         sectorId: m.sectorId,
         leaderId: m.leaderId,
         supervisorId: m.supervisorId,
-        hostId: m.hostId ?? 0,
+        hostId: m.hostId,
         coSupervisorIds: [...m.coSupervisorIds],
         title: m.title,
         description: m.description,
@@ -455,7 +450,6 @@ async function duplicateMeeting(m: MeetingRecord) {
     }
 }
 
-// Desactivar una reunión detiene la generación de fechas pendientes.
 async function toggleActive(m: MeetingRecord) {
     try {
         await updateMeetingMutation.mutateAsync({ id: m.id, input: { isActive: !m.isActive } })
@@ -627,7 +621,7 @@ async function toggleActive(m: MeetingRecord) {
                     <span
                         class="whitespace-nowrap font-mono text-[11px] tabular-nums text-on-surface-variant"
                     >
-                        {{ (row as MeetingRecord).code }}
+                        {{ (row as MeetingRecord).fullCode }}
                     </span>
                 </template>
 
@@ -692,21 +686,33 @@ async function toggleActive(m: MeetingRecord) {
                         <span
                             class="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
                         >
-                            {{ formatInitials((row as MeetingRecord).sectorName) }}
+                            {{ formatInitials(getMeetingSectorLabel(row as MeetingRecord)) }}
                         </span>
                         <div class="min-w-0">
                             <p class="truncate text-sm text-on-surface">
-                                {{ (row as MeetingRecord).sectorName }}
+                                {{ getMeetingSectorLabel(row as MeetingRecord) }}
                             </p>
                             <p class="truncate text-[11px] text-on-surface-variant">
-                                Sup. {{ (row as MeetingRecord).supervisorName ?? '—' }}
+                                {{
+                                    (row as MeetingRecord).isGeneral
+                                        ? 'Reunión general'
+                                        : (row as MeetingRecord).sectorId === null
+                                          ? 'Asígnala desde Territorios'
+                                          : `Sup. ${(row as MeetingRecord).supervisorName ?? '—'}`
+                                }}
                             </p>
                         </div>
                     </div>
                 </template>
 
                 <template #cell-people="{ row }">
-                    <div class="min-w-0 space-y-0.5">
+                    <p
+                        v-if="(row as MeetingRecord).isGeneral"
+                        class="text-xs text-on-surface-variant"
+                    >
+                        Sin líder ni anfitrión
+                    </p>
+                    <div v-else class="min-w-0 space-y-0.5">
                         <p class="truncate text-sm text-on-surface">
                             <span class="text-[11px] text-on-surface-variant">Líder</span>
                             {{ (row as MeetingRecord).leaderName ?? '—' }}

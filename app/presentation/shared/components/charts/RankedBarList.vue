@@ -5,18 +5,15 @@ interface RankedItem {
     id: number | string
     label: string
     value: number
-    /// Dato secundario que se muestra junto al valor, por ejemplo la asistencia.
     meta?: string | null
 }
 
 const props = withDefaults(
     defineProps<{
         items: RankedItem[]
-        /// Nombre accesible del gráfico; se expone como aria-label.
         label: string
         format?: 'number' | 'currency'
         emptyMessage?: string
-        /// Cuántas filas se muestran antes de plegar la cola en «Otras».
         limit?: number
     }>(),
     {
@@ -26,8 +23,6 @@ const props = withDefaults(
     },
 )
 
-// Un solo tono para todas las barras: la longitud ya codifica la magnitud, y
-// teñirlas por tamaño sería duplicar esa información en el único canal libre.
 const ranked = computed(() => [...props.items].sort((left, right) => right.value - left.value))
 
 const visible = computed(() => {

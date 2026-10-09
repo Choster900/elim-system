@@ -2,7 +2,6 @@ import { routePermissionCodes } from '~/presentation/auth/constants/permission.c
 
 export default [
     {
-        // La bandeja de pendientes es la entrada del módulo: la pregunta es «qué me falta».
         name: 'offerings',
         path: '/finanzas/ofrendas',
         component: () => import('~/presentation/finance/view/PendingOfferingsView.vue'),
@@ -23,7 +22,6 @@ export default [
         },
     },
     {
-        // Pantalla propia de captura: registrar no cabía en un panel lateral.
         name: 'offering-capture',
         path: '/finanzas/ofrendas/registrar/:meetingId',
         component: () => import('~/presentation/finance/view/OccurrenceCaptureView.vue'),
@@ -44,7 +42,6 @@ export default [
         },
     },
     {
-        // Se conserva para enlaces compartidos y marcadores anteriores.
         name: 'my-meetings',
         path: '/finanzas/ofrendas/mis-reuniones',
         redirect: '/finanzas/ofrendas',

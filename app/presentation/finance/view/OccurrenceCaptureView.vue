@@ -19,6 +19,7 @@ import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatLocalIsoDate, formatTimeRange } from '~/utils/date/date-format.util'
+import { getMeetingScopeLabel } from '~/presentation/meetings/utils/meeting-format.util'
 import { useRecordOccurrencesBulkMutation } from '../composables/useOccurrenceMutations'
 import {
     useAttendanceTypesQuery,
@@ -33,14 +34,10 @@ interface CaptureRow {
     date: string
     endTime: string
     recordable: boolean
-    /// Una fila sin marcar no se envía: llenar 2 de 4 es lo normal.
     selected: boolean
-    /// Asistencia desglosada por tipo; el total de la fecha es la suma del desglose.
     attendanceByType: Record<number, number | null>
-    /// Respaldo cuando el catálogo de tipos está vacío: total escrito a mano.
     attendanceTotal: number | null
     amounts: Record<number, number | null>
-    /// Respaldo cuando el catálogo de ofrendas está vacío.
     offeringTotal: number | null
 }
 
@@ -57,8 +54,6 @@ const meetingId = computed(() => {
     return Number.isSafeInteger(raw) && raw > 0 ? raw : null
 })
 
-// Al abrir desde el historial se marca la fecha solicitada; las demás siguen
-// disponibles para una captura en lote.
 const targetedOccurrenceId = computed(() => {
     const raw = Number(route.query.occurrence)
     return Number.isSafeInteger(raw) && raw > 0 ? raw : null
@@ -69,15 +64,12 @@ const categories = computed(() =>
 )
 const hasCategories = computed(() => categories.value.length > 0)
 
-/// Solo los tipos vigentes se capturan; los desactivados sobreviven en el histórico.
 const attendanceTypes = computed(() =>
     (attendanceTypesQuery.data.value ?? []).filter((type) => type.isActive),
 )
 
-/// Sin catálogo vigente se cae al total escrito a mano en vez de bloquear la captura.
 const hasAttendanceTypes = computed(() => attendanceTypes.value.length > 0)
 
-/// Las fechas pendientes de esta reunión, de la más antigua a la más reciente.
 const occurrences = computed(() =>
     (pendingQuery.data.value ?? [])
         .filter((item) => item.meetingId === meetingId.value)
@@ -192,7 +184,6 @@ function rowTotal(row: CaptureRow) {
     return Object.values(row.amounts).reduce<number>((sum, amount) => sum + (amount ?? 0), 0)
 }
 
-/// El desglose manda: el total de la fecha es lo que suman sus tipos.
 function rowAttendance(row: CaptureRow) {
     if (!hasAttendanceTypes.value) return row.attendanceTotal ?? 0
     return Object.values(row.attendanceByType).reduce<number>(
@@ -201,7 +192,6 @@ function rowAttendance(row: CaptureRow) {
     )
 }
 
-/// Un cero escrito a propósito cuenta; lo que no cuenta es dejarlo todo en blanco.
 function hasAttendance(row: CaptureRow) {
     if (!hasAttendanceTypes.value) return row.attendanceTotal !== null
     return Object.values(row.attendanceByType).some((quantity) => quantity !== null)
@@ -224,7 +214,6 @@ function categoryTotal(categoryId: number) {
     return selectedRows.value.reduce((sum, row) => sum + (row.amounts[categoryId] ?? 0), 0)
 }
 
-/// Marcar la fila al escribir evita el paso extra de tildar la casilla.
 function touchRow(row: CaptureRow) {
     if (!row.recordable) return
     row.selected = true
@@ -260,7 +249,6 @@ function setOfferingTotal(row: CaptureRow, event: Event) {
     touchRow(row)
 }
 
-/// Enter baja por la misma columna; Shift + Enter sube. Tab conserva el recorrido horizontal.
 function moveVertically(event: KeyboardEvent) {
     if (event.key !== 'Enter') return
 
@@ -303,9 +291,6 @@ function daysSince(isoDate: string | undefined) {
     return Math.max(0, Math.round((today - then) / MS_PER_DAY))
 }
 
-// El encabezado se deriva de las ocurrencias, no de `rows`: el watcher que
-// construye las filas corre en el siguiente tick, y en ese hueco `rows` está
-// vacío aunque la reunión ya se conozca.
 const pendingCount = computed(() => recordableOccurrences.value.length)
 const inProgressCount = computed(() => occurrences.value.length - pendingCount.value)
 const oldestDaysBehind = computed(() => daysSince(recordableOccurrences.value[0]?.date))
@@ -363,7 +348,6 @@ async function onSubmit() {
                 notes: null,
             }))
 
-        // Solo viaja el tipo que alguien llenó; un blanco no es un cero registrado.
         const attendanceDetails = Object.entries(row.attendanceByType)
             .filter(([, quantity]) => quantity !== null)
             .map(([typeId, quantity]) => ({
@@ -375,7 +359,6 @@ async function onSubmit() {
             occurrenceId: row.occurrenceId,
             attendance: rowAttendance(row),
             attendanceDetails,
-            // Sin catálogo se guarda el total manual; con catálogo manda el desglose.
             totalAmount: details.length > 0 ? null : (row.offeringTotal ?? 0),
             currency: 'USD',
             notes: null,
@@ -459,7 +442,6 @@ const cellInputClass =
         </div>
 
         <template v-else>
-            <!-- Identidad de la reunión -->
             <section
                 data-tour="offering-capture-heading"
                 class="border-b border-outline-variant pb-8"
@@ -491,7 +473,7 @@ const cellInputClass =
                             >
                                 <span class="inline-flex items-center gap-1.5">
                                     <MapPin class="size-3.5" />
-                                    {{ meeting.sectorName }} · {{ meeting.zoneName }}
+                                    {{ getMeetingScopeLabel(meeting) }}
                                 </span>
                                 <span class="inline-flex items-center gap-1.5">
                                     <Clock class="size-3.5" />

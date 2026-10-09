@@ -3,12 +3,12 @@ export type MonthlyMode = 'dia_fijo' | 'ordinal'
 
 export interface MeetingRecord {
     id: number
-    /// Autogenerado por el servidor: D#Z#S#X#.
     code: string
+    fullCode: string
     typeId: number
-    sectorId: number
-    leaderId: number
-    supervisorId: number
+    sectorId: number | null
+    leaderId: number | null
+    supervisorId: number | null
     hostId: number | null
     coSupervisorIds: number[]
     title: string
@@ -31,11 +31,12 @@ export interface MeetingRecord {
     color: string
     typeName: string | null
     typeColor: string | null
+    isGeneral: boolean
     sectorName: string | null
-    zoneId: number
-    zoneName: string
-    districtId: number
-    districtName: string
+    zoneId: number | null
+    zoneName: string | null
+    districtId: number | null
+    districtName: string | null
     leaderName: string | null
     supervisorName: string | null
     hostName: string | null
@@ -45,10 +46,10 @@ export interface MeetingRecord {
 
 export interface MeetingInput {
     typeId: number
-    sectorId: number
-    leaderId: number
-    supervisorId: number
-    hostId: number
+    sectorId: number | null
+    leaderId: number | null
+    supervisorId: number | null
+    hostId: number | null
     coSupervisorIds: number[]
     title: string
     description: string | null
@@ -77,6 +78,7 @@ export interface MeetingTypeOption {
     description: string | null
     color: string
     isActive: boolean
+    isGeneral: boolean
 }
 
 export interface MemberOption {
@@ -93,6 +95,7 @@ export interface SectorOption {
     id: number
     name: string
     code: string
+    pathCode: string
     zoneCode: string
     districtCode: string
     zoneName: string

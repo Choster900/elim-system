@@ -31,8 +31,6 @@ export const weekdayOptions = [
     { value: 6, label: 'sábado' },
 ]
 
-// La reunión ya no tiene estado: una plantilla que se repite no puede estar
-// «completada». Lo que sí tiene es si sigue activa generando fechas.
 export const activeOptions = [
     { value: true, label: 'Activa' },
     { value: false, label: 'Inactiva' },

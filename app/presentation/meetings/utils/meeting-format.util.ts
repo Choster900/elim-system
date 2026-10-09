@@ -8,6 +8,19 @@ import {
 } from '~/utils/date/date-format.util'
 import { getOptionLabel } from '~/utils/option/option-label.util'
 
+export const GENERAL_MEETING_SCOPE_LABEL = 'Toda la iglesia'
+export const UNASSIGNED_MEETING_SCOPE_LABEL = 'Sin asignar'
+
+export function getMeetingSectorLabel(meeting: { sectorName: string | null; isGeneral: boolean }) {
+    if (meeting.sectorName) return meeting.sectorName
+    return meeting.isGeneral ? GENERAL_MEETING_SCOPE_LABEL : UNASSIGNED_MEETING_SCOPE_LABEL
+}
+
+export function getMeetingScopeLabel(item: { sectorName: string | null; zoneName: string | null }) {
+    if (!item.sectorName) return GENERAL_MEETING_SCOPE_LABEL
+    return item.zoneName ? `${item.sectorName} · ${item.zoneName}` : item.sectorName
+}
+
 export function formatMeetingDate(isoDate: string) {
     return formatLocalIsoDate(isoDate, {
         weekday: 'short',

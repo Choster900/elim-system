@@ -5,11 +5,6 @@ import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster
 import type { MapProviderConfig } from '~/presentation/shared/maps/map-provider.types'
 import { landingContact } from '../constants/landing.constants'
 
-/**
- * Mapa real de la ubicación con estilo oscuro y minimalista. Leaflet y las teselas solo
- * se cargan cuando la sección está por entrar en pantalla; mientras tanto (y si no hay
- * red) se ve la ilustración de calles como fondo.
- */
 const mapElement = ref<HTMLElement | null>(null)
 const isMapReady = ref(false)
 const { provider } = useMapProvider()
@@ -18,7 +13,6 @@ let map: import('leaflet').Map | null = null
 let observer: IntersectionObserver | null = null
 let isUnmounted = false
 
-// La landing siempre usa el mapa oscuro, aunque el resto del sistema use el claro.
 function darkProvider(): MapProviderConfig {
     const current = provider.value
     return current.name === 'carto-light'
@@ -30,7 +24,6 @@ function darkProvider(): MapProviderConfig {
         : current
 }
 
-// Ícono `Church` de Lucide (mismo trazo que el resto del sistema) dentro de una gota dorada.
 const CHURCH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 9h4"/><path d="M12 7v5"/><path d="M14 21v-3a2 2 0 0 0-4 0v3"/><path d="m18 9 3.52 2.147a1 1 0 0 1 .48.854V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6.999a1 1 0 0 1 .48-.854L6 9"/><path d="M6 21V7a1 1 0 0 1 .376-.782l5-3.999a1 1 0 0 1 1.249.001l5 4A1 1 0 0 1 18 7v14"/></svg>`
 
 const PIN_HTML = `
@@ -52,17 +45,13 @@ async function initMap() {
         center,
         zoom: 15,
         zoomControl: false,
-        // No secuestra el scroll de la página ni el arrastre con un dedo en el celular.
         scrollWheelZoom: false,
         dragging: !leaflet.Browser.mobile,
         attributionControl: false,
     })
     leaflet.control.zoom({ position: 'topright' }).addTo(map)
-    // Arriba a la izquierda para no chocar con la tarjeta y el botón de abajo.
     leaflet.control.attribution({ position: 'topleft', prefix: false }).addTo(map)
 
-    // Se muestra el mapa en cuanto llega la primera tesela, de CARTO o del respaldo de
-    // OpenStreetMap que agrega el adaptador; hasta entonces queda la ilustración.
     const showWhenTilesArrive = (tileLayer: import('leaflet').Layer) => {
         if (tileLayer instanceof leaflet.TileLayer) {
             tileLayer.once('tileload', () => (isMapReady.value = true))
@@ -124,7 +113,6 @@ const avenue = 'M-40 360 C 300 340, 450 290, 600 260 S 950 200, 1240 165'
     <div
         class="landing-map relative h-[clamp(380px,44vw,540px)] overflow-hidden rounded-[20px] border border-[rgba(78,70,57,0.7)] bg-[#0f1212]"
     >
-        <!-- Fondo mientras carga el mapa real -->
         <svg
             viewBox="0 0 1200 520"
             preserveAspectRatio="xMidYMid slice"
@@ -164,8 +152,6 @@ const avenue = 'M-40 360 C 300 340, 450 290, 600 260 S 950 200, 1240 165'
             />
         </svg>
 
-        <!-- El fundido va en el contenedor: si Vue cambiara clases en el div de Leaflet,
-             borraría `leaflet-container` y las teselas quedarían con ancho 0. -->
         <div
             class="absolute inset-0 transition-opacity duration-700"
             :class="isMapReady ? 'opacity-100' : 'opacity-0'"
@@ -178,7 +164,6 @@ const avenue = 'M-40 360 C 300 340, 450 290, 600 260 S 950 200, 1240 165'
             />
         </div>
 
-        <!-- Viñeta: centra la mirada en el punto y suaviza los bordes -->
         <div
             aria-hidden="true"
             class="pointer-events-none absolute inset-0 z-[450] bg-[radial-gradient(ellipse_60%_65%_at_50%_50%,rgba(15,18,18,0)_0%,rgba(15,18,18,0.12)_65%,rgba(12,15,15,0.7)_100%)]"

@@ -20,11 +20,11 @@ import {
     usePendingMeetingDetailQuery,
     usePendingOccurrencesQuery,
 } from '../composables/useOccurrenceQueries'
+import { getMeetingScopeLabel } from '~/presentation/meetings/utils/meeting-format.util'
 import type { OccurrenceRecord, PendingGroup } from '../interfaces/occurrence.interface'
 
 defineOptions({ name: 'PendingOfferingsView' })
 
-/// La vista del líder es la misma bandeja sin los filtros de sector.
 const props = withDefaults(defineProps<{ personalScope?: boolean }>(), { personalScope: false })
 
 useHead({
@@ -119,7 +119,13 @@ function daysSince(isoDate: string) {
 const occurrences = computed(() => pendingQuery.data.value ?? [])
 
 const zoneOptions = computed(() =>
-    [...new Map(occurrences.value.map((item) => [item.zoneId, item.zoneName]))]
+    [
+        ...new Map(
+            occurrences.value
+                .filter((item) => item.zoneId !== null)
+                .map((item) => [item.zoneId!, item.zoneName ?? '']),
+        ),
+    ]
         .map(([value, label]) => ({ value, label }))
         .sort((left, right) => left.label.localeCompare(right.label, 'es')),
 )
@@ -128,8 +134,9 @@ const sectorOptions = computed(() =>
     [
         ...new Map(
             occurrences.value
+                .filter((item) => item.sectorId !== null)
                 .filter((item) => !selectedZone.value || item.zoneId === selectedZone.value)
-                .map((item) => [item.sectorId, item.sectorName]),
+                .map((item) => [item.sectorId!, item.sectorName ?? '']),
         ),
     ]
         .map(([value, label]) => ({ value, label }))
@@ -144,7 +151,6 @@ const filtered = computed(() =>
     ),
 )
 
-/// Agrupadas por reunión y ordenadas por antigüedad: lo más atrasado primero.
 const groups = computed<PendingGroup[]>(() => {
     const byMeeting = new Map<number, OccurrenceRecord[]>()
 
@@ -184,7 +190,6 @@ const stats = computed(() => ({
     oldest: groups.value.length > 0 ? groups.value[0]!.daysBehind : 0,
 }))
 
-/// El tono comunica el atraso antes que el número.
 function toneFor(daysBehind: number) {
     if (daysBehind >= 30) return 'text-destructive'
     if (daysBehind >= 14) return 'text-primary'
@@ -415,7 +420,7 @@ watch([() => authStore.user?.id, () => pendingQuery.isPending.value], startFirst
                                 {{ group.meetingTitle }}
                             </h3>
                             <p class="mt-0.5 truncate text-xs text-on-surface-variant">
-                                {{ group.sectorName }} · {{ group.zoneName }}
+                                {{ getMeetingScopeLabel(group) }}
                                 <template v-if="group.leaderName">
                                     · Líder: {{ group.leaderName }}
                                 </template>

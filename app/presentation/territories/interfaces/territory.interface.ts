@@ -58,3 +58,19 @@ export interface TerritoryMemberOption {
 
 export type TerritoryLeaderOption = TerritoryMemberOption
 export type TerritorySupervisorOption = TerritoryMemberOption
+
+export interface AssignableMeeting {
+    id: string
+    title: string
+    code: string
+    color: string
+    typeId: number
+    typeName: string
+    weekday: number
+    dayLabel: string
+    startTime: string
+    timeLabel: string
+    frequencyLabel: string
+    leaderName: string | null
+    location: string
+}

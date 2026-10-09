@@ -7,7 +7,6 @@ import AppBrand from './AppBrand.vue'
 const accessAction = useAccessAction()
 const currentYear = new Date().getFullYear()
 
-// Lucide ya no incluye íconos de marcas; se dibujan aquí con el mismo trazo.
 const socialLinks = computed(() =>
     [
         {

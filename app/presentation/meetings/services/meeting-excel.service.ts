@@ -17,30 +17,25 @@ import { createMeeting } from './meeting.service'
 type ExcelValue = string | number | boolean | Date | null | undefined
 type ExcelOutputCell = ExcelValue | Record<string, unknown>
 
-const MEETING_HEADERS = [
-    'Título *',
-    'Tipo *',
-    'Sector *',
-    'Líder *',
-    'Anfitrión *',
-    'Co-supervisores',
-    'Fecha de inicio *',
-    'Hora de inicio *',
-    'Hora de fin *',
-    'Frecuencia *',
-    'Fecha fin de recurrencia',
-    'Modo mensual',
-    'Ordinal',
-    'Día de semana',
-    'Ubicación *',
-    'Latitud',
-    'Longitud',
-    'Asistentes esperados',
-    'Visibilidad',
-    'Color',
-    'Descripción',
-    'Notas',
+const MEETING_COLUMNS = [
+    ['Tipo *', 20],
+    ['Sector *', 22],
+    ['Líder *', 22],
+    ['Anfitrión *', 22],
+    ['Fecha de inicio *', 18],
+    ['Hora de inicio *', 16],
+    ['Hora de fin *', 16],
+    ['Frecuencia *', 18],
+    ['Fecha fin de recurrencia', 22],
+    ['Modo mensual', 18],
+    ['Ordinal', 14],
+    ['Día de semana', 18],
+    ['Ubicación *', 38],
+    ['Asistentes esperados', 20],
+    ['Descripción', 46],
 ] as const
+
+const MEETING_HEADERS = MEETING_COLUMNS.map(([header]) => header)
 
 const DEFAULT_COLOR = '#e9c176'
 const MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -51,7 +46,6 @@ export interface MeetingImportCatalogs {
     sectors: SectorOption[]
     leaders: MemberOption[]
     hosts: MemberOption[]
-    supervisors: MemberOption[]
 }
 
 export interface MeetingWorkbookImportRow {
@@ -135,32 +129,11 @@ function meetingsSheet(rows: ExcelValue[][], failureReasons?: string[]) {
         ] as never[][],
         sheet: 'Reuniones',
         columns: [
-            34,
-            20,
-            22,
-            22,
-            30,
-            30,
-            18,
-            16,
-            16,
-            18,
-            22,
-            20,
-            16,
-            20,
-            38,
-            16,
-            16,
-            22,
-            18,
-            16,
-            46,
-            52,
+            ...MEETING_COLUMNS.map(([, width]) => width),
             ...(failureReasons ? [58] : []),
         ].map((width) => ({ width })),
         stickyRowsCount: 1,
-        stickyColumnsCount: 4,
+        stickyColumnsCount: 3,
         showGridLines: false,
         orientation: 'landscape' as const,
     }
@@ -181,7 +154,7 @@ function instructionsSheet() {
         ],
         [
             {
-                value: 'Completa únicamente la pestaña Reuniones. Copia los códigos desde las pestañas de catálogos para evitar asignaciones ambiguas.',
+                value: 'Llena solo la pestaña Reuniones. Copia los códigos de las demás pestañas.',
                 textColor: '#655D58',
                 columnSpan: 4,
                 wrap: true,
@@ -195,58 +168,41 @@ function instructionsSheet() {
             sectionCell('Ejemplo'),
         ],
         [
-            'Tipo / Sector / Líder / Anfitrión',
+            'Tipo, Sector, Líder, Anfitrión',
             'Sí',
-            'Usa el código exacto de su pestaña. El anfitrión debe tener el rol Anfitrión. El supervisor se hereda automáticamente del sector y no se escribe en el archivo.',
-            'CULTO, SEC-001, MIE-0012, MIE-0018',
-        ],
-        [
-            'Co-supervisores',
-            'No',
-            'Escribe uno o varios códigos de la pestaña Supervisores separados por punto y coma. No incluyas al supervisor principal del sector.',
-            'MIE-0021; MIE-0035',
+            'Copia el código de su pestaña. Si el tipo es de toda la iglesia, deja vacíos Sector, Líder y Anfitrión.',
+            'C, D1Z2S3, MIE-0012, MIE-0018',
         ],
         [
             'Fecha y horas',
             'Sí',
-            'Fecha en formato AAAA-MM-DD o DD/MM/AAAA. Horas en formato de 24 horas HH:mm; la hora final debe ser posterior a la inicial.',
+            'Fecha AAAA-MM-DD o DD/MM/AAAA. Horas de 24 horas (HH:mm).',
             '2026-09-05, 19:00, 20:30',
         ],
         [
             'Frecuencia',
             'Sí',
-            'Usa un valor de la pestaña Frecuencias. La fecha final es opcional para reuniones recurrentes y se ignora en reuniones únicas.',
+            'Un valor de la pestaña Frecuencias. La fecha fin de recurrencia es opcional.',
             'semanal',
         ],
         [
-            'Regla mensual',
+            'Modo mensual',
             'Solo mensual',
-            'Usa dia_fijo o ordinal. Para ordinal también debes indicar la posición y el día desde sus pestañas.',
+            'dia_fijo u ordinal. Con ordinal llena también Ordinal y Día de semana.',
             'ordinal, 2, martes',
         ],
+        ['Ubicación', 'Sí', 'Nombre o dirección del lugar.', 'Templo central'],
         [
-            'Ubicación',
-            'Sí',
-            'Nombre o dirección del lugar. Latitud y longitud son opcionales, pero deben completarse juntas.',
-            'Templo central, 13.704, -89.204',
-        ],
-        [
-            'Visibilidad',
-            'No',
-            'Si queda vacía se usará Interna. Consulta su pestaña para ver los valores admitidos. Las reuniones importadas siempre quedan activas.',
-            'Interna',
-        ],
-        [
-            'Color',
-            'No',
-            'Color hexadecimal. Si queda vacío se usará el color del tipo de reunión.',
-            '#E9C176',
-        ],
-        [
-            'Importación parcial',
+            'Automático',
             '—',
-            'Antes de guardar verás los errores por fila. Las filas correctas se crean y las pendientes se descargan en un nuevo Excel con el motivo.',
-            'Las reuniones ya creadas no se repiten',
+            'El título, el supervisor y el color se asignan solos. Las reuniones se crean activas.',
+            '—',
+        ],
+        [
+            'Errores',
+            '—',
+            'Antes de guardar verás los errores por fila. Las filas con error se descargan en otro Excel con el motivo.',
+            '—',
         ],
     ]
 
@@ -309,26 +265,28 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
             'Tipos',
             'Tipos de reunión',
             'Copia el segmento en la columna Tipo de la pestaña Reuniones.',
-            ['Segmento', 'Nombre', 'Estado', 'Color'],
+            ['Segmento', 'Nombre', 'Alcance', 'Estado'],
             catalogs.meetingTypes.map((type) => [
                 type.codeSegment,
                 type.name,
+                type.isGeneral ? 'Toda la iglesia' : 'Sector',
                 type.isActive ? 'Activo' : 'Inactivo',
-                type.color,
             ]),
-            [22, 36, 18, 16],
+            [22, 36, 20, 18],
         ),
         catalogSheet(
             'Sectores',
             'Sectores disponibles',
-            'Copia el código del sector. Su supervisor se asignará automáticamente.',
-            ['Código', 'Nombre', 'Supervisor'],
+            'Copia el código del sector: distrito + zona + sector (D1Z2S3). Su supervisor se asignará automáticamente.',
+            ['Código', 'Nombre', 'Zona', 'Distrito', 'Supervisor'],
             catalogs.sectors.map((sector) => [
-                sector.code,
+                sector.pathCode,
                 sector.name,
+                sector.zoneName,
+                sector.districtName,
                 sector.supervisorName ?? 'Sin supervisor',
             ]),
-            [24, 38, 42],
+            [18, 34, 28, 28, 38],
         ),
         catalogSheet(
             'Lideres',
@@ -344,14 +302,6 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
             'Solo estos miembros pueden utilizarse en la columna Anfitrión.',
             ['Código', 'Nombre', 'Estado'],
             catalogs.hosts.map((host) => [host.code, host.fullName, host.status]),
-            [24, 46, 18],
-        ),
-        catalogSheet(
-            'Supervisores',
-            'Supervisores disponibles para co-supervisión',
-            'Puedes copiar varios códigos y separarlos por punto y coma.',
-            ['Código', 'Nombre', 'Estado'],
-            catalogs.supervisors.map((member) => [member.code, member.fullName, member.status]),
             [24, 46, 18],
         ),
         catalogSheet(
@@ -386,17 +336,6 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
             weekdayOptions.map((option) => [option.value, option.label]),
             [22, 36],
         ),
-        catalogSheet(
-            'Visibilidad',
-            'Visibilidad de una reunión',
-            'Indica si la reunión es pública o interna.',
-            ['Valor', 'Descripción'],
-            [
-                ['Pública', 'Visible como reunión pública'],
-                ['Interna', 'Uso interno de la congregación'],
-            ],
-            [24, 52],
-        ),
     ]
 }
 
@@ -428,6 +367,10 @@ function normalize(value: string) {
         .replace(/[\u0300-\u036f]/g, '')
         .trim()
         .toLowerCase()
+}
+
+function normalizeHeader(value: string) {
+    return normalize(value).replace(/\*/g, '').replace(/\s+/g, ' ').trim()
 }
 
 function validateText(value: string, field: string, max: number, issues: string[], min = 0) {
@@ -520,23 +463,6 @@ function parseNumber(
     return parsed
 }
 
-function parseVisibility(value: ExcelValue, issues: string[]) {
-    const input = normalize(text(value))
-    if (!input || ['interna', 'interno', 'false', 'no', '0'].includes(input)) return false
-    if (['publica', 'publico', 'true', 'si', '1'].includes(input)) return true
-    issues.push('Visibilidad: usa Pública o Interna.')
-    return false
-}
-
-function parseColor(value: ExcelValue, fallback: string, issues: string[]) {
-    const color = text(value) || fallback || DEFAULT_COLOR
-    if (!/^#[0-9a-f]{6}$/i.test(color)) {
-        issues.push('Color: debe tener formato hexadecimal, por ejemplo #E9C176.')
-        return DEFAULT_COLOR
-    }
-    return color.toLowerCase()
-}
-
 function resolveCatalogItem<T>(
     value: ExcelValue,
     items: T[],
@@ -563,40 +489,6 @@ function resolveCatalogItem<T>(
             : `${field}: “${raw}” no pertenece al catálogo.`,
     )
     return null
-}
-
-function resolveCoSupervisors(
-    value: ExcelValue,
-    members: MemberOption[],
-    supervisorId: number | null,
-    issues: string[],
-) {
-    const values = text(value)
-        .split(/[;|\n]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-    const ids: number[] = []
-
-    values.forEach((memberValue) => {
-        const before = issues.length
-        const member = resolveCatalogItem(
-            memberValue,
-            members,
-            'Co-supervisores',
-            issues,
-            (item) => item.code,
-            (item) => item.fullName,
-        )
-        if (!member || issues.length > before) return
-        if (member.id === supervisorId) {
-            issues.push(
-                `Co-supervisores: ${member.fullName} ya es el supervisor principal del sector.`,
-            )
-            return
-        }
-        if (!ids.includes(member.id)) ids.push(member.id)
-    })
-    return ids
 }
 
 function resolveFrequency(value: ExcelValue, issues: string[]) {
@@ -648,7 +540,7 @@ function resolveWeekday(value: ExcelValue, issues: string[]) {
 
 type MeetingKeyFields = Pick<
     MeetingInput,
-    'sectorId' | 'typeId' | 'leaderId' | 'title' | 'date' | 'startTime' | 'endTime'
+    'sectorId' | 'typeId' | 'leaderId' | 'date' | 'startTime' | 'endTime'
 >
 
 function meetingKey(input: MeetingKeyFields) {
@@ -656,7 +548,6 @@ function meetingKey(input: MeetingKeyFields) {
         input.sectorId,
         input.typeId,
         input.leaderId,
-        normalize(input.title),
         input.date,
         input.startTime,
         input.endTime,
@@ -687,11 +578,11 @@ export async function parseMeetingsWorkbook(
     }
 
     const headerIndexes = new Map(
-        excelRows[0]!.map((cell, index) => [normalize(text(cell)), index]),
+        excelRows[0]!.map((cell, index) => [normalizeHeader(text(cell)), index]),
     )
     const requiredHeaders = MEETING_HEADERS.filter((header) => header.endsWith('*'))
     const missingHeaders = requiredHeaders.filter(
-        (header) => headerIndexes.get(normalize(header)) == null,
+        (header) => headerIndexes.get(normalizeHeader(header)) == null,
     )
     if (missingHeaders.length) {
         return {
@@ -701,7 +592,7 @@ export async function parseMeetingsWorkbook(
     }
 
     const value = (row: ExcelValue[], header: (typeof MEETING_HEADERS)[number]) => {
-        const index = headerIndexes.get(normalize(header))
+        const index = headerIndexes.get(normalizeHeader(header))
         return index == null ? null : row[index]
     }
     const rows: MeetingWorkbookImportRow[] = []
@@ -716,14 +607,10 @@ export async function parseMeetingsWorkbook(
             issues.push(`El archivo supera el límite de ${MAX_ROWS} reuniones.`)
         }
 
-        const title = text(value(row, 'Título *'))
         const description = text(value(row, 'Descripción'))
         const location = text(value(row, 'Ubicación *'))
-        const notes = text(value(row, 'Notas'))
-        validateText(title, 'Título', 100, issues, 2)
         validateText(description, 'Descripción', 300, issues)
         validateText(location, 'Ubicación', 300, issues, 2)
-        validateText(notes, 'Notas', 600, issues)
 
         const type = resolveCatalogItem(
             value(row, 'Tipo *'),
@@ -733,30 +620,37 @@ export async function parseMeetingsWorkbook(
             (item) => item.codeSegment,
             (item) => item.name,
         )
-        const sector = resolveCatalogItem(
-            value(row, 'Sector *'),
-            catalogs.sectors,
-            'Sector',
-            issues,
-            (item) => item.code,
-            (item) => item.name,
-        )
-        const leader = resolveCatalogItem(
-            value(row, 'Líder *'),
-            catalogs.leaders,
-            'Líder',
-            issues,
-            (item) => item.code,
-            (item) => item.fullName,
-        )
-        const host = resolveCatalogItem(
-            value(row, 'Anfitrión *'),
-            catalogs.hosts,
-            'Anfitrión',
-            issues,
-            (item) => item.code,
-            (item) => item.fullName,
-        )
+        const isGeneral = type?.isGeneral ?? false
+        const sector = isGeneral
+            ? null
+            : resolveCatalogItem(
+                  value(row, 'Sector *'),
+                  catalogs.sectors,
+                  'Sector',
+                  issues,
+                  (item) => item.pathCode,
+                  (item) => item.name,
+              )
+        const leader = isGeneral
+            ? null
+            : resolveCatalogItem(
+                  value(row, 'Líder *'),
+                  catalogs.leaders,
+                  'Líder',
+                  issues,
+                  (item) => item.code,
+                  (item) => item.fullName,
+              )
+        const host = isGeneral
+            ? null
+            : resolveCatalogItem(
+                  value(row, 'Anfitrión *'),
+                  catalogs.hosts,
+                  'Anfitrión',
+                  issues,
+                  (item) => item.code,
+                  (item) => item.fullName,
+              )
         if (sector && !sector.supervisorId) {
             issues.push('Sector: debe tener un supervisor asignado antes de crear reuniones.')
         }
@@ -792,17 +686,6 @@ export async function parseMeetingsWorkbook(
                 ? resolveWeekday(value(row, 'Día de semana'), issues)
                 : null
 
-        const latitude = parseNumber(value(row, 'Latitud'), 'Latitud', issues, {
-            min: -90,
-            max: 90,
-        })
-        const longitude = parseNumber(value(row, 'Longitud'), 'Longitud', issues, {
-            min: -180,
-            max: 180,
-        })
-        if ((latitude === null) !== (longitude === null)) {
-            issues.push('Ubicación geográfica: completa latitud y longitud juntas.')
-        }
         const expectedAttendees =
             parseNumber(value(row, 'Asistentes esperados'), 'Asistentes esperados', issues, {
                 min: 0,
@@ -812,34 +695,29 @@ export async function parseMeetingsWorkbook(
 
         const input: MeetingInput = {
             typeId: type?.id ?? 0,
-            sectorId: sector?.id ?? 0,
-            leaderId: leader?.id ?? 0,
-            supervisorId: sector?.supervisorId ?? 0,
-            hostId: host?.id ?? 0,
-            coSupervisorIds: resolveCoSupervisors(
-                value(row, 'Co-supervisores'),
-                catalogs.supervisors,
-                sector?.supervisorId ?? null,
-                issues,
-            ),
-            title,
+            sectorId: isGeneral ? null : (sector?.id ?? 0),
+            leaderId: isGeneral ? null : (leader?.id ?? 0),
+            supervisorId: isGeneral ? null : (sector?.supervisorId ?? 0),
+            hostId: isGeneral ? null : (host?.id ?? 0),
+            coSupervisorIds: [],
+            title: '',
             description: description || null,
             date: date ?? '',
             recurrenceEndDate,
             startTime,
             endTime,
             location,
-            latitude,
-            longitude,
+            latitude: null,
+            longitude: null,
             frequency,
             monthlyMode,
             weekOrdinal,
             weekday,
             expectedAttendees,
             isActive: true,
-            isPublic: parseVisibility(value(row, 'Visibilidad'), issues),
-            notes: notes || null,
-            color: parseColor(value(row, 'Color'), type?.color ?? DEFAULT_COLOR, issues),
+            isPublic: false,
+            notes: null,
+            color: type?.color ?? DEFAULT_COLOR,
         }
         const parsedRow: MeetingWorkbookImportRow = {
             rowNumber,
@@ -849,7 +727,7 @@ export async function parseMeetingsWorkbook(
         }
         rows.push(parsedRow)
 
-        if (type && sector && leader && date && startTime && endTime && title) {
+        if (type && (isGeneral || (sector && leader)) && date && startTime && endTime) {
             const key = meetingKey(input)
             if (existingKeys.has(key)) {
                 issues.push('Reunión: ya existe un registro con los mismos datos principales.')

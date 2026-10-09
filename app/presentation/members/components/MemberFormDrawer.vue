@@ -15,8 +15,9 @@ import type {
     MemberMaritalStatus,
     MemberStatus,
 } from '../interfaces/member.interface'
+import { formatDuiInput } from '../utils/dui-input.util'
 import { toInputDate } from '../utils/member-format.util'
-import { formatDuiInput, hasDuiFormat, isValidDui, normalizeDui } from '#shared/utils/dui.util'
+import { hasDuiFormat, isValidDui, normalizeDui } from '#shared/utils/dui.util'
 
 type DocumentNumberError = '' | 'invalid'
 type InvalidMemberField =

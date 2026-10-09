@@ -93,20 +93,16 @@ export async function getTerritoryHierarchy(
 
     return {
         districts: data.districts.map((district): District => mapEntity(district)),
-        zones: data.zones.map(
-            (zone): Zone => ({
-                ...mapEntity(zone),
-                districtId: String(zone.districtId),
-            }),
-        ),
-        sectors: data.sectors.map(
-            (sector): TerritorySector => ({
-                ...mapEntity(sector),
-                zoneId: String(sector.zoneId),
-                supervisorId: sector.supervisorId,
-                supervisorName: sector.supervisorName ?? '',
-            }),
-        ),
+        zones: data.zones.map((zone): Zone => ({
+            ...mapEntity(zone),
+            districtId: String(zone.districtId),
+        })),
+        sectors: data.sectors.map((sector): TerritorySector => ({
+            ...mapEntity(sector),
+            zoneId: String(sector.zoneId),
+            supervisorId: sector.supervisorId,
+            supervisorName: sector.supervisorName ?? '',
+        })),
     }
 }
 
@@ -130,7 +126,6 @@ function requestPayload(level: TerritoryLevel, input: TerritoryInput, parentId?:
               }
             : {
                   ...input,
-                  // El código lo genera el servidor; enviarlo lo rechaza el validador.
                   code: undefined,
                   supervisorId: undefined,
                   leaderId: input.leaderId,

@@ -5,6 +5,7 @@ declare module 'vue-router' {
         requiresAuth?: boolean
         requiredPermission?: string
         sectionPermissions?: Record<string, string>
+        fixedViewport?: boolean
     }
 }
 

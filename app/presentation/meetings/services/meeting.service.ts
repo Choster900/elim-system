@@ -1,4 +1,5 @@
 import type { AxiosInstance } from 'axios'
+import { territoryPathCode } from '#shared/utils/territory-code.util'
 import type { ApiResponse } from '~/presentation/shared/interfaces/api-response.interface'
 import type {
     MeetingInput,
@@ -135,12 +136,14 @@ export async function getSectors(
 
     return data.sectors.map((sector) => {
         const zone = zones.get(sector.zoneId)
+        const districtCode = zone ? (districts.get(zone.districtId)?.code ?? '') : ''
         return {
             id: sector.id,
             name: sector.name,
             code: sector.code,
+            pathCode: territoryPathCode(districtCode, zone?.code, sector.code),
             zoneCode: zone?.code ?? '',
-            districtCode: zone ? (districts.get(zone.districtId)?.code ?? '') : '',
+            districtCode,
             zoneName: zone?.name ?? 'Zona sin asignar',
             districtName: zone
                 ? (districts.get(zone.districtId)?.name ?? 'Distrito sin asignar')
@@ -154,7 +157,7 @@ export async function getSectors(
 
 export async function createMeetingType(
     apiClient: AxiosInstance,
-    input: Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive'>,
+    input: Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive' | 'isGeneral'>,
 ): Promise<MeetingTypeOption> {
     const response = await apiClient.post<ApiResponse<MeetingTypeOption>>('/meeting-types', input)
     return responseData(response.data, 'No fue posible crear el tipo de reunión')
@@ -163,7 +166,7 @@ export async function createMeetingType(
 export async function updateMeetingType(
     apiClient: AxiosInstance,
     id: number,
-    input: Partial<Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive'>>,
+    input: Partial<Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive' | 'isGeneral'>>,
 ): Promise<MeetingTypeOption> {
     const response = await apiClient.put<ApiResponse<MeetingTypeOption>>(
         `/meeting-types/${id}`,

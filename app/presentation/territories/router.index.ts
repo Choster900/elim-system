@@ -9,6 +9,7 @@ export default [
             layout: 'dashboard',
             requiresAuth: true,
             requiredPermission: routePermissionCodes.territoriesView,
+            fixedViewport: true,
         },
     },
 ]

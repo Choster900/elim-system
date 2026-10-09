@@ -42,17 +42,11 @@ export const landingMinistries = [
     },
 ]
 
-/**
- * Datos públicos de contacto de la iglesia. Los valores entre corchetes son marcadores:
- * reemplázalos aquí y se actualizan en la portada, la sección de ubicación y el pie.
- */
 export const landingContact = {
-    // Nombre del lugar tal como aparece en Google Maps.
     address: 'Centro de Retiro Iglesia Elim, Lourdes',
     serviceSchedule: 'Domingos · [HORA]',
     phone: '[TELÉFONO]',
     email: '[CORREO]',
-    // Botón "Cómo llegar" y punto del mapa.
     mapsUrl: 'https://maps.app.goo.gl/bhFRzfuVBxpoXUTy5',
     coordinates: [13.711409, -89.359812] as [latitude: number, longitude: number],
     socials: {

@@ -178,8 +178,8 @@ function instructionsData(catalogs: MemberCatalogs) {
         [
             'Sector',
             'No',
-            'Opcional. Escribe un único código de la hoja Sectores. No se solicitan distrito ni zona.',
-            'SEC-001',
+            'Opcional. Escribe un único código de la hoja Sectores; ya incluye distrito, zona y sector, así que no se solicitan por separado.',
+            'D1Z2S3',
         ],
         [
             'Reintentos',
@@ -293,7 +293,7 @@ function catalogSheets(catalogs: MemberCatalogs) {
         catalogSheet(
             'Sectores',
             'Sectores activos',
-            'La asignación territorial del miembro se realiza únicamente por sector.',
+            'La asignación territorial del miembro se realiza únicamente por sector. El código combina distrito, zona y sector (D1Z2S3).',
             ['Código de sector', 'Nombre del sector'],
             simpleCatalogRows(catalogs.sectors),
             [24, 38],

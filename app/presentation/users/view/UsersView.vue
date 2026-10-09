@@ -77,7 +77,6 @@ const loadError = computed(() => {
 })
 
 const canCreate = computed(() => authStore.hasPermission(routePermissionCodes.usersCreate))
-// Editar, restablecer y bloquear cuentas es exclusivo del super administrador.
 const canUpdate = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 const canBlock = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 const hasActions = computed(() => canUpdate.value || canBlock.value)

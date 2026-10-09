@@ -35,7 +35,6 @@ const sectionTitleClass =
 
 <template>
     <main class="overflow-x-clip bg-background text-on-surface">
-        <!-- Portada -->
         <section
             id="inicio"
             class="relative flex min-h-[46rem] items-center justify-center overflow-hidden bg-surface-container-lowest px-6 pb-36 pt-40"
@@ -111,7 +110,6 @@ const sectionTitleClass =
             </a>
         </section>
 
-        <!-- Ministerios -->
         <section id="ministerios" class="scroll-mt-20 px-6 py-[clamp(72px,9vw,128px)]">
             <div class="mx-auto max-w-[1240px]">
                 <div class="mb-12 flex flex-wrap items-end justify-between gap-6">
@@ -159,7 +157,6 @@ const sectionTitleClass =
             </div>
         </section>
 
-        <!-- Por qué Elim -->
         <section
             id="elim"
             class="relative scroll-mt-20 overflow-hidden border-y border-[rgba(78,70,57,0.5)] bg-surface-container-lowest px-6 py-[clamp(80px,10vw,144px)]"
@@ -188,7 +185,6 @@ const sectionTitleClass =
             </figure>
         </section>
 
-        <!-- Visión -->
         <section id="vision" class="scroll-mt-20 px-6 py-[clamp(80px,10vw,140px)]">
             <div
                 class="mx-auto flex max-w-[1240px] flex-wrap items-center gap-[clamp(40px,6vw,88px)]"
@@ -254,7 +250,6 @@ const sectionTitleClass =
             </div>
         </section>
 
-        <!-- Ubicación -->
         <section id="ubicacion" class="scroll-mt-20 px-6 pb-[clamp(72px,9vw,120px)]">
             <div class="mx-auto max-w-[1240px]">
                 <LandingMap />

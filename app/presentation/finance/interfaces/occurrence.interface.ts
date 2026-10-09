@@ -29,12 +29,10 @@ export interface OccurrenceDetail {
     notes: string | null
 }
 
-/// Una fecha concreta en que la reunión debía realizarse.
 export interface OccurrenceRecord {
     id: number
     meetingId: number
     meetingTitle: string
-    /// Código autogenerado de la reunión: SECNNN-REUNNNN-AAAAMMDD.
     meetingCode: string
     meetingTypeName: string | null
     meetingColor: string
@@ -42,19 +40,18 @@ export interface OccurrenceRecord {
     endTime: string
     date: string
     status: OccurrenceStatus
-    /// Solo la bandeja de captura lo envía; evita registrar una reunión aún en curso.
     isRecordable?: boolean
     attendance: number | null
     attendanceDetails: AttendanceDetail[]
     totalAmount: number | null
     currency: string
     notes: string | null
-    sectorId: number
-    sectorName: string
-    zoneId: number
-    zoneName: string
-    districtId: number
-    districtName: string
+    sectorId: number | null
+    sectorName: string | null
+    zoneId: number | null
+    zoneName: string | null
+    districtId: number | null
+    districtName: string | null
     leaderId: number | null
     leaderName: string | null
     recordedById: number | null
@@ -97,16 +94,15 @@ export interface OccurrenceFilters {
     to?: string
 }
 
-/// Pendientes de una misma reunión, agrupados para la bandeja.
 export interface PendingGroup {
     meetingId: number
     meetingTitle: string
     meetingCode: string
     meetingColor: string
     meetingTypeName: string | null
-    sectorName: string
-    zoneName: string
-    districtName: string
+    sectorName: string | null
+    zoneName: string | null
+    districtName: string | null
     leaderName: string | null
     startTime: string
     occurrences: OccurrenceRecord[]

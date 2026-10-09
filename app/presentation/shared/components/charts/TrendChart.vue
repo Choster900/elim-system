@@ -11,7 +11,6 @@ const props = withDefaults(
         values: TrendValue[]
         color?: string
         format?: 'number' | 'currency'
-        /// Nombre accesible del gráfico; se expone como aria-label.
         label: string
     }>(),
     {

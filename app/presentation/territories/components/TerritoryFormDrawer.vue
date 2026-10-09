@@ -30,6 +30,7 @@ const props = defineProps<{
     entity: TerritoryInput | null
     parentCentroid: LatLng | null
     parentLabel: string | null
+    autoName: string | null
     palette: readonly string[]
     usedColors?: readonly string[]
     accent: string
@@ -64,6 +65,7 @@ const form = reactive({
     supervisorId: null as number | null,
 })
 const tempPolygon = ref<LatLng[]>([])
+const manualName = ref(false)
 const nameError = ref(false)
 const supervisorError = ref(false)
 const leaderTouched = ref(false)
@@ -95,7 +97,8 @@ function resetForm() {
     locationError.value = ''
     mapError.value = ''
     if (props.mode === 'edit' && props.entity) {
-        form.name = props.entity.name
+        manualName.value = props.entity.name !== props.autoName
+        form.name = manualName.value ? props.entity.name : ''
         form.code = props.entity.code
         form.leaderId = props.entity.leaderId ?? null
         form.leaderName = props.entity.leaderName
@@ -106,6 +109,7 @@ function resetForm() {
         form.supervisorId = props.entity.supervisorId
         tempPolygon.value = props.entity.polygon.map((p) => [...p] as LatLng)
     } else {
+        manualName.value = false
         form.name = ''
         form.code = ''
         form.leaderId = null
@@ -327,7 +331,6 @@ async function initMap() {
             scrollWheelZoom: false,
             doubleClickZoom: false,
         })
-        // Initialize the viewport before adding raster or vector layers.
         map.setView(props.parentCentroid ?? DEFAULT_CENTER, 11)
         map.zoomControl.setPosition('topright')
         addLeafletRasterLayer(L, map, mapProvider.value)
@@ -390,14 +393,15 @@ onMounted(() => {
 })
 
 function save() {
-    if (!form.name.trim()) {
+    const name = manualName.value ? form.name.trim() : ''
+    if (manualName.value && name.length < 2) {
         nameError.value = true
         return
     }
     const polygon: Polygon = tempPolygon.value.map((p) => [...p] as LatLng)
     const leaderId = props.level === 'sector' || !leaderTouched.value ? undefined : form.leaderId
     emit('save', {
-        name: form.name.trim(),
+        name,
         code: form.code,
         leaderName: form.leaderName.trim(),
         leaderId,
@@ -496,12 +500,37 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                 <div class="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
                     <section class="space-y-4">
                         <div>
+                            <label
+                                class="flex cursor-pointer items-center justify-between rounded-lg border border-outline-variant bg-surface px-3 py-2.5"
+                            >
+                                <span class="min-w-0">
+                                    <span class="block text-sm font-semibold text-on-surface">
+                                        Nombrar manualmente
+                                    </span>
+                                    <span class="block truncate text-xs text-on-surface-variant">
+                                        {{
+                                            manualName
+                                                ? 'Escribe el nombre que prefieras.'
+                                                : `Se llamará «${autoName ?? codePrefix}».`
+                                        }}
+                                    </span>
+                                </span>
+                                <input
+                                    v-model="manualName"
+                                    type="checkbox"
+                                    class="size-4 accent-primary"
+                                    @change="nameError = false"
+                                />
+                            </label>
+                        </div>
+
+                        <div v-if="manualName">
                             <label :class="labelClass" for="tf-name">{{ nameLabel }} *</label>
                             <input
                                 id="tf-name"
                                 v-model="form.name"
                                 type="text"
-                                :placeholder="`Ej. ${levelLabel === 'distrito' ? 'Distrito Central' : levelLabel === 'zona' ? 'Zona Norte' : 'Sector Centro'}`"
+                                :placeholder="autoName ? `Ej. ${autoName}` : ''"
                                 :class="[
                                     inputClass,
                                     nameError ? 'border-destructive focus:border-destructive' : '',
@@ -509,7 +538,7 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                                 @input="nameError = false"
                             />
                             <p v-if="nameError" class="mt-1 text-xs text-destructive">
-                                El nombre es obligatorio.
+                                Escribe al menos 2 caracteres o desmarca «Nombrar manualmente».
                             </p>
                         </div>
 
@@ -670,7 +699,7 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                                         class="inline-flex min-h-8 max-w-full items-center truncate rounded-full px-3.5 text-[11px] font-bold uppercase tracking-wider shadow-sm"
                                         :style="{ backgroundColor: color, color: textColor }"
                                     >
-                                        {{ form.name || levelLabel }}
+                                        {{ (manualName && form.name) || autoName || levelLabel }}
                                     </span>
                                 </template>
                             </UiColorPicker>
@@ -794,7 +823,6 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Leaflet owns this node's classes; resize only its parent. -->
                                 <div
                                     ref="mapEl"
                                     class="territory-form-map min-h-0 w-full flex-1"
@@ -872,7 +900,6 @@ function onLeaderUpdate(value: string | number | (string | number)[] | null) {
         opacity: 1;
     }
 }
-/* Keep Leaflet panes/controls contained within the map box. */
 .territory-form-map {
     position: relative;
     z-index: 0;

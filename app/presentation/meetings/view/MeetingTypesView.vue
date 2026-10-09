@@ -31,17 +31,23 @@ const updateMutation = useUpdateMeetingTypeMutation()
 const deleteMutation = useDeleteMeetingTypeMutation()
 const types = computed(() => typesQuery.data.value ?? [])
 const editingId = ref<number | null>(null)
-const form = reactive({ name: '', codeSegment: '', isActive: true })
+const form = reactive({ name: '', codeSegment: '', isActive: true, isGeneral: false })
 const stats = computed(() => ({
     total: types.value.length,
     active: types.value.filter((type) => type.isActive).length,
     inactive: types.value.filter((type) => !type.isActive).length,
 }))
-const previewCode = computed(() => `D1Z1S1${form.codeSegment.trim().toUpperCase() || 'C'}1`)
+function codeExample(segment: string, isGeneral: boolean) {
+    return `${isGeneral ? 'IGL' : 'D1Z1S1'}${segment}1`
+}
+
+const previewCode = computed(() =>
+    codeExample(form.codeSegment.trim().toUpperCase() || 'C', form.isGeneral),
+)
 
 function resetForm() {
     editingId.value = null
-    Object.assign(form, { name: '', codeSegment: '', isActive: true })
+    Object.assign(form, { name: '', codeSegment: '', isActive: true, isGeneral: false })
 }
 
 function edit(type: MeetingTypeOption) {
@@ -50,6 +56,7 @@ function edit(type: MeetingTypeOption) {
         name: type.name,
         codeSegment: type.codeSegment,
         isActive: type.isActive,
+        isGeneral: type.isGeneral,
     })
 }
 
@@ -212,12 +219,15 @@ async function remove(type: MeetingTypeOption) {
                                     class="text-[10px]"
                                     >{{ type.isActive ? 'Activo' : 'Inactivo' }}</UiBadge
                                 >
+                                <UiBadge v-if="type.isGeneral" variant="outline" class="text-[10px]"
+                                    >Toda la iglesia</UiBadge
+                                >
                             </div>
                             <p class="mt-1 text-xs text-on-surface-variant">
                                 Código resultante
-                                <span class="font-mono text-primary"
-                                    >D1Z1S1{{ type.codeSegment }}1</span
-                                >
+                                <span class="font-mono text-primary">{{
+                                    codeExample(type.codeSegment, type.isGeneral)
+                                }}</span>
                             </p>
                         </div>
                         <div class="flex shrink-0 items-center gap-1">
@@ -308,6 +318,20 @@ async function remove(type: MeetingTypeOption) {
                             ></span
                         ><input
                             v-model="form.isActive"
+                            class="size-4 accent-primary"
+                            type="checkbox"
+                    /></label>
+                    <label
+                        class="flex cursor-pointer items-center justify-between rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3"
+                        ><span
+                            ><span class="block text-sm font-semibold text-on-surface"
+                                >Reunión de toda la iglesia</span
+                            ><span class="mt-0.5 block text-xs text-on-surface-variant"
+                                >Para cultos y vigilias: no piden sector, supervisor, líder ni
+                                anfitrión. No se puede cambiar si el tipo ya tiene reuniones.</span
+                            ></span
+                        ><input
+                            v-model="form.isGeneral"
                             class="size-4 accent-primary"
                             type="checkbox"
                     /></label>

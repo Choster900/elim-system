@@ -1,7 +1,4 @@
 <script setup lang="ts">
-// Versión recortada de `logo.png`: el archivo original lleva el 45% de su alto en
-// transparencia (215 px arriba y 352 px abajo), y ese vacío escalaba con la imagen
-// y engordaba el encabezado. El arte es idéntico, solo sin el margen.
 import logoUrl from '~/assets/images/system/logo-trimmed.png'
 
 const props = withDefaults(
@@ -15,8 +12,6 @@ const props = withDefaults(
     },
 )
 
-// Dimensiones reales del archivo: se declaran para que el navegador reserve el
-// espacio antes de cargarlo y el encabezado no salte.
 const INTRINSIC_WIDTH = 1195
 const INTRINSIC_HEIGHT = 687
 </script>

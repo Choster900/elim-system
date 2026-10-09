@@ -38,7 +38,6 @@ function appendCartoApiKey(tileUrl: string, apiKey: string) {
     return `${tileUrl}${separator}key=${encodeURIComponent(apiKey)}`
 }
 
-/** Returns the selected raster-map provider from the public runtime configuration. */
 export function useMapProvider() {
     const config = useRuntimeConfig()
     const providerName = config.public.mapProvider as MapProviderName

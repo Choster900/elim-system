@@ -1,4 +1,5 @@
 import type { AxiosInstance } from 'axios'
+import { territoryPathCode } from '#shared/utils/territory-code.util'
 import type {
     TerritoryHierarchy,
     TerritoryInput,
@@ -17,7 +18,7 @@ type SheetColumn = readonly [header: string, width: number]
 
 const DISTRICT_COLUMNS = [
     ['Referencia *', 24],
-    ['Nombre *', 34],
+    ['Nombre', 34],
     ['Pastor', 30],
     ['Descripción', 44],
     ['Dirección general', 44],
@@ -28,7 +29,7 @@ const DISTRICT_COLUMNS = [
 const ZONE_COLUMNS = [
     ['Referencia *', 24],
     ['Distrito *', 24],
-    ['Nombre *', 34],
+    ['Nombre', 34],
     ['Coordinador', 30],
     ['Descripción', 44],
     ['Dirección general', 44],
@@ -39,7 +40,7 @@ const ZONE_COLUMNS = [
 const SECTOR_COLUMNS = [
     ['Referencia *', 24],
     ['Zona *', 24],
-    ['Nombre *', 34],
+    ['Nombre', 34],
     ['Supervisor', 30],
     ['Descripción', 44],
     ['Dirección general', 44],
@@ -157,7 +158,6 @@ function formatPolygon(polygon: TerritoryInput['polygon']) {
     return polygon.map(([latitude, longitude]) => `${latitude},${longitude}`).join(' | ')
 }
 
-// La celda de color se pinta con su propio color para que se vea en el Excel.
 function colorSwatch(value: ExcelValue) {
     const color = normalizeHexColor(text(value))
     return color ? { backgroundColor: color.toUpperCase(), textColor: contrastColor(color) } : {}
@@ -234,10 +234,16 @@ function instructionsSheet() {
             'DISTRITO-NORTE',
         ],
         [
+            'Nombre',
+            'No',
+            'Si queda vacío se genera automáticamente: un distrito toma su código, una zona el nombre de su distrito más su código y un sector el distrito y la zona más su código.',
+            'Distrito Norte Z2',
+        ],
+        [
             'Distrito / Zona',
             'Sí',
-            'Usa la referencia de una fila del mismo archivo o el código de un registro que ya existe. Los códigos existentes están en las pestañas Distritos existentes y Zonas existentes.',
-            'DISTRITO-NORTE o DIS-001',
+            'Usa la referencia de una fila del mismo archivo o el código de un registro que ya existe. Una zona existente se identifica con el código de su distrito más el suyo (D1Z2), porque cada distrito numera sus zonas desde Z1. Los códigos están en las pestañas Distritos existentes y Zonas existentes.',
+            'DISTRITO-NORTE, D1 o D1Z2',
         ],
         [
             'Pastor / Coordinador / Supervisor',
@@ -281,7 +287,6 @@ function instructionsSheet() {
     }
 }
 
-// Hoja de consulta: título, nota, encabezados y filas. Si no hay filas muestra el aviso vacío.
 function catalogSheet(
     sheet: string,
     title: string,
@@ -374,10 +379,11 @@ function existingDistrictsSheet(hierarchy: TerritoryHierarchy | null) {
 
 function existingZonesSheet(hierarchy: TerritoryHierarchy | null) {
     const districtById = new Map((hierarchy?.districts ?? []).map((d) => [d.id, d]))
+    const { zoneCodes } = pathCodesOf(hierarchy)
     return catalogSheet(
         'Zonas existentes',
         'Zonas registradas en el sistema',
-        'Usa el código en la columna Zona * de la pestaña Sectores para colgar un sector de una zona que ya existe.',
+        'Usa el código (distrito + zona) en la columna Zona * de la pestaña Sectores para colgar un sector de una zona que ya existe.',
         [
             ['Código', 18],
             ['Nombre', 36],
@@ -387,7 +393,7 @@ function existingZonesSheet(hierarchy: TerritoryHierarchy | null) {
         (hierarchy?.zones ?? []).map((zone) => {
             const district = districtById.get(zone.districtId)
             return [
-                zone.code,
+                zoneCodes.get(zone.id) ?? zone.code,
                 zone.name,
                 district ? `${district.code} · ${district.name}` : '',
                 zone.isActive ? 'Activo' : 'Inactivo',
@@ -414,7 +420,6 @@ function colorCatalogSheet() {
     )
 }
 
-/** Hojas del libro; separado de la escritura para poder verificarlo sin navegador. */
 export function buildTerritoryWorkbookSheets(
     rows: WorkbookRows,
     roleCatalogs: TerritoryRoleCatalogs,
@@ -465,9 +470,28 @@ async function writeTerritoryWorkbook(
     ).toFile(filename)
 }
 
+function pathCodesOf(hierarchy: TerritoryHierarchy | null) {
+    const districtCodes = new Map(
+        (hierarchy?.districts ?? []).map((district) => [district.id, district.code]),
+    )
+    const zoneCodes = new Map(
+        (hierarchy?.zones ?? []).map((zone) => [
+            zone.id,
+            territoryPathCode(districtCodes.get(zone.districtId), zone.code),
+        ]),
+    )
+    const sectorCodes = new Map(
+        (hierarchy?.sectors ?? []).map((sector) => [
+            sector.id,
+            territoryPathCode(zoneCodes.get(sector.zoneId), sector.code),
+        ]),
+    )
+    return { districtCodes, zoneCodes, sectorCodes }
+}
+
 function hierarchyRows(hierarchy: TerritoryHierarchy, roleCatalogs: TerritoryRoleCatalogs) {
     const districtById = new Map(hierarchy.districts.map((district) => [district.id, district]))
-    const zoneById = new Map(hierarchy.zones.map((zone) => [zone.id, zone]))
+    const { zoneCodes, sectorCodes } = pathCodesOf(hierarchy)
     const leaderById = new Map(roleCatalogs.leaders.map((leader) => [leader.id, leader]))
     const coordinatorById = new Map(
         roleCatalogs.coordinators.map((coordinator) => [coordinator.id, coordinator]),
@@ -488,7 +512,7 @@ function hierarchyRows(hierarchy: TerritoryHierarchy, roleCatalogs: TerritoryRol
             formatPolygon(district.polygon),
         ]),
         zones: hierarchy.zones.map((zone) => [
-            zone.code,
+            zoneCodes.get(zone.id) ?? zone.code,
             districtById.get(zone.districtId)?.code ?? '',
             zone.name,
             zone.leaderId ? (coordinatorById.get(zone.leaderId)?.code ?? '') : '',
@@ -499,8 +523,8 @@ function hierarchyRows(hierarchy: TerritoryHierarchy, roleCatalogs: TerritoryRol
             formatPolygon(zone.polygon),
         ]),
         sectors: hierarchy.sectors.map((sector) => [
-            sector.code,
-            zoneById.get(sector.zoneId)?.code ?? '',
+            sectorCodes.get(sector.id) ?? sector.code,
+            zoneCodes.get(sector.zoneId) ?? '',
             sector.name,
             sector.supervisorId ? (supervisorById.get(sector.supervisorId)?.code ?? '') : '',
             sector.description,
@@ -563,7 +587,6 @@ function parseStatus(value: ExcelValue, issues: string[]) {
 function parseColor(value: ExcelValue, level: TerritoryLevel, issues: string[]) {
     const raw = text(value)
     if (!raw) return DEFAULT_COLORS[level]
-    // Acepta con o sin #, como suele quedar al copiar un color en Excel.
     const color = normalizeHexColor(raw)
     if (!color) {
         issues.push('Color: debe tener formato hexadecimal, por ejemplo #E9C176.')
@@ -572,7 +595,6 @@ function parseColor(value: ExcelValue, level: TerritoryLevel, issues: string[]) 
     return color
 }
 
-// "Referencia", "Referencia *" y "referencia*" cuentan como el mismo encabezado.
 function normalizeHeader(value: string) {
     return normalize(value).replace(/\*/g, '').replace(/\s+/g, ' ').trim()
 }
@@ -670,7 +692,7 @@ function parseTerritorySheetRows(
         if (!row.some((cell) => text(cell))) return []
         const issues: string[] = []
         const reference = text(value(row, 'Referencia *'))
-        const name = text(value(row, 'Nombre *'))
+        const name = text(value(row, 'Nombre'))
         const description = text(value(row, 'Descripción'))
         const address = text(value(row, 'Dirección general'))
         const parentReference =
@@ -681,7 +703,7 @@ function parseTerritorySheetRows(
                   : null
 
         validateText(reference, 'Referencia', 100, issues, 1)
-        validateText(name, 'Nombre', 100, issues, 2)
+        validateText(name, 'Nombre', 100, issues, name ? 2 : 0)
         validateText(description, 'Descripción', 300, issues)
         validateText(address, 'Dirección general', 300, issues)
         if (level !== 'distrito' && !parentReference) {
@@ -755,14 +777,15 @@ function markDuplicateReferences(rows: TerritoryWorkbookImportRow[]) {
 }
 
 function validateRelationships(preview: TerritoryImportPreview, hierarchy: TerritoryHierarchy) {
+    const { zoneCodes, sectorCodes } = pathCodesOf(hierarchy)
     const existingDistrictCodes = new Set(
         hierarchy.districts.map((district) => normalizeTerritoryReference(district.code)),
     )
     const existingZoneCodes = new Set(
-        hierarchy.zones.map((zone) => normalizeTerritoryReference(zone.code)),
+        [...zoneCodes.values()].map((code) => normalizeTerritoryReference(code)),
     )
     const existingSectorCodes = new Set(
-        hierarchy.sectors.map((sector) => normalizeTerritoryReference(sector.code)),
+        [...sectorCodes.values()].map((code) => normalizeTerritoryReference(code)),
     )
     const districtRows = new Map(
         preview.districts.map((row) => [normalizeTerritoryReference(row.reference), row]),
@@ -828,7 +851,6 @@ export async function parseTerritoriesWorkbook(
     )
 }
 
-/** Valida las hojas leídas; recibe el lector para poder probarlo sin navegador. */
 export async function buildTerritoryImportPreview(
     readRows: (sheet: string) => Promise<ExcelValue[][]>,
     hierarchy: TerritoryHierarchy,
@@ -897,6 +919,7 @@ export async function importTerritories(
     preview: TerritoryImportPreview,
     hierarchy: TerritoryHierarchy,
 ): Promise<TerritoryImportResult> {
+    const { districtCodes, zoneCodes } = pathCodesOf(hierarchy)
     const districtIds = new Map(
         hierarchy.districts.map((district) => [
             normalizeTerritoryReference(district.code),
@@ -904,7 +927,10 @@ export async function importTerritories(
         ]),
     )
     const zoneIds = new Map(
-        hierarchy.zones.map((zone) => [normalizeTerritoryReference(zone.code), zone.id]),
+        hierarchy.zones.map((zone) => [
+            normalizeTerritoryReference(zoneCodes.get(zone.id) ?? zone.code),
+            zone.id,
+        ]),
     )
     const result: TerritoryImportResult = {
         createdDistricts: 0,
@@ -920,6 +946,7 @@ export async function importTerritories(
             const created = await createTerritoryEntity(apiClient, 'distrito', row.input)
             const reference = normalizeTerritoryReference(row.reference)
             districtIds.set(reference, created.id)
+            districtCodes.set(created.id, created.code)
             result.resolvedDistrictCodes[reference] = created.code
             result.createdDistricts += 1
         } catch (error) {
@@ -946,7 +973,10 @@ export async function importTerritories(
             const created = await createTerritoryEntity(apiClient, 'zona', row.input, parentId)
             const reference = normalizeTerritoryReference(row.reference)
             zoneIds.set(reference, created.id)
-            result.resolvedZoneCodes[reference] = created.code
+            result.resolvedZoneCodes[reference] = territoryPathCode(
+                districtCodes.get(parentId),
+                created.code,
+            )
             result.createdZones += 1
         } catch (error) {
             result.failures.push({

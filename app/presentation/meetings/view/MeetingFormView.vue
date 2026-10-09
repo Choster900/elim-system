@@ -20,6 +20,7 @@ import {
     DialogRoot,
     DialogTitle,
 } from 'radix-vue'
+import { meetingAutoTitle } from '#shared/utils/territory-name.util'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { useMapProvider } from '~/presentation/shared/composables/useMapProvider'
 import { addLeafletRasterLayer } from '~/presentation/shared/maps/leaflet-raster.adapter'
@@ -52,6 +53,8 @@ import type {
 import {
     formatMeetingRecurrence,
     formatMeetingTimeRange,
+    GENERAL_MEETING_SCOPE_LABEL,
+    UNASSIGNED_MEETING_SCOPE_LABEL,
 } from '~/presentation/meetings/utils/meeting-format.util'
 import { EL_SALVADOR_CENTER } from '~/presentation/territories/constants/territory.constants'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
@@ -111,8 +114,6 @@ const loadError = computed(
 )
 const notFound = computed(() => isEditing.value && meetingQuery.isError.value)
 
-// Sin condicionar a import.meta.server: Vue cuenta onServerPrefetch como frontera async
-// al generar useId(); si el cliente no lo registra, los ids de radix-vue no coinciden.
 onServerPrefetch(() =>
     Promise.allSettled([
         meetingTypesQuery.suspense(),
@@ -180,10 +181,10 @@ function emptyForm(): MeetingForm {
 }
 
 const form = reactive(emptyForm())
+const manualTitle = ref(false)
 const formInitialized = ref(false)
 const isClientReady = ref(false)
 
-// ===== Map location picker (Leaflet) =====
 const mapEl = ref<HTMLElement | null>(null)
 let map: import('leaflet').Map | null = null
 let marker: import('leaflet').Marker | null = null
@@ -335,7 +336,6 @@ async function initMap() {
     }
 }
 
-// Re-center to the chosen sector while no explicit pin has been dropped yet.
 watch(
     () => form.sectorId,
     (sectorId) => {
@@ -348,7 +348,6 @@ watch(
         formErrors.supervisorId = null
     },
 )
-// Keep the pin colour in sync with the selected label colour.
 watch(
     () => form.color,
     () => {
@@ -381,13 +380,15 @@ watch(
             const existing = meetingQuery.data.value
             if (!existing) return
 
+            manualTitle.value =
+                existing.title !== meetingAutoTitle(existing.code, existing.sectorName)
             Object.assign(form, {
-                title: existing.title,
+                title: manualTitle.value ? existing.title : '',
                 description: existing.description ?? '',
                 typeId: existing.typeId,
-                sectorId: existing.sectorId,
-                leaderId: existing.leaderId,
-                supervisorId: existing.supervisorId,
+                sectorId: existing.sectorId ?? 0,
+                leaderId: existing.leaderId ?? 0,
+                supervisorId: existing.supervisorId ?? 0,
                 hostId: existing.hostId ?? 0,
                 coSupervisorIds: [...existing.coSupervisorIds],
                 date: existing.date,
@@ -411,10 +412,10 @@ watch(
             })
         } else {
             form.typeId = meetingTypes.value.find((type) => type.isActive)?.id ?? 0
-            form.sectorId = sectors.value[0]?.id ?? 0
+            form.sectorId = 0
             form.leaderId = leaders.value[0]?.id ?? 0
             form.hostId = hosts.value[0]?.id ?? 0
-            form.supervisorId = sectors.value[0]?.supervisorId ?? 0
+            form.supervisorId = 0
         }
 
         formInitialized.value = true
@@ -474,8 +475,8 @@ function clearFormErrors() {
 function validateForm() {
     clearFormErrors()
     let ok = true
-    if (!form.title.trim()) {
-        formErrors.title = 'El título es obligatorio'
+    if (manualTitle.value && form.title.trim().length < 2) {
+        formErrors.title = 'Escribe al menos 2 caracteres o desmarca «Titular manualmente»'
         ok = false
     }
     if (!form.typeId) {
@@ -506,15 +507,13 @@ function validateForm() {
         formErrors.endTime = 'Debe ser posterior al inicio'
         ok = false
     }
-    if (!form.sectorId) {
-        formErrors.sectorId = 'Asigna un sector'
-        ok = false
-    }
+    if (isGeneralType.value) return ok
+
     if (!form.leaderId) {
         formErrors.leaderId = 'Asigna un líder con rol Líder'
         ok = false
     }
-    if (!form.supervisorId) {
+    if (form.sectorId && !form.supervisorId) {
         formErrors.supervisorId = 'El sector seleccionado no tiene un supervisor asignado'
         ok = false
     }
@@ -609,14 +608,16 @@ function schedulesOverlap(first: MeetingSchedule, second: MeetingSchedule) {
 }
 
 function buildInput(): MeetingInput {
+    const isGeneral = isGeneralType.value
+    const isUnassigned = isGeneral || !form.sectorId
     return {
         typeId: form.typeId,
-        sectorId: form.sectorId,
-        leaderId: form.leaderId,
-        supervisorId: form.supervisorId,
-        hostId: form.hostId,
-        coSupervisorIds: [...form.coSupervisorIds],
-        title: form.title.trim(),
+        sectorId: isUnassigned ? null : form.sectorId,
+        leaderId: isGeneral ? null : form.leaderId,
+        supervisorId: isUnassigned ? null : form.supervisorId,
+        hostId: isGeneral ? null : form.hostId,
+        coSupervisorIds: isGeneral ? [] : [...form.coSupervisorIds],
+        title: manualTitle.value ? form.title.trim() : '',
         description: form.description.trim() || null,
         date: form.date,
         recurrenceEndDate: form.frequency === 'unica' ? null : form.recurrenceEndDate,
@@ -626,7 +627,6 @@ function buildInput(): MeetingInput {
         latitude: form.position ? form.position[0] : null,
         longitude: form.position ? form.position[1] : null,
         frequency: form.frequency,
-        // Los campos del ordinal solo viajan cuando la recurrencia los usa.
         monthlyMode: form.frequency === 'mensual' ? form.monthlyMode : null,
         weekOrdinal:
             form.frequency === 'mensual' && form.monthlyMode === 'ordinal'
@@ -643,6 +643,7 @@ function buildInput(): MeetingInput {
 }
 
 function findLeaderScheduleConflict(input: MeetingInput) {
+    if (input.leaderId === null) return null
     return (
         existingMeetings.value.find(
             (meeting) =>
@@ -700,21 +701,51 @@ function cancel() {
 }
 
 const selectedType = computed(() => meetingTypes.value.find((t) => t.id === form.typeId))
+const isGeneralType = computed(() => selectedType.value?.isGeneral ?? false)
 const availableMeetingTypes = computed(() =>
     meetingTypes.value.filter((type) => type.isActive || type.id === form.typeId),
 )
-const selectedSector = computed(() => sectors.value.find((s) => s.id === form.sectorId))
+const selectedSector = computed(() =>
+    isGeneralType.value ? undefined : sectors.value.find((s) => s.id === form.sectorId),
+)
 const nextCodePreview = computed(() => {
-    if (!selectedSector.value || !selectedType.value) return null
-    return `${selectedSector.value.districtCode}${selectedSector.value.zoneCode}${selectedSector.value.code}${selectedType.value.codeSegment}#`
+    if (isGeneralType.value && selectedType.value) {
+        return `IGL${selectedType.value.codeSegment}#`
+    }
+    if (!selectedType.value) return null
+    if (!selectedSector.value) return `${selectedType.value.codeSegment}#`
+    return `${selectedSector.value.pathCode}${selectedType.value.codeSegment}#`
 })
-const sectorOptions = computed(() =>
-    sectors.value.map((sector) => ({
+const autoTitlePreview = computed(() => {
+    const existing = isEditing.value ? meetingQuery.data.value : null
+    const sectorId = isGeneralType.value || !form.sectorId ? null : form.sectorId
+    if (existing && existing.typeId === form.typeId && existing.sectorId === sectorId) {
+        return meetingAutoTitle(existing.code, existing.sectorName)
+    }
+    if (!selectedType.value) return null
+    if (isGeneralType.value) return `IGL${selectedType.value.codeSegment}#`
+    return meetingAutoTitle(
+        `${selectedType.value.codeSegment}#`,
+        selectedSector.value?.name ?? null,
+    )
+})
+const sectorOptions = computed(() => [
+    {
+        id: 0,
+        name: 'Sin asignar',
+        zoneName: '',
+        districtName: '',
+        code: 'Se asigna después desde Territorios',
+        displayName: 'Sin asignar',
+    },
+    ...sectors.value.map((sector) => ({
         ...sector,
         displayName: `${sector.name} · ${sector.zoneName} · ${sector.districtName}`,
     })),
+])
+const selectedLeader = computed(() =>
+    isGeneralType.value ? undefined : leaders.value.find((member) => member.id === form.leaderId),
 )
-const selectedLeader = computed(() => leaders.value.find((member) => member.id === form.leaderId))
 const memberOptions = (members: typeof leaders.value) =>
     members.map((member) => ({
         ...member,
@@ -724,9 +755,9 @@ const memberOptions = (members: typeof leaders.value) =>
     }))
 const leaderOptions = computed(() => memberOptions(leaders.value))
 const hostOptions = computed(() => memberOptions(hosts.value))
-const selectedSupervisor = computed(() => ({
-    fullName: selectedSector.value?.supervisorName ?? '',
-}))
+const selectedSupervisor = computed(() =>
+    isGeneralType.value ? null : { fullName: selectedSector.value?.supervisorName ?? '' },
+)
 const isRecurring = computed(() => form.frequency !== 'unica')
 const recurrenceSummary = computed(() =>
     formatMeetingRecurrence(
@@ -854,13 +885,42 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                         </div>
 
-                        <div class="grid gap-4 md:grid-cols-[1fr_240px]">
-                            <div>
+                        <label
+                            class="mb-4 flex cursor-pointer items-center justify-between gap-3 rounded border border-outline-variant bg-surface-container px-3 py-2.5"
+                        >
+                            <span class="min-w-0">
+                                <span class="block text-sm font-semibold text-on-surface">
+                                    Titular manualmente
+                                </span>
+                                <span class="block truncate text-xs text-on-surface-variant">
+                                    {{
+                                        manualTitle
+                                            ? 'Escribe el título que prefieras.'
+                                            : autoTitlePreview
+                                              ? `Se titulará «${autoTitlePreview}».`
+                                              : 'Se titulará automáticamente al elegir tipo y sector.'
+                                    }}
+                                </span>
+                            </span>
+                            <input
+                                v-model="manualTitle"
+                                type="checkbox"
+                                class="size-4 shrink-0 accent-primary"
+                                @change="formErrors.title = null"
+                            />
+                        </label>
+
+                        <div
+                            class="grid gap-4"
+                            :class="manualTitle ? 'md:grid-cols-[1fr_240px]' : ''"
+                        >
+                            <div v-if="manualTitle">
                                 <label :class="labelClass" for="meeting-title">Título *</label>
                                 <input
                                     id="meeting-title"
                                     v-model="form.title"
                                     type="text"
+                                    :placeholder="autoTitlePreview ? `Ej. ${autoTitlePreview}` : ''"
                                     :class="[
                                         inputClass,
                                         'mt-1',
@@ -1159,9 +1219,17 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                             </div>
                         </div>
 
-                        <div class="grid gap-4 md:grid-cols-2">
+                        <p
+                            v-if="isGeneralType"
+                            class="rounded-xl border border-primary/25 bg-primary/5 p-4 text-xs leading-relaxed text-on-surface-variant"
+                        >
+                            <strong class="text-on-surface">{{ selectedType?.name }}</strong> es una
+                            reunión de toda la iglesia: no tiene sector, supervisor, líder,
+                            anfitrión ni co-supervisores.
+                        </p>
+                        <div v-else class="grid gap-4 md:grid-cols-2">
                             <div>
-                                <label :class="labelClass">Sector *</label>
+                                <label :class="labelClass">Sector</label>
                                 <div class="mt-1">
                                     <UiSearchSelect
                                         v-model="form.sectorId"
@@ -1176,6 +1244,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 </div>
                                 <p v-if="formErrors.sectorId" class="mt-1 text-xs text-destructive">
                                     {{ formErrors.sectorId }}
+                                </p>
+                                <p
+                                    v-else-if="!form.sectorId"
+                                    class="mt-1 text-xs text-on-surface-variant"
+                                >
+                                    Sin sector no genera fechas pendientes hasta que la asignes.
                                 </p>
                             </div>
                             <div>
@@ -1192,8 +1266,10 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         "
                                     >
                                         {{
-                                            selectedSupervisor.fullName ||
-                                            'Selecciona un sector con supervisor'
+                                            selectedSupervisor?.fullName ||
+                                            (form.sectorId
+                                                ? 'Selecciona un sector con supervisor'
+                                                : 'Se asignará con el sector')
                                         }}
                                     </div>
                                 </div>
@@ -1267,40 +1343,22 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     Detalles
                                 </h2>
                                 <p class="text-xs text-on-surface-variant">
-                                    Estado, asistencia y configuración.
+                                    Asistencia y configuración.
                                 </p>
                             </div>
                         </div>
 
-                        <div class="grid gap-4 md:grid-cols-2">
-                            <div>
-                                <label :class="labelClass" for="meeting-attendees"
-                                    >Asistentes esperados</label
-                                >
-                                <input
-                                    id="meeting-attendees"
-                                    v-model.number="form.expectedAttendees"
-                                    type="number"
-                                    min="0"
-                                    :class="[inputClass, 'mt-1']"
-                                />
-                            </div>
-                            <div>
-                                <label :class="labelClass">Estado</label>
-                                <label
-                                    class="mt-3 flex cursor-pointer items-center gap-2.5 text-sm text-on-surface"
-                                >
-                                    <input
-                                        v-model="form.isActive"
-                                        type="checkbox"
-                                        class="size-4 accent-primary"
-                                    />
-                                    Activa
-                                </label>
-                                <p class="mt-1 text-[11px] text-on-surface-variant">
-                                    Una reunión inactiva deja de generar fechas pendientes.
-                                </p>
-                            </div>
+                        <div>
+                            <label :class="labelClass" for="meeting-attendees"
+                                >Asistentes esperados</label
+                            >
+                            <input
+                                id="meeting-attendees"
+                                v-model.number="form.expectedAttendees"
+                                type="number"
+                                min="0"
+                                :class="[inputClass, 'mt-1']"
+                            />
                         </div>
 
                         <div class="mt-5">
@@ -1348,7 +1406,11 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 Vista previa
                             </p>
                             <h3 class="mt-3 font-display text-lg font-semibold text-on-surface">
-                                {{ form.title || 'Título de la reunión' }}
+                                {{
+                                    (manualTitle && form.title) ||
+                                    autoTitlePreview ||
+                                    'Título de la reunión'
+                                }}
                             </h3>
                             <p
                                 v-if="selectedType"
@@ -1391,7 +1453,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                         </p>
                                     </div>
                                 </div>
-                                <div v-if="selectedSector" class="flex items-start gap-2">
+                                <div class="flex items-start gap-2">
                                     <span
                                         class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center text-on-surface-variant"
                                         >·</span
@@ -1403,7 +1465,12 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                             Sector
                                         </p>
                                         <p class="text-on-surface">
-                                            {{ selectedSector.name }}
+                                            {{
+                                                selectedSector?.name ??
+                                                (isGeneralType
+                                                    ? GENERAL_MEETING_SCOPE_LABEL
+                                                    : UNASSIGNED_MEETING_SCOPE_LABEL)
+                                            }}
                                         </p>
                                     </div>
                                 </div>
@@ -1438,7 +1505,7 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                     </div>
                                 </div>
                                 <div
-                                    v-if="form.coSupervisorIds.length > 0"
+                                    v-if="!isGeneralType && form.coSupervisorIds.length > 0"
                                     class="flex items-start gap-2"
                                 >
                                     <span
@@ -1537,8 +1604,6 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
 </template>
 
 <style scoped>
-/* Contain Leaflet's high z-index panes/controls in their own stacking context
-   so they don't render over the sticky header while scrolling. */
 .meeting-map {
     position: relative;
     z-index: 0;

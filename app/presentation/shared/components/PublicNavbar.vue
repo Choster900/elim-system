@@ -11,7 +11,6 @@ function closeMenu() {
     isOpen.value = false
 }
 
-// Cierra el menú móvil si la pantalla vuelve a tamaño escritorio.
 if (import.meta.client) {
     const desktopQuery = window.matchMedia('(min-width: 900px)')
     const onDesktop = (event: MediaQueryListEvent) => {

@@ -25,6 +25,7 @@ import {
     formatMeetingPreviewDate,
     formatMeetingRecurrence,
     getMeetingFrequencyLabel,
+    getMeetingSectorLabel,
 } from '../utils/meeting-format.util'
 
 defineOptions({ name: 'MeetingDetailDrawer' })
@@ -115,7 +116,7 @@ onBeforeUnmount(destroyMap)
                             {{ meeting?.title ?? 'Cargando reunión' }}
                         </DialogTitle>
                         <DialogDescription class="mt-1 font-mono text-xs text-on-surface-variant">
-                            {{ meeting?.code ?? 'Información de programación y responsables' }}
+                            {{ meeting?.fullCode ?? 'Información de programación y responsables' }}
                         </DialogDescription>
                     </div>
                     <button
@@ -219,8 +220,13 @@ onBeforeUnmount(destroyMap)
                                             {{ meeting.location || 'Ubicación sin especificar' }}
                                         </p>
                                         <p class="mt-1 text-xs text-on-surface-variant">
-                                            {{ meeting.sectorName }} · {{ meeting.zoneName }} ·
-                                            {{ meeting.districtName }}
+                                            <template v-if="meeting.sectorName">
+                                                {{ meeting.sectorName }} · {{ meeting.zoneName }} ·
+                                                {{ meeting.districtName }}
+                                            </template>
+                                            <template v-else>
+                                                {{ getMeetingSectorLabel(meeting) }}
+                                            </template>
                                         </p>
                                     </div>
                                 </div>
@@ -262,7 +268,7 @@ onBeforeUnmount(destroyMap)
                             </div>
                         </section>
 
-                        <section class="mt-5">
+                        <section v-if="!meeting.isGeneral" class="mt-5">
                             <h3
                                 class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                             >

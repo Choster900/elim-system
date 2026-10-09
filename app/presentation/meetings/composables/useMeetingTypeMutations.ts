@@ -8,7 +8,7 @@ import {
     updateMeetingType,
 } from '../services/meeting.service'
 
-type TypeInput = Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive'>
+type TypeInput = Pick<MeetingTypeOption, 'name' | 'codeSegment' | 'isActive' | 'isGeneral'>
 
 export function useCreateMeetingTypeMutation() {
     const apiClient = useApiClient()

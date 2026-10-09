@@ -25,6 +25,7 @@ import {
     formatTimeRange,
 } from '~/utils/date/date-format.util'
 import { useOccurrencesQuery } from '../composables/useOccurrenceQueries'
+import { GENERAL_MEETING_SCOPE_LABEL } from '~/presentation/meetings/utils/meeting-format.util'
 import type { OccurrenceFilters, OccurrenceRecord } from '../interfaces/occurrence.interface'
 
 defineOptions({ name: 'OfferingHistoryView' })
@@ -38,8 +39,6 @@ const selectedZone = ref<number | null>(null)
 const selectedSector = ref<number | null>(null)
 const selectedMeeting = ref<number | null>(null)
 
-// El rango de fechas viaja al servidor, que ya sabe acotar por fecha; el territorio
-// se filtra sobre lo recibido, que es justo el alcance del usuario.
 const filters = computed<OccurrenceFilters>(() => ({
     status: 'registrada',
     ...(dateRange.value.start ? { from: dateRange.value.start } : {}),
@@ -115,14 +114,16 @@ function startFirstVisitTour() {
 
 const occurrences = computed(() => historyQuery.data.value ?? [])
 
-/// Opciones únicas, ordenadas y derivadas de lo que realmente hay.
 function optionsOf(
     list: OccurrenceRecord[],
     id: keyof OccurrenceRecord,
     name: keyof OccurrenceRecord,
 ) {
     const map = new Map<number, string>()
-    for (const item of list) map.set(item[id] as number, item[name] as string)
+    for (const item of list) {
+        if (item[id] === null || !item[name]) continue
+        map.set(item[id] as number, item[name] as string)
+    }
     return [...map.entries()]
         .map(([value, label]) => ({ value, label }))
         .sort((left, right) => left.label.localeCompare(right.label, 'es'))
@@ -152,8 +153,6 @@ const sectorOptions = computed(() =>
     ),
 )
 
-// La API ya limita la lista al alcance del usuario. El selector nunca muestra
-// reuniones fuera de los sectores supervisados o de las reuniones lideradas.
 const meetingOptions = computed(() =>
     [
         ...new Map(
@@ -167,7 +166,6 @@ const meetingOptions = computed(() =>
         .sort((left, right) => left.label.localeCompare(right.label, 'es')),
 )
 
-// Cambiar un nivel invalida los de abajo: dejar un sector de otra zona no filtra nada.
 watch(selectedDistrict, () => {
     selectedZone.value = null
     selectedSector.value = null
@@ -220,7 +218,6 @@ const visible = computed(() => {
     })
 })
 
-/// El detalle siempre se lee de lo más reciente a lo más antiguo.
 const tableRows = computed(() =>
     [...visible.value].sort(
         (left, right) =>
@@ -261,7 +258,6 @@ const stats = computed(() => {
     }
 })
 
-/// Una fecha del eje puede tener varias reuniones: se suman.
 const trendByDate = computed(() => {
     const byDate = new Map<string, number>()
     for (const item of visible.value) {
@@ -311,13 +307,13 @@ const byMeeting = computed(() => {
 const bySector = computed(() => {
     const map = new Map<string, number>()
     for (const item of visible.value) {
-        map.set(item.sectorName, (map.get(item.sectorName) ?? 0) + (item.totalAmount ?? 0))
+        const label = item.sectorName ?? GENERAL_MEETING_SCOPE_LABEL
+        map.set(label, (map.get(label) ?? 0) + (item.totalAmount ?? 0))
     }
 
     return [...map.entries()].map(([label, value]) => ({ id: label, label, value }))
 })
 
-/// Composición de la asistencia: cuántas personas de cada tipo hay tras el total.
 const byAttendanceType = computed(() => {
     const map = new Map<number, { label: string; value: number }>()
 
@@ -375,7 +371,6 @@ function openMeeting(meetingId: number) {
     return navigateTo(`/finanzas/ofrendas/reunion/${meetingId}`)
 }
 
-// Solo lo usa el buscador de texto; los selectores de territorio son UiSearchSelect.
 const controlClass =
     'rounded-md border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary'
 const filterLabelClass =
@@ -430,7 +425,6 @@ const filterLabelClass =
             </p>
         </section>
 
-        <!-- Filtros: territorio en cascada, rango de fechas y búsqueda -->
         <section
             data-tour="offerings-history-filters"
             class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4"
@@ -545,7 +539,6 @@ const filterLabelClass =
         </div>
 
         <template v-else>
-            <!-- Cifras de cabecera -->
             <section
                 data-tour="offerings-history-stats"
                 class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
@@ -606,7 +599,6 @@ const filterLabelClass =
                 </UiCard>
             </section>
 
-            <!-- Tendencia: dos medidas de escala distinta, dos gráficos -->
             <section data-tour="offerings-history-trends" class="mt-6 grid gap-4 xl:grid-cols-2">
                 <UiCard class="p-6">
                     <div class="mb-5 flex items-center gap-2">
@@ -639,7 +631,6 @@ const filterLabelClass =
                 </UiCard>
             </section>
 
-            <!-- De dónde viene -->
             <section
                 data-tour="offerings-history-breakdowns"
                 class="mt-4 grid gap-4 xl:grid-cols-2"
@@ -662,7 +653,6 @@ const filterLabelClass =
                 </UiCard>
             </section>
 
-            <!-- Quiénes son los que asisten -->
             <section v-if="byAttendanceType.length > 0" class="mt-4">
                 <UiCard class="p-6">
                     <h2 class="mb-5 text-sm font-semibold text-on-surface">
@@ -677,7 +667,6 @@ const filterLabelClass =
                 </UiCard>
             </section>
 
-            <!-- Detalle -->
             <section data-tour="offerings-history-detail" class="mt-8">
                 <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -889,9 +878,13 @@ const filterLabelClass =
                                             <MapPin class="mt-0.5 size-3.5 shrink-0 text-primary" />
                                             <div>
                                                 <p class="font-semibold text-on-surface">
-                                                    {{ item.sectorName }}
+                                                    {{
+                                                        item.sectorName ??
+                                                        GENERAL_MEETING_SCOPE_LABEL
+                                                    }}
                                                 </p>
                                                 <p
+                                                    v-if="item.sectorName"
                                                     class="mt-1 text-[11px] leading-relaxed text-on-surface-variant"
                                                 >
                                                     {{ item.zoneName }} · {{ item.districtName }}

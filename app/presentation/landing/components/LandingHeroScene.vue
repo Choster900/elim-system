@@ -1,13 +1,4 @@
 <script setup lang="ts">
-/**
- * Fondo animado de la portada: una superficie de partículas doradas que ondula como agua
- * (Elim: "doce fuentes de aguas") y motas de luz que suben.
- *
- * Rendimiento: todo el movimiento se calcula en los shaders (la CPU no toca posiciones
- * por cuadro), una sola llamada de dibujo por capa, resolución limitada a 1.5x, y la
- * animación se pausa fuera de pantalla o con la pestaña oculta. Con
- * `prefers-reduced-motion` se dibuja un único cuadro estático.
- */
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 let teardown: (() => void) | null = null
 let isUnmounted = false
@@ -70,7 +61,6 @@ async function initScene(canvas: HTMLCanvasElement) {
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const isSmallScreen = window.innerWidth < 640
-    // En pantallas chicas basta con menos puntos: se ven igual y cuestan la mitad.
     const density = isSmallScreen ? 0.55 : 1
 
     let renderer: import('three').WebGLRenderer
@@ -82,7 +72,6 @@ async function initScene(canvas: HTMLCanvasElement) {
             powerPreference: 'low-power',
         })
     } catch {
-        // Sin WebGL la portada se queda con su fondo estático.
         return
     }
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5)

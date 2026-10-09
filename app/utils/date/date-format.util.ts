@@ -71,7 +71,6 @@ function to12Hour({ hours, minutes }: { hours: number; minutes: number }) {
     }
 }
 
-// "19:00" → "7:00 p. m."
 export function formatTime12h(time: string) {
     const parsed = parseTime(time)
     if (!parsed) return time
@@ -79,7 +78,6 @@ export function formatTime12h(time: string) {
     return `${clock} ${period}`
 }
 
-// "19:00"–"20:30" → "7:00 – 8:30 p. m."; "11:00"–"13:00" → "11:00 a. m. – 1:00 p. m."
 export function formatTimeRange(startTime: string, endTime: string) {
     const start = parseTime(startTime)
     const end = parseTime(endTime)
@@ -92,7 +90,6 @@ export function formatTimeRange(startTime: string, endTime: string) {
         : `${from.clock} ${from.period} – ${to.clock} ${to.period}`
 }
 
-// "19:00"–"20:30" → "1 h 30 min"
 export function formatTimeDuration(startTime: string, endTime: string) {
     const start = parseTime(startTime)
     const end = parseTime(endTime)
