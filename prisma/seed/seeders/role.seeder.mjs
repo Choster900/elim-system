@@ -61,8 +61,16 @@ export const ROLE_SEEDS = [
             'finance.view',
             'finance.record',
             'finance.manage',
+            'finance.receive',
+            'finance.audit',
             'reports.export',
         ],
+    },
+    {
+        name: 'Comité de apoyo',
+        code: 'SUPPORT_COMMITTEE',
+        description: 'Recibe y cuenta los sobres de ofrenda entregados por los líderes.',
+        permissionCodes: ['dashboard.view', 'finance.receive'],
     },
     {
         name: 'Supervisor de sector',
