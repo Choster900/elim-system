@@ -11,6 +11,8 @@ export interface ResultSummary {
     mixedCount: number
     registered: number
     counted: number
+    directCount: number
+    directAmount: number
 }
 
 const props = defineProps<{
@@ -104,129 +106,156 @@ function segmentAria(segment: (typeof segments.value)[number]) {
 </script>
 
 <template>
-    <div class="result-summary grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-10">
-        <section aria-label="Resultado de los sobres">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
-                Resultado de los sobres
-            </p>
-            <p class="mt-1 flex flex-wrap items-baseline gap-x-2 font-sans text-on-surface">
-                <span class="text-2xl font-semibold sm:text-3xl">{{ headline }}</span>
-                <span
-                    v-if="summary.matched !== summary.envelopes"
-                    class="text-lg font-semibold text-on-surface-variant"
+    <div>
+        <div
+            v-if="summary.envelopes > 0"
+            class="result-summary grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-10"
+        >
+            <section aria-label="Resultado de los sobres">
+                <p
+                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
-                    ({{ percentLabel }})
-                </span>
-            </p>
+                    Resultado de los sobres
+                </p>
+                <p class="mt-1 flex flex-wrap items-baseline gap-x-2 font-sans text-on-surface">
+                    <span class="text-2xl font-semibold sm:text-3xl">{{ headline }}</span>
+                    <span
+                        v-if="summary.matched !== summary.envelopes"
+                        class="text-lg font-semibold text-on-surface-variant"
+                    >
+                        ({{ percentLabel }})
+                    </span>
+                </p>
 
-            <div class="relative mt-4">
-                <div
-                    class="flex h-3.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface-container-high"
-                    role="list"
-                >
+                <div class="relative mt-4">
                     <div
+                        class="flex h-3.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface-container-high"
+                        role="list"
+                    >
+                        <div
+                            v-for="segment in segments"
+                            :key="segment.key"
+                            role="listitem"
+                            tabindex="0"
+                            :aria-label="segmentAria(segment)"
+                            class="h-full min-w-[6px] basis-0 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-on-surface"
+                            :class="[
+                                segment.colorClass,
+                                activeSegment && activeSegment !== segment.key ? 'opacity-40' : '',
+                            ]"
+                            :style="{ flexGrow: segment.count }"
+                            @pointerenter="activeSegment = segment.key"
+                            @pointerleave="activeSegment = null"
+                            @focus="activeSegment = segment.key"
+                            @blur="activeSegment = null"
+                        />
+                    </div>
+                    <div
+                        v-if="activeInfo"
+                        class="pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-outline-variant bg-surface px-3 py-1.5 text-xs shadow-xl"
+                        :style="{
+                            left: `${Math.min(Math.max((activeInfo.start + activeInfo.share / 2) * 100, 12), 88)}%`,
+                        }"
+                    >
+                        <strong class="text-on-surface">
+                            {{ activeInfo.count }} {{ activeInfo.count === 1 ? 'sobre' : 'sobres' }}
+                        </strong>
+                        <span class="text-on-surface-variant">
+                            · {{ activeInfo.label.toLowerCase() }} ·
+                            {{ Math.round(activeInfo.share * 100) }}%
+                        </span>
+                        <span v-if="activeInfo.amount" class="text-on-surface-variant">
+                            · {{ formatMoney(activeInfo.amount) }}
+                        </span>
+                    </div>
+                </div>
+
+                <ul class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                    <li
                         v-for="segment in segments"
                         :key="segment.key"
-                        role="listitem"
-                        tabindex="0"
-                        :aria-label="segmentAria(segment)"
-                        class="h-full min-w-[6px] basis-0 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-on-surface"
-                        :class="[
-                            segment.colorClass,
-                            activeSegment && activeSegment !== segment.key ? 'opacity-40' : '',
-                        ]"
-                        :style="{ flexGrow: segment.count }"
+                        class="flex items-center gap-1.5 transition-opacity"
+                        :class="activeSegment && activeSegment !== segment.key ? 'opacity-50' : ''"
                         @pointerenter="activeSegment = segment.key"
                         @pointerleave="activeSegment = null"
-                        @focus="activeSegment = segment.key"
-                        @blur="activeSegment = null"
-                    />
-                </div>
-                <div
-                    v-if="activeInfo"
-                    class="pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-outline-variant bg-surface px-3 py-1.5 text-xs shadow-xl"
-                    :style="{
-                        left: `${Math.min(Math.max((activeInfo.start + activeInfo.share / 2) * 100, 12), 88)}%`,
-                    }"
+                    >
+                        <span class="size-2.5 rounded-sm" :class="segment.colorClass" />
+                        <span class="text-on-surface-variant">{{ segment.label }}</span>
+                        <strong class="text-on-surface">{{ segment.count }}</strong>
+                        <span v-if="segment.amount" class="text-on-surface-variant">
+                            ({{ formatMoney(segment.amount) }})
+                        </span>
+                    </li>
+                </ul>
+            </section>
+
+            <section aria-label="Dinero anotado contra dinero contado">
+                <p
+                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
                 >
+                    Dinero
+                </p>
+                <div class="mt-2 space-y-3">
+                    <div>
+                        <div class="mb-1 flex items-baseline justify-between gap-3 text-xs">
+                            <span class="text-on-surface-variant">Anotado por los líderes</span>
+                            <span class="text-sm font-semibold tabular-nums text-on-surface">
+                                {{ formatMoney(summary.registered) }}
+                            </span>
+                        </div>
+                        <div class="h-2.5 w-full rounded-full bg-surface-container-high">
+                            <div
+                                class="bar-registered h-full rounded-full"
+                                :style="{ width: barWidth(summary.registered) }"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <div class="mb-1 flex items-baseline justify-between gap-3 text-xs">
+                            <span class="text-on-surface-variant">Contado por el comité</span>
+                            <span class="text-sm font-semibold tabular-nums text-on-surface">
+                                {{ formatMoney(summary.counted) }}
+                            </span>
+                        </div>
+                        <div class="h-2.5 w-full rounded-full bg-surface-container-high">
+                            <div
+                                class="h-full rounded-full bg-primary"
+                                :style="{ width: barWidth(summary.counted) }"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <p class="mt-3 flex items-center justify-end gap-2 text-sm">
+                    <span class="size-2.5 rounded-full" :class="differenceTone" />
                     <strong class="text-on-surface">
-                        {{ activeInfo.count }} {{ activeInfo.count === 1 ? 'sobre' : 'sobres' }}
+                        {{
+                            toCents(difference) === 0
+                                ? 'Coinciden exactamente'
+                                : differenceLabel(difference)
+                        }}
                     </strong>
-                    <span class="text-on-surface-variant">
-                        · {{ activeInfo.label.toLowerCase() }} ·
-                        {{ Math.round(activeInfo.share * 100) }}%
-                    </span>
-                    <span v-if="activeInfo.amount" class="text-on-surface-variant">
-                        · {{ formatMoney(activeInfo.amount) }}
-                    </span>
-                </div>
-            </div>
-
-            <ul class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                <li
-                    v-for="segment in segments"
-                    :key="segment.key"
-                    class="flex items-center gap-1.5 transition-opacity"
-                    :class="activeSegment && activeSegment !== segment.key ? 'opacity-50' : ''"
-                    @pointerenter="activeSegment = segment.key"
-                    @pointerleave="activeSegment = null"
-                >
-                    <span class="size-2.5 rounded-sm" :class="segment.colorClass" />
-                    <span class="text-on-surface-variant">{{ segment.label }}</span>
-                    <strong class="text-on-surface">{{ segment.count }}</strong>
-                    <span v-if="segment.amount" class="text-on-surface-variant">
-                        ({{ formatMoney(segment.amount) }})
-                    </span>
-                </li>
-            </ul>
-        </section>
-
-        <section aria-label="Dinero anotado contra dinero contado">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
-                Dinero
-            </p>
-            <div class="mt-2 space-y-3">
-                <div>
-                    <div class="mb-1 flex items-baseline justify-between gap-3 text-xs">
-                        <span class="text-on-surface-variant">Anotado por los líderes</span>
-                        <span class="text-sm font-semibold tabular-nums text-on-surface">
-                            {{ formatMoney(summary.registered) }}
-                        </span>
-                    </div>
-                    <div class="h-2.5 w-full rounded-full bg-surface-container-high">
-                        <div
-                            class="bar-registered h-full rounded-full"
-                            :style="{ width: barWidth(summary.registered) }"
-                        />
-                    </div>
-                </div>
-                <div>
-                    <div class="mb-1 flex items-baseline justify-between gap-3 text-xs">
-                        <span class="text-on-surface-variant">Contado por el comité</span>
-                        <span class="text-sm font-semibold tabular-nums text-on-surface">
-                            {{ formatMoney(summary.counted) }}
-                        </span>
-                    </div>
-                    <div class="h-2.5 w-full rounded-full bg-surface-container-high">
-                        <div
-                            class="h-full rounded-full bg-primary"
-                            :style="{ width: barWidth(summary.counted) }"
-                        />
-                    </div>
-                </div>
-            </div>
-            <p class="mt-3 flex items-center justify-end gap-2 text-sm">
-                <span class="size-2.5 rounded-full" :class="differenceTone" />
+                    <span class="text-xs text-on-surface-variant">en total</span>
+                </p>
+            </section>
+        </div>
+        <p
+            v-if="summary.directCount > 0"
+            class="flex items-center gap-2 text-sm text-on-surface-variant"
+            :class="summary.envelopes > 0 ? 'mt-5 border-t border-outline-variant pt-4' : ''"
+        >
+            <span class="size-2.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+            <span>
+                Además,
                 <strong class="text-on-surface">
-                    {{
-                        toCents(difference) === 0
-                            ? 'Coinciden exactamente'
-                            : differenceLabel(difference)
-                    }}
+                    {{ summary.directCount }}
+                    {{ summary.directCount === 1 ? 'culto general' : 'cultos generales' }}
                 </strong>
-                <span class="text-xs text-on-surface-variant">en total</span>
-            </p>
-        </section>
+                registrados directamente por el comité:
+                <strong class="tabular-nums text-on-surface">
+                    {{ formatMoney(summary.directAmount) }}
+                </strong>
+            </span>
+        </p>
     </div>
 </template>
 
