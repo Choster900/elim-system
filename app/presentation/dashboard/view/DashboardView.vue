@@ -9,13 +9,14 @@ import {
     Compass,
     HandCoins,
     MapPin,
+    Minus,
     RefreshCw,
     TrendingDown,
     TrendingUp,
     UserPlus,
     UsersRound,
 } from '@lucide/vue'
-import DashboardDonutChart from '~/presentation/dashboard/components/DashboardDonutChart.vue'
+import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
 import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
 import { useDashboardQuery } from '~/presentation/dashboard/composables/useDashboardQuery'
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
@@ -94,33 +95,28 @@ const tourSteps: TourStep[] = [
         id: 'attendance',
         target: '[data-tour="dashboard-attendance"]',
         title: 'Tendencia de asistencia',
-        description: 'Sigue la evolución de la asistencia y el promedio de personas por reunión.',
+        description:
+            'Sigue la evolución de la asistencia, el promedio por reunión y el cumplimiento frente a lo esperado.',
     },
     {
         id: 'offerings',
         target: '[data-tour="dashboard-offerings"]',
         title: 'Tendencia de ofrendas',
-        description: 'Observa cómo cambia la recaudación y el promedio de ofrendas por reunión.',
+        description:
+            'Observa cómo cambia la recaudación, el promedio por reunión y la ofrenda por asistente.',
     },
     {
         id: 'categories',
         target: '[data-tour="dashboard-categories"]',
         title: 'Ofrendas por categoría',
         description:
-            'Este gráfico muestra cómo se distribuye el total recolectado entre las categorías.',
+            'Compara cuánto se recolectó en cada categoría y qué parte del total representa.',
     },
     {
         id: 'districts',
         target: '[data-tour="dashboard-districts"]',
         title: 'Desempeño por distrito',
         description: 'Compara la asistencia, los registros y las ofrendas de cada distrito.',
-    },
-    {
-        id: 'secondary-metrics',
-        target: '[data-tour="dashboard-secondary-metrics"]',
-        title: 'Más indicadores',
-        description:
-            'Consulta el cumplimiento de asistencia, promedios de ofrenda y fechas analizadas.',
     },
     {
         id: 'recent',
@@ -172,7 +168,7 @@ const periodOptions: Array<{ value: DashboardPeriodDays; label: string }> = [
 ]
 
 const filterLabelClass =
-    'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
+    'mb-1.5 block text-xs font-semibold uppercase tracking-wider text-on-surface-variant'
 
 function selectPeriod(period: DashboardPeriodDays) {
     selectedPeriod.value = period
@@ -208,11 +204,25 @@ const maximumDistrictOffering = computed(() =>
 
 const canCreateMembers = computed(() => authStore.hasPermission('members.create'))
 const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
-const canViewMeetings = computed(() => authStore.hasPermission('meetings.view'))
-const canManageFinance = computed(() => authStore.hasPermission('finance.manage'))
+const canRecordFinance = computed(() => authStore.hasPermission('finance.record'))
 const canViewFinance = computed(() => authStore.hasPermission('finance.view'))
 const hasQuickActions = computed(
-    () => canCreateMembers.value || canManageMeetings.value || canManageFinance.value,
+    () => canCreateMembers.value || canManageMeetings.value || canRecordFinance.value,
+)
+const NuxtLinkComponent = resolveComponent('NuxtLink')
+
+const categoryItems = computed(
+    () =>
+        summary.value?.categoryDistribution.map((category) => ({
+            id: category.id,
+            label: category.name,
+            value: category.value,
+            meta: `${formatNumber(category.percentage)}%`,
+        })) ?? [],
+)
+
+const attendanceGoalWidth = computed(() =>
+    Math.min(100, Math.max(0, summary.value?.metrics.attendanceGoalRate ?? 0)),
 )
 
 onServerPrefetch(() =>
@@ -268,6 +278,11 @@ function formatDate(value: string, options: Intl.DateTimeFormatOptions = {}) {
         .replace('.', '')
 }
 
+function changeDirection(metric: DashboardMetric) {
+    if (metric.changePercentage === null || metric.changePercentage === 0) return 'flat'
+    return metric.changePercentage > 0 ? 'up' : 'down'
+}
+
 function changeLabel(metric: DashboardMetric) {
     if (metric.changePercentage === null) return 'Sin datos en el período anterior'
     if (metric.changePercentage === 0) return 'Sin variación frente al período anterior'
@@ -281,40 +296,44 @@ const metricCards = computed(() => {
         {
             label: 'Ofrendas recolectadas',
             value: formatCompactMoney(summary.value.metrics.offerings.value),
-            metric: summary.value.metrics.offerings,
+            meta: changeLabel(summary.value.metrics.offerings),
+            direction: changeDirection(summary.value.metrics.offerings),
             icon: HandCoins,
         },
         {
             label: 'Asistencia registrada',
             value: formatNumber(summary.value.metrics.attendance.value),
-            metric: summary.value.metrics.attendance,
+            meta: changeLabel(summary.value.metrics.attendance),
+            direction: changeDirection(summary.value.metrics.attendance),
             icon: UsersRound,
         },
         {
             label: 'Reuniones documentadas',
             value: formatNumber(summary.value.metrics.registeredMeetings.value),
-            metric: summary.value.metrics.registeredMeetings,
+            meta: changeLabel(summary.value.metrics.registeredMeetings),
+            direction: changeDirection(summary.value.metrics.registeredMeetings),
             icon: CalendarDays,
         },
         {
             label: 'Miembros activos',
             value: formatNumber(summary.value.metrics.activeMembers),
-            metric: summary.value.metrics.newMembers,
+            meta: `${formatNumber(summary.value.metrics.newMembers.value)} incorporados en el período`,
+            direction: null,
             icon: Activity,
-            customMeta: `${formatNumber(summary.value.metrics.newMembers.value)} incorporados en el período`,
-            showChange: false,
         },
     ]
 })
 
-function openRecentOffering(id: number) {
-    if (canManageFinance.value) navigateTo(`/finanzas/ofrendas/${id}/editar`)
-    else if (canViewFinance.value) navigateTo('/finanzas/ofrendas')
+function recentOfferingLink(meetingId: number) {
+    return canViewFinance.value ? { to: `/finanzas/ofrendas/reunion/${meetingId}` } : {}
 }
 
-function openMeeting(id: number) {
-    if (canViewMeetings.value) navigateTo(`/catalogos/reuniones/${id}/editar`)
+function upcomingMeetingLink(id: number) {
+    return canManageMeetings.value ? { to: `/catalogos/reuniones/${id}/editar` } : {}
 }
+
+const quickActionClass =
+    'inline-flex h-10 items-center gap-2 rounded-md border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
 </script>
 
 <template>
@@ -365,12 +384,16 @@ function openMeeting(id: number) {
                 </div>
                 <button
                     type="button"
-                    class="flex size-10 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
-                    aria-label="Actualizar dashboard"
+                    class="flex size-10 items-center justify-center rounded-lg border border-outline-variant bg-surface text-on-surface-variant transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60"
+                    :aria-label="isRefreshing ? 'Actualizando dashboard' : 'Actualizar dashboard'"
+                    :aria-busy="isRefreshing"
                     :disabled="dashboardQuery.isFetching.value"
                     @click="dashboardQuery.refetch()"
                 >
-                    <RefreshCw :class="['size-4', isRefreshing ? 'animate-spin' : '']" />
+                    <RefreshCw
+                        :class="['size-4', isRefreshing ? 'animate-spin' : '']"
+                        aria-hidden="true"
+                    />
                 </button>
             </div>
         </header>
@@ -384,8 +407,10 @@ function openMeeting(id: number) {
                 class="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end lg:flex-1"
             >
                 <div class="shrink-0">
-                    <span :class="filterLabelClass">Período</span>
+                    <span id="dashboard-period-label" :class="filterLabelClass">Período</span>
                     <div
+                        role="group"
+                        aria-labelledby="dashboard-period-label"
                         class="flex h-11 items-center gap-1 rounded-lg border border-outline-variant bg-surface p-1"
                     >
                         <button
@@ -393,7 +418,7 @@ function openMeeting(id: number) {
                             :key="period.value"
                             type="button"
                             :class="[
-                                'h-full flex-1 whitespace-nowrap rounded-md px-3.5 text-[11px] font-semibold uppercase tracking-wider transition-colors sm:flex-none',
+                                'h-full flex-1 whitespace-nowrap rounded-md px-3.5 text-xs font-semibold uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:flex-none',
                                 !appliedRange && selectedPeriod === period.value
                                     ? 'bg-primary text-primary-foreground shadow-sm'
                                     : 'text-on-surface-variant hover:bg-surface-container',
@@ -433,11 +458,39 @@ function openMeeting(id: number) {
                     clearable
                     placeholder="Todos los distritos"
                     search-placeholder="Buscar distrito..."
+                    aria-label="Distrito"
                 />
             </div>
         </section>
 
-        <section v-if="isLoading" class="mt-8 space-y-6" aria-label="Cargando dashboard">
+        <p
+            v-if="summary"
+            class="mt-3 flex items-start gap-2 text-xs text-on-surface-variant"
+            aria-live="polite"
+        >
+            <CalendarDays class="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <span>
+                Mostrando del
+                <strong class="text-on-surface">
+                    {{ formatDate(summary.period.startDate, { year: 'numeric' }) }}
+                </strong>
+                al
+                <strong class="text-on-surface">
+                    {{ formatDate(summary.period.endDate, { year: 'numeric' }) }}
+                </strong>
+                ({{ summary.period.days }} días). Los cambios se comparan con el
+                {{ formatDate(summary.period.previousStartDate) }} –
+                {{ formatDate(summary.period.previousEndDate, { year: 'numeric' }) }}.
+            </span>
+        </p>
+
+        <section
+            v-if="isLoading"
+            class="mt-8 space-y-6"
+            aria-label="Cargando dashboard"
+            aria-busy="true"
+        >
+            <span class="sr-only">Cargando indicadores…</span>
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div
                     v-for="index in 4"
@@ -472,55 +525,66 @@ function openMeeting(id: number) {
         <template v-else>
             <section
                 data-tour="dashboard-metrics"
-                class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                aria-labelledby="dashboard-metrics-title"
+                class="mt-8"
             >
-                <UiCard
-                    v-for="card in metricCards"
-                    :key="card.label"
-                    class="group relative overflow-hidden rounded-xl p-6 transition-colors hover:border-primary/60"
-                >
-                    <div class="flex items-start justify-between gap-4">
+                <h2 id="dashboard-metrics-title" class="sr-only">Indicadores principales</h2>
+                <dl class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <UiCard
+                        v-for="card in metricCards"
+                        :key="card.label"
+                        class="rounded-xl p-6 transition-colors hover:border-primary/60"
+                    >
                         <div
                             class="flex size-11 items-center justify-center rounded-lg bg-primary/10"
+                            aria-hidden="true"
                         >
                             <component :is="card.icon" class="size-5 text-primary" />
                         </div>
-                        <span
-                            v-if="
-                                card.showChange !== false && card.metric.changePercentage !== null
-                            "
-                            :class="[
-                                'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold',
-                                card.metric.changePercentage >= 0
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'bg-destructive/10 text-destructive',
-                            ]"
+                        <dt
+                            class="mt-5 text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
                         >
-                            <TrendingUp v-if="card.metric.changePercentage >= 0" class="size-3" />
-                            <TrendingDown v-else class="size-3" />
-                            {{ Math.abs(card.metric.changePercentage) }}%
-                        </span>
-                    </div>
-                    <p
-                        class="mt-6 text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                    >
-                        {{ card.label }}
-                    </p>
-                    <p class="mt-1 font-display text-3xl font-semibold text-on-surface">
-                        {{ card.value }}
-                    </p>
-                    <p class="mt-2 min-h-8 text-xs leading-4 text-on-surface-variant">
-                        {{ card.customMeta ?? changeLabel(card.metric) }}
-                    </p>
-                </UiCard>
+                            {{ card.label }}
+                        </dt>
+                        <dd class="mt-1 font-sans text-3xl font-semibold text-on-surface">
+                            {{ card.value }}
+                        </dd>
+                        <dd
+                            class="mt-2 flex items-start gap-1.5 text-xs leading-5"
+                            :class="{
+                                'text-primary': card.direction === 'up',
+                                'text-destructive': card.direction === 'down',
+                                'text-on-surface-variant':
+                                    card.direction === 'flat' || card.direction === null,
+                            }"
+                        >
+                            <TrendingUp
+                                v-if="card.direction === 'up'"
+                                class="mt-0.5 size-3.5 shrink-0"
+                                aria-hidden="true"
+                            />
+                            <TrendingDown
+                                v-else-if="card.direction === 'down'"
+                                class="mt-0.5 size-3.5 shrink-0"
+                                aria-hidden="true"
+                            />
+                            <Minus
+                                v-else-if="card.direction === 'flat'"
+                                class="mt-0.5 size-3.5 shrink-0"
+                                aria-hidden="true"
+                            />
+                            <span>{{ card.meta }}</span>
+                        </dd>
+                    </UiCard>
+                </dl>
             </section>
 
             <section class="mt-6 grid gap-6 xl:grid-cols-2">
                 <UiCard data-tour="dashboard-attendance" class="rounded-xl p-6 md:p-8">
-                    <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                    <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                         <div>
                             <p
-                                class="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary"
+                                class="text-xs font-semibold uppercase tracking-[0.2em] text-primary"
                             >
                                 Participación
                             </p>
@@ -528,31 +592,58 @@ function openMeeting(id: number) {
                                 Tendencia de asistencia
                             </h2>
                             <p class="mt-1 text-xs text-on-surface-variant">
-                                Personas registradas en
-                                {{ summary.metrics.registeredMeetings.value }}
-                                reuniones documentadas.
+                                Personas registradas en cada fecha de reunión.
                             </p>
                         </div>
-                        <div class="text-left sm:text-right">
-                            <p class="text-xs text-on-surface-variant">Promedio por reunión</p>
-                            <p class="font-display text-xl font-semibold text-on-surface">
-                                {{ formatNumber(summary.metrics.averageAttendance) }}
-                            </p>
+                        <dl class="flex gap-6 sm:text-right">
+                            <div>
+                                <dt class="text-xs text-on-surface-variant">
+                                    Promedio por reunión
+                                </dt>
+                                <dd class="text-xl font-semibold text-on-surface">
+                                    {{ formatNumber(summary.metrics.averageAttendance) }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs text-on-surface-variant">Cumplimiento</dt>
+                                <dd class="text-xl font-semibold text-on-surface">
+                                    {{ formatNumber(summary.metrics.attendanceGoalRate) }}%
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="mt-4">
+                        <div
+                            class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest"
+                            role="meter"
+                            aria-label="Asistencia frente a la esperada"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            :aria-valuenow="attendanceGoalWidth"
+                            :aria-valuetext="`${formatNumber(summary.metrics.attendanceGoalRate)}% de la asistencia esperada`"
+                        >
+                            <div
+                                class="h-full rounded-full bg-primary"
+                                :style="{ width: `${attendanceGoalWidth}%` }"
+                            />
                         </div>
+                        <p class="mt-1 text-xs text-on-surface-variant">
+                            Asistencia frente a la esperada en las reuniones
+                        </p>
                     </div>
                     <TrendChart
-                        class="mt-6"
+                        class="mt-5"
                         :values="attendanceTrend"
-                        label="Tendencia de asistencia por período"
+                        label="Asistencia por período"
                         color="var(--chart-1)"
                     />
                 </UiCard>
 
                 <UiCard data-tour="dashboard-offerings" class="rounded-xl p-6 md:p-8">
-                    <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                    <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                         <div>
                             <p
-                                class="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary"
+                                class="text-xs font-semibold uppercase tracking-[0.2em] text-primary"
                             >
                                 Finanzas
                             </p>
@@ -563,80 +654,91 @@ function openMeeting(id: number) {
                                 Recaudación consolidada por fecha de reunión.
                             </p>
                         </div>
-                        <div class="text-left sm:text-right">
-                            <p class="text-xs text-on-surface-variant">Promedio por reunión</p>
-                            <p class="font-display text-xl font-semibold text-on-surface">
-                                {{ formatCompactMoney(summary.metrics.averageOffering) }}
-                            </p>
-                        </div>
+                        <dl class="flex gap-6 sm:text-right">
+                            <div>
+                                <dt class="text-xs text-on-surface-variant">
+                                    Promedio por reunión
+                                </dt>
+                                <dd class="text-xl font-semibold text-on-surface">
+                                    {{ formatCompactMoney(summary.metrics.averageOffering) }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs text-on-surface-variant">Por asistente</dt>
+                                <dd class="text-xl font-semibold text-on-surface">
+                                    {{ formatMoney(summary.metrics.offeringPerAttendee) }}
+                                </dd>
+                            </div>
+                        </dl>
                     </div>
                     <TrendChart
                         class="mt-6"
                         :values="offeringTrend"
-                        label="Tendencia de ofrendas por período"
+                        label="Ofrendas por período"
                         color="var(--chart-2)"
                         format="currency"
                     />
                 </UiCard>
             </section>
 
-            <section class="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+            <section class="mt-6 grid gap-6 xl:grid-cols-2">
                 <UiCard data-tour="dashboard-categories" class="rounded-xl p-6 md:p-8">
-                    <div class="mb-7">
-                        <p
-                            class="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary"
-                        >
+                    <div class="mb-6">
+                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
                             Composición
                         </p>
                         <h2 class="mt-2 font-display text-2xl font-semibold text-on-surface">
                             Ofrendas por categoría
                         </h2>
+                        <p class="mt-1 text-xs text-on-surface-variant">
+                            Monto recolectado y porcentaje del total.
+                        </p>
                     </div>
-                    <DashboardDonutChart
-                        :items="summary.categoryDistribution"
-                        total-label="Total recolectado"
+                    <RankedBarList
+                        :items="categoryItems"
+                        label="Ofrendas por categoría"
+                        format="currency"
+                        empty-message="Aún no hay categorías registradas en este período."
+                        :limit="6"
                     />
                 </UiCard>
 
                 <UiCard data-tour="dashboard-districts" class="rounded-xl p-6 md:p-8">
-                    <div class="mb-7 flex items-end justify-between gap-4">
-                        <div>
-                            <p
-                                class="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary"
-                            >
-                                Territorio
-                            </p>
-                            <h2 class="mt-2 font-display text-2xl font-semibold text-on-surface">
-                                Desempeño por distrito
-                            </h2>
-                        </div>
-                        <span class="text-[10px] uppercase tracking-wider text-on-surface-variant">
-                            Ofrendas
-                        </span>
+                    <div class="mb-6">
+                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                            Territorio
+                        </p>
+                        <h2 class="mt-2 font-display text-2xl font-semibold text-on-surface">
+                            Desempeño por distrito
+                        </h2>
+                        <p class="mt-1 text-xs text-on-surface-variant">
+                            Ofrendas de cada distrito, con su asistencia y registros.
+                        </p>
                     </div>
 
-                    <div v-if="summary.districtPerformance.length" class="space-y-5">
-                        <div
+                    <ul v-if="summary.districtPerformance.length" class="space-y-5">
+                        <li
                             v-for="district in summary.districtPerformance"
                             :key="district.id"
                             class="space-y-2"
                         >
                             <div class="flex items-end justify-between gap-4">
-                                <div>
-                                    <p class="text-sm font-semibold text-on-surface">
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-semibold text-on-surface">
                                         {{ district.name }}
                                     </p>
-                                    <p class="mt-0.5 text-[11px] text-on-surface-variant">
+                                    <p class="mt-0.5 text-xs text-on-surface-variant">
                                         {{ formatNumber(district.attendance) }} asistentes ·
                                         {{ district.meetingCount }} registros
                                     </p>
                                 </div>
-                                <p class="font-display text-sm font-semibold text-primary">
+                                <p class="text-sm font-semibold tabular-nums text-on-surface">
                                     {{ formatCompactMoney(district.offerings) }}
                                 </p>
                             </div>
                             <div
                                 class="h-2 overflow-hidden rounded-full bg-surface-container-highest"
+                                aria-hidden="true"
                             >
                                 <div
                                     class="h-full rounded-full bg-primary transition-[width] duration-500"
@@ -648,77 +750,12 @@ function openMeeting(id: number) {
                                     }"
                                 />
                             </div>
-                        </div>
-                    </div>
+                        </li>
+                    </ul>
                     <p v-else class="py-12 text-center text-sm text-on-surface-variant">
                         No hay registros territoriales en este período.
                     </p>
                 </UiCard>
-            </section>
-
-            <section
-                data-tour="dashboard-secondary-metrics"
-                class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-            >
-                <div class="rounded-xl border border-outline-variant bg-surface-container-low p-5">
-                    <p
-                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                    >
-                        Cumplimiento de asistencia
-                    </p>
-                    <div class="mt-3 flex items-end gap-2">
-                        <strong class="font-display text-2xl text-on-surface">
-                            {{ formatNumber(summary.metrics.attendanceGoalRate) }}%
-                        </strong>
-                        <span class="pb-1 text-[11px] text-on-surface-variant">de lo esperado</span>
-                    </div>
-                    <div
-                        class="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-container-highest"
-                    >
-                        <div
-                            class="h-full rounded-full bg-primary"
-                            :style="{
-                                width: `${Math.min(100, summary.metrics.attendanceGoalRate)}%`,
-                            }"
-                        />
-                    </div>
-                </div>
-                <div class="rounded-xl border border-outline-variant bg-surface-container-low p-5">
-                    <p
-                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                    >
-                        Ofrenda por asistente
-                    </p>
-                    <strong class="mt-3 block font-display text-2xl text-on-surface">
-                        {{ formatMoney(summary.metrics.offeringPerAttendee) }}
-                    </strong>
-                    <p class="mt-2 text-[11px] text-on-surface-variant">Promedio consolidado</p>
-                </div>
-                <div class="rounded-xl border border-outline-variant bg-surface-container-low p-5">
-                    <p
-                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                    >
-                        Ofrenda promedio
-                    </p>
-                    <strong class="mt-3 block font-display text-2xl text-on-surface">
-                        {{ formatMoney(summary.metrics.averageOffering) }}
-                    </strong>
-                    <p class="mt-2 text-[11px] text-on-surface-variant">Por reunión registrada</p>
-                </div>
-                <div class="rounded-xl border border-outline-variant bg-surface-container-low p-5">
-                    <p
-                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                    >
-                        Período analizado
-                    </p>
-                    <strong class="mt-3 block font-display text-lg text-on-surface">
-                        {{ formatDate(summary.period.startDate) }} –
-                        {{ formatDate(summary.period.endDate) }}
-                    </strong>
-                    <p class="mt-2 text-[11px] text-on-surface-variant">
-                        {{ summary.period.days }} días de actividad
-                    </p>
-                </div>
             </section>
 
             <section class="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
@@ -728,7 +765,7 @@ function openMeeting(id: number) {
                     >
                         <div>
                             <p
-                                class="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary"
+                                class="text-xs font-semibold uppercase tracking-[0.2em] text-primary"
                             >
                                 Últimos registros
                             </p>
@@ -736,56 +773,54 @@ function openMeeting(id: number) {
                                 Asistencia y ofrendas
                             </h2>
                         </div>
-                        <button
+                        <NuxtLink
                             v-if="canViewFinance"
-                            type="button"
-                            class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary"
-                            @click="navigateTo('/finanzas/ofrendas')"
+                            to="/finanzas/ofrendas/historial"
+                            class="flex items-center gap-1 rounded text-xs font-semibold uppercase tracking-wider text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         >
-                            Ver todos <ArrowRight class="size-3.5" />
-                        </button>
+                            Ver historial <ArrowRight class="size-3.5" aria-hidden="true" />
+                        </NuxtLink>
                     </div>
 
-                    <div
+                    <ul
                         v-if="summary.recentOfferings.length"
                         class="divide-y divide-outline-variant"
                     >
-                        <button
-                            v-for="offering in summary.recentOfferings"
-                            :key="offering.id"
-                            type="button"
-                            :class="[
-                                'grid w-full grid-cols-[1fr_auto] gap-4 px-6 py-4 text-left transition-colors md:grid-cols-[minmax(0,1fr)_120px_130px] md:px-8',
-                                canViewFinance
-                                    ? 'hover:bg-surface-container-low'
-                                    : 'cursor-default',
-                            ]"
-                            @click="openRecentOffering(offering.id)"
-                        >
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-semibold text-on-surface">
-                                    {{ offering.meetingTitle }}
-                                </p>
-                                <p class="mt-1 truncate text-[11px] text-on-surface-variant">
-                                    {{ offering.districtName }} · {{ formatDate(offering.date) }}
-                                </p>
-                            </div>
-                            <div class="hidden self-center text-right md:block">
-                                <p class="text-sm font-semibold text-on-surface">
-                                    {{ offering.attendance }}
-                                </p>
-                                <p class="text-[10px] uppercase text-on-surface-variant">
-                                    asistentes
-                                </p>
-                            </div>
-                            <div class="self-center text-right">
-                                <p class="font-display text-sm font-semibold text-primary">
-                                    {{ formatMoney(offering.totalAmount, offering.currency) }}
-                                </p>
-                                <p class="text-[10px] uppercase text-on-surface-variant">ofrenda</p>
-                            </div>
-                        </button>
-                    </div>
+                        <li v-for="offering in summary.recentOfferings" :key="offering.id">
+                            <component
+                                :is="canViewFinance ? NuxtLinkComponent : 'div'"
+                                v-bind="recentOfferingLink(offering.meetingId)"
+                                :class="[
+                                    'grid w-full grid-cols-[1fr_auto] gap-4 px-6 py-4 text-left transition-colors md:grid-cols-[minmax(0,1fr)_120px_130px] md:px-8',
+                                    canViewFinance
+                                        ? 'hover:bg-surface-container-low focus-visible:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary'
+                                        : '',
+                                ]"
+                            >
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-semibold text-on-surface">
+                                        {{ offering.meetingTitle }}
+                                    </p>
+                                    <p class="mt-1 truncate text-xs text-on-surface-variant">
+                                        {{ offering.districtName }} ·
+                                        {{ formatDate(offering.date) }}
+                                    </p>
+                                </div>
+                                <div class="hidden self-center text-right md:block">
+                                    <p class="text-sm font-semibold text-on-surface">
+                                        {{ offering.attendance }}
+                                    </p>
+                                    <p class="text-xs text-on-surface-variant">asistentes</p>
+                                </div>
+                                <div class="self-center text-right">
+                                    <p class="text-sm font-semibold text-on-surface">
+                                        {{ formatMoney(offering.totalAmount, offering.currency) }}
+                                    </p>
+                                    <p class="text-xs text-on-surface-variant">ofrenda</p>
+                                </div>
+                            </component>
+                        </li>
+                    </ul>
                     <p v-else class="px-8 py-14 text-center text-sm text-on-surface-variant">
                         Aún no hay ofrendas registradas en este período.
                     </p>
@@ -795,7 +830,7 @@ function openMeeting(id: number) {
                     <div class="mb-6 flex items-end justify-between gap-4">
                         <div>
                             <p
-                                class="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary"
+                                class="text-xs font-semibold uppercase tracking-[0.2em] text-primary"
                             >
                                 Agenda
                             </p>
@@ -803,51 +838,56 @@ function openMeeting(id: number) {
                                 Próximas reuniones
                             </h2>
                         </div>
-                        <CalendarDays class="size-5 text-primary" />
+                        <CalendarDays class="size-5 text-primary" aria-hidden="true" />
                     </div>
 
-                    <div v-if="summary.upcomingMeetings.length" class="space-y-3">
-                        <button
-                            v-for="meeting in summary.upcomingMeetings"
-                            :key="meeting.id"
-                            type="button"
-                            :class="[
-                                'flex w-full gap-4 rounded-lg border border-outline-variant p-4 text-left transition-colors',
-                                canViewMeetings
-                                    ? 'hover:border-primary hover:bg-surface-container-low'
-                                    : 'cursor-default',
-                            ]"
-                            @click="openMeeting(meeting.id)"
-                        >
-                            <span
-                                class="mt-1 h-11 w-1 flex-none rounded-full"
-                                :style="{ backgroundColor: meeting.color }"
-                            />
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-semibold text-on-surface">
-                                    {{ meeting.title }}
-                                </p>
-                                <p class="mt-1 text-[11px] text-on-surface-variant">
-                                    {{ meeting.typeName }} · {{ meeting.sectorName }}
-                                </p>
-                                <div
-                                    class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-on-surface-variant"
-                                >
-                                    <span class="inline-flex items-center gap-1">
-                                        <Clock3 class="size-3" />
-                                        {{
-                                            formatDate(meeting.occurrenceDate, { weekday: 'short' })
-                                        }}
-                                        ·
-                                        {{ formatTime12h(meeting.startTime) }}
-                                    </span>
-                                    <span class="inline-flex items-center gap-1">
-                                        <MapPin class="size-3" /> {{ meeting.location }}
-                                    </span>
+                    <ul v-if="summary.upcomingMeetings.length" class="space-y-3">
+                        <li v-for="meeting in summary.upcomingMeetings" :key="meeting.id">
+                            <component
+                                :is="canManageMeetings ? NuxtLinkComponent : 'div'"
+                                v-bind="upcomingMeetingLink(meeting.id)"
+                                :class="[
+                                    'flex w-full gap-4 rounded-lg border border-outline-variant p-4 text-left transition-colors',
+                                    canManageMeetings
+                                        ? 'hover:border-primary hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                                        : '',
+                                ]"
+                            >
+                                <span
+                                    class="mt-1 h-11 w-1 flex-none rounded-full"
+                                    :style="{ backgroundColor: meeting.color }"
+                                    aria-hidden="true"
+                                />
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-sm font-semibold text-on-surface">
+                                        {{ meeting.title }}
+                                    </p>
+                                    <p class="mt-1 text-xs text-on-surface-variant">
+                                        {{ meeting.typeName }} · {{ meeting.sectorName }}
+                                    </p>
+                                    <div
+                                        class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-on-surface-variant"
+                                    >
+                                        <span class="inline-flex items-center gap-1">
+                                            <Clock3 class="size-3" aria-hidden="true" />
+                                            <span class="capitalize">
+                                                {{
+                                                    formatDate(meeting.occurrenceDate, {
+                                                        weekday: 'short',
+                                                    })
+                                                }}
+                                            </span>
+                                            · {{ formatTime12h(meeting.startTime) }}
+                                        </span>
+                                        <span class="inline-flex items-center gap-1">
+                                            <MapPin class="size-3" aria-hidden="true" />
+                                            {{ meeting.location }}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
-                        </button>
-                    </div>
+                            </component>
+                        </li>
+                    </ul>
                     <p v-else class="py-14 text-center text-sm text-on-surface-variant">
                         No hay reuniones próximas configuradas.
                     </p>
@@ -858,40 +898,45 @@ function openMeeting(id: number) {
                 <UiCard class="rounded-xl p-6 md:px-8">
                     <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <p class="font-display text-lg font-semibold text-on-surface">
+                            <h2 class="font-display text-lg font-semibold text-on-surface">
                                 Acciones rápidas
-                            </p>
+                            </h2>
                             <p class="mt-1 text-xs text-on-surface-variant">
                                 Continúa con las operaciones más frecuentes.
                             </p>
                         </div>
                         <div class="flex flex-wrap gap-3">
-                            <UiButton
+                            <NuxtLink
                                 v-if="canCreateMembers"
-                                variant="outline"
-                                type="button"
-                                class="rounded"
-                                @click="navigateTo('/comunidad/miembros/nuevo')"
+                                to="/comunidad/miembros/nuevo"
+                                :class="[
+                                    quickActionClass,
+                                    'border-outline-variant bg-surface text-on-surface hover:border-primary',
+                                ]"
                             >
-                                <UserPlus class="mr-2 size-4" /> Nuevo miembro
-                            </UiButton>
-                            <UiButton
+                                <UserPlus class="size-4" aria-hidden="true" /> Nuevo miembro
+                            </NuxtLink>
+                            <NuxtLink
                                 v-if="canManageMeetings"
-                                variant="outline"
-                                type="button"
-                                class="rounded"
-                                @click="navigateTo('/catalogos/reuniones/nueva')"
+                                to="/catalogos/reuniones/nueva"
+                                :class="[
+                                    quickActionClass,
+                                    'border-outline-variant bg-surface text-on-surface hover:border-primary',
+                                ]"
                             >
-                                <CalendarPlus class="mr-2 size-4" /> Nueva reunión
-                            </UiButton>
-                            <UiButton
-                                v-if="canManageFinance"
-                                type="button"
-                                class="rounded"
-                                @click="navigateTo('/finanzas/ofrendas/nueva')"
+                                <CalendarPlus class="size-4" aria-hidden="true" /> Nueva reunión
+                            </NuxtLink>
+                            <NuxtLink
+                                v-if="canRecordFinance"
+                                to="/finanzas/ofrendas"
+                                :class="[
+                                    quickActionClass,
+                                    'border-primary bg-primary text-primary-foreground hover:opacity-90',
+                                ]"
                             >
-                                <CircleDollarSign class="mr-2 size-4" /> Registrar ofrenda
-                            </UiButton>
+                                <CircleDollarSign class="size-4" aria-hidden="true" /> Registrar
+                                ofrendas
+                            </NuxtLink>
                         </div>
                     </div>
                 </UiCard>
