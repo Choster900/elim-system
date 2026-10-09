@@ -71,6 +71,7 @@ export const occurrenceFiltersSchema = Joi.object<OccurrenceFiltersDto>({
     status: Joi.string().valid('pendiente', 'registrada'),
     from: Joi.string().isoDate(),
     to: Joi.string().isoDate(),
+    dateField: Joi.string().valid('reunion', 'registro'),
 })
 
 const categoryBaseFields = {
