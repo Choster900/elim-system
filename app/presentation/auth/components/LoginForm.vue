@@ -67,8 +67,6 @@ watch(
     { immediate: true },
 )
 
-// El precargado ocurre después del montaje para que el HTML del servidor,
-// que no ve localStorage, coincida con el primer render del cliente.
 onMounted(() => {
     if (hasInvitation.value || !authStore.rememberedEmail) return
 
