@@ -14,6 +14,9 @@ import {
 } from '@lucide/vue'
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
+import DataTable, {
+    type DataTableColumn,
+} from '~/presentation/shared/components/DataTable/DataTable.vue'
 import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
 import AppTour from '~/presentation/shared/components/AppTour.vue'
 import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
@@ -26,7 +29,11 @@ import {
 } from '~/utils/date/date-format.util'
 import { useOccurrencesQuery } from '../composables/useOccurrenceQueries'
 import { GENERAL_MEETING_SCOPE_LABEL } from '~/presentation/meetings/utils/meeting-format.util'
-import type { OccurrenceFilters, OccurrenceRecord } from '../interfaces/occurrence.interface'
+import type {
+    OccurrenceDateField,
+    OccurrenceFilters,
+    OccurrenceRecord,
+} from '../interfaces/occurrence.interface'
 
 defineOptions({ name: 'OfferingHistoryView' })
 
@@ -34,6 +41,20 @@ useHead({ title: 'Historial de ofrendas · Sistema' })
 
 const search = ref('')
 const dateRange = ref<DatePickerRange>({ start: null, end: null })
+const DEFAULT_DATE_FIELD: OccurrenceDateField = 'registro'
+const dateField = ref<OccurrenceDateField>(DEFAULT_DATE_FIELD)
+const dateFieldOptions: { value: OccurrenceDateField; label: string; description: string }[] = [
+    {
+        value: 'registro',
+        label: 'Fecha de registro',
+        description: 'El día en que el líder ingresó la ofrenda',
+    },
+    {
+        value: 'reunion',
+        label: 'Fecha de la reunión',
+        description: 'El día en que se realizó la reunión',
+    },
+]
 const selectedDistrict = ref<number | null>(null)
 const selectedZone = ref<number | null>(null)
 const selectedSector = ref<number | null>(null)
@@ -43,6 +64,7 @@ const filters = computed<OccurrenceFilters>(() => ({
     status: 'registrada',
     ...(dateRange.value.start ? { from: dateRange.value.start } : {}),
     ...(dateRange.value.end ? { to: dateRange.value.end } : {}),
+    ...(dateField.value === 'registro' ? { dateField: 'registro' as const } : {}),
 }))
 
 const historyQuery = useOccurrencesQuery(filters)
@@ -186,6 +208,7 @@ const hasFilters = computed(
         !!search.value ||
         !!dateRange.value.start ||
         !!dateRange.value.end ||
+        dateField.value !== DEFAULT_DATE_FIELD ||
         selectedDistrict.value !== null ||
         selectedZone.value !== null ||
         selectedSector.value !== null ||
@@ -195,6 +218,7 @@ const hasFilters = computed(
 function clearFilters() {
     search.value = ''
     dateRange.value = { start: null, end: null }
+    dateField.value = DEFAULT_DATE_FIELD
     selectedDistrict.value = null
     selectedZone.value = null
     selectedSector.value = null
@@ -219,14 +243,64 @@ const visible = computed(() => {
 })
 
 const tableRows = computed(() =>
-    [...visible.value].sort(
-        (left, right) =>
+    [...visible.value].sort((left, right) => {
+        if (dateField.value === 'registro') {
+            const byRecorded = (right.recordedAt ?? '').localeCompare(left.recordedAt ?? '')
+            if (byRecorded !== 0) return byRecorded
+        }
+        return (
             right.date.localeCompare(left.date) ||
-            left.meetingTitle.localeCompare(right.meetingTitle, 'es'),
-    ),
+            left.meetingTitle.localeCompare(right.meetingTitle, 'es')
+        )
+    }),
 )
 
 const isSingleSectorScope = computed(() => selectedSector.value !== null)
+
+const historyColumns = computed<DataTableColumn<OccurrenceRecord>[]>(() => [
+    { key: 'date', label: 'Fecha', sortable: true, accessor: (row) => row.date, width: '150px' },
+    {
+        key: 'meeting',
+        label: 'Reunión',
+        sortable: true,
+        accessor: (row) => `${row.meetingTitle} ${row.meetingCode}`,
+    },
+    ...(isSingleSectorScope.value
+        ? []
+        : [
+              {
+                  key: 'territory',
+                  label: 'Territorio',
+                  sortable: true,
+                  accessor: (row: OccurrenceRecord) =>
+                      row.sectorName ?? GENERAL_MEETING_SCOPE_LABEL,
+              },
+          ]),
+    {
+        key: 'attendance',
+        label: 'Asistencia',
+        sortable: true,
+        align: 'right',
+        accessor: (row) => row.attendance ?? 0,
+        width: '130px',
+    },
+    {
+        key: 'offering',
+        label: 'Ofrenda',
+        sortable: true,
+        align: 'right',
+        accessor: (row) => row.totalAmount ?? 0,
+        width: '200px',
+    },
+    {
+        key: 'recorded',
+        label: 'Captura',
+        sortable: true,
+        accessor: (row) => row.recordedAt ?? '',
+        width: '200px',
+    },
+    { key: 'actions', label: '', align: 'center', width: '56px' },
+])
 const selectedSectorRecord = computed(() =>
     occurrences.value.find((item) => item.sectorId === selectedSector.value),
 )
@@ -429,7 +503,7 @@ const filterLabelClass =
             data-tour="offerings-history-filters"
             class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4"
         >
-            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                 <div>
                     <span :class="filterLabelClass">Distrito</span>
                     <UiSearchSelect
@@ -474,7 +548,19 @@ const filterLabelClass =
                     />
                 </div>
                 <div>
-                    <span :class="filterLabelClass">Entre fechas</span>
+                    <span :class="filterLabelClass">Buscar por</span>
+                    <UiSearchSelect
+                        v-model="dateField"
+                        :options="dateFieldOptions"
+                        option-description="description"
+                        :searchable="false"
+                        aria-label="Qué fecha usar en el filtro"
+                    />
+                </div>
+                <div>
+                    <span :class="filterLabelClass">
+                        {{ dateField === 'registro' ? 'Registradas entre' : 'Reuniones entre' }}
+                    </span>
                     <UiDatePicker
                         v-model="dateRange"
                         mode="range"
@@ -686,349 +772,249 @@ const filterLabelClass =
                 </div>
 
                 <div
-                    class="overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-sm"
+                    class="mb-3 flex flex-col gap-4 rounded-xl border border-outline-variant bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                    <div
-                        class="flex flex-col gap-4 border-b border-outline-variant bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                        <div class="flex min-w-0 items-center gap-3">
-                            <span
-                                class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-                            >
-                                <MapPin class="size-4" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-semibold text-on-surface">
-                                    {{ sectorScopeName }}
-                                </p>
-                                <p class="truncate text-xs text-on-surface-variant">
-                                    {{ sectorScopeDescription }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-6 text-right">
-                            <div>
-                                <p class="text-lg font-semibold tabular-nums text-on-surface">
-                                    {{ stats.count }}
-                                </p>
-                                <p
-                                    class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    registros
-                                </p>
-                            </div>
-                            <span class="h-9 w-px bg-outline-variant" />
-                            <div>
-                                <p class="text-lg font-semibold tabular-nums text-primary">
-                                    ${{ formatMoney(stats.total) }}
-                                </p>
-                                <p
-                                    class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    acumulado
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="max-h-[72vh] overflow-auto overscroll-contain">
-                        <table
-                            data-testid="offering-history-table"
-                            class="w-full border-separate border-spacing-0 text-sm"
-                            :class="isSingleSectorScope ? 'min-w-[1040px]' : 'min-w-[1240px]'"
+                    <div class="flex min-w-0 items-center gap-3">
+                        <span
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
                         >
-                            <caption class="sr-only">
-                                Historial de ofrendas registradas para
-                                {{
-                                    sectorScopeName
-                                }}
-                            </caption>
-                            <thead class="sticky top-0 z-20 bg-surface-container-high shadow-sm">
-                                <tr class="text-on-surface-variant">
-                                    <th
-                                        scope="col"
-                                        class="w-[170px] border-b border-outline-variant px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em]"
-                                    >
-                                        Fecha
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        class="min-w-[260px] border-b border-outline-variant px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em]"
-                                    >
-                                        Reunión
-                                    </th>
-                                    <th
-                                        v-if="!isSingleSectorScope"
-                                        scope="col"
-                                        class="min-w-[210px] border-b border-outline-variant px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em]"
-                                    >
-                                        Territorio
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        class="w-[150px] border-b border-outline-variant px-5 py-3 text-right text-[10px] font-bold uppercase tracking-[0.16em]"
-                                    >
-                                        Asistencia
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        class="w-[220px] border-b border-outline-variant px-5 py-3 text-right text-[10px] font-bold uppercase tracking-[0.16em]"
-                                    >
-                                        Ofrenda
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        class="min-w-[210px] border-b border-outline-variant px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em]"
-                                    >
-                                        Captura
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        class="w-12 border-b border-outline-variant px-3 py-3"
-                                    >
-                                        <span class="sr-only">Abrir historial de la reunión</span>
-                                    </th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                <tr
-                                    v-for="item in tableRows"
-                                    :key="item.id"
-                                    class="group cursor-pointer transition-colors hover:bg-primary/[0.035]"
-                                    @click="openMeeting(item.meetingId)"
-                                >
-                                    <td class="border-b border-outline-variant px-5 py-4 align-top">
-                                        <div class="flex items-center gap-3">
-                                            <div
-                                                class="w-11 shrink-0 overflow-hidden rounded-lg border border-outline-variant bg-surface text-center"
-                                            >
-                                                <p
-                                                    class="py-1.5 font-display text-lg font-semibold leading-none tabular-nums text-on-surface"
-                                                >
-                                                    {{ formatDateDay(item.date) }}
-                                                </p>
-                                                <p
-                                                    class="bg-surface-container-high py-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant"
-                                                >
-                                                    {{ formatDateMonth(item.date) }}
-                                                </p>
-                                            </div>
-                                            <div class="min-w-0">
-                                                <p
-                                                    class="capitalize text-xs font-semibold text-on-surface"
-                                                >
-                                                    {{ formatDateContext(item.date) }}
-                                                </p>
-                                                <p
-                                                    class="mt-0.5 whitespace-nowrap text-[11px] tabular-nums text-on-surface-variant"
-                                                >
-                                                    {{ formatShortIsoDate(item.date) }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td class="border-b border-outline-variant px-5 py-4 align-top">
-                                        <div class="flex gap-3">
-                                            <span
-                                                class="mt-0.5 h-10 w-1 shrink-0 rounded-full"
-                                                :style="{ backgroundColor: item.meetingColor }"
-                                            />
-                                            <div class="min-w-0">
-                                                <p
-                                                    class="font-semibold leading-snug text-on-surface transition-colors group-hover:text-primary"
-                                                >
-                                                    {{ item.meetingTitle }}
-                                                </p>
-                                                <p
-                                                    class="mt-1 font-mono text-[10px] uppercase tracking-wider text-on-surface-variant"
-                                                >
-                                                    {{ item.meetingCode }}
-                                                </p>
-                                                <div
-                                                    class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-on-surface-variant"
-                                                >
-                                                    <span
-                                                        v-if="item.meetingTypeName"
-                                                        class="font-medium"
-                                                    >
-                                                        {{ item.meetingTypeName }}
-                                                    </span>
-                                                    <span class="inline-flex items-center gap-1">
-                                                        <CalendarClock class="size-3" />
-                                                        {{
-                                                            formatTimeRange(
-                                                                item.startTime,
-                                                                item.endTime,
-                                                            )
-                                                        }}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td
-                                        v-if="!isSingleSectorScope"
-                                        class="border-b border-outline-variant px-5 py-4 align-top"
-                                    >
-                                        <div class="flex gap-2.5">
-                                            <MapPin class="mt-0.5 size-3.5 shrink-0 text-primary" />
-                                            <div>
-                                                <p class="font-semibold text-on-surface">
-                                                    {{
-                                                        item.sectorName ??
-                                                        GENERAL_MEETING_SCOPE_LABEL
-                                                    }}
-                                                </p>
-                                                <p
-                                                    v-if="item.sectorName"
-                                                    class="mt-1 text-[11px] leading-relaxed text-on-surface-variant"
-                                                >
-                                                    {{ item.zoneName }} · {{ item.districtName }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td
-                                        class="border-b border-outline-variant px-5 py-4 text-right align-top"
-                                    >
-                                        <p
-                                            class="text-lg font-semibold tabular-nums text-on-surface"
-                                        >
-                                            {{ item.attendance ?? '—' }}
-                                        </p>
-                                        <p class="text-[10px] text-on-surface-variant">personas</p>
-                                        <div
-                                            v-if="item.attendanceDetails.length > 0"
-                                            class="mt-2 space-y-0.5 text-[10px] tabular-nums text-on-surface-variant"
-                                        >
-                                            <p
-                                                v-for="detail in item.attendanceDetails.slice(0, 2)"
-                                                :key="detail.id"
-                                            >
-                                                {{ detail.quantity }}
-                                                {{ detail.typeName ?? 'sin tipo' }}
-                                            </p>
-                                            <p v-if="item.attendanceDetails.length > 2">
-                                                +{{ item.attendanceDetails.length - 2 }} tipos
-                                            </p>
-                                        </div>
-                                    </td>
-
-                                    <td
-                                        class="border-b border-outline-variant px-5 py-4 text-right align-top"
-                                    >
-                                        <p class="text-lg font-bold tabular-nums text-primary">
-                                            ${{ formatMoney(item.totalAmount ?? 0) }}
-                                        </p>
-                                        <p
-                                            v-if="offeringPerAttendee(item) !== null"
-                                            class="text-[10px] tabular-nums text-on-surface-variant"
-                                        >
-                                            ${{ formatMoney(offeringPerAttendee(item) ?? 0) }} por
-                                            persona
-                                        </p>
-                                        <div
-                                            v-if="item.details.length > 0"
-                                            class="mt-2 flex flex-wrap justify-end gap-1"
-                                        >
-                                            <span
-                                                v-for="detail in item.details.slice(0, 2)"
-                                                :key="detail.id"
-                                                class="rounded bg-primary/[0.07] px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-on-surface-variant"
-                                            >
-                                                {{ detail.categoryName ?? 'Sin categoría' }} · ${{
-                                                    formatMoney(detail.amount)
-                                                }}
-                                            </span>
-                                            <span
-                                                v-if="item.details.length > 2"
-                                                class="rounded bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant"
-                                            >
-                                                +{{ item.details.length - 2 }}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    <td class="border-b border-outline-variant px-5 py-4 align-top">
-                                        <div v-if="item.recordedByName" class="flex gap-2.5">
-                                            <span
-                                                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant"
-                                            >
-                                                <UserRound class="size-3.5" />
-                                            </span>
-                                            <div class="min-w-0">
-                                                <p class="font-medium text-on-surface">
-                                                    {{ item.recordedByName }}
-                                                </p>
-                                                <p
-                                                    v-if="formatRecordedAt(item.recordedAt)"
-                                                    class="mt-0.5 text-[10px] tabular-nums text-on-surface-variant"
-                                                >
-                                                    {{ formatRecordedAt(item.recordedAt) }}
-                                                </p>
-                                                <p
-                                                    v-if="item.updatedByName"
-                                                    class="mt-1 text-[10px] text-on-surface-variant"
-                                                >
-                                                    Corregido por {{ item.updatedByName }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <span v-else class="text-on-surface-variant">—</span>
-                                    </td>
-
-                                    <td
-                                        class="border-b border-outline-variant px-3 py-4 text-center align-middle"
-                                    >
-                                        <button
-                                            type="button"
-                                            class="mx-auto flex size-8 items-center justify-center rounded-full text-on-surface-variant outline-none transition-colors hover:bg-primary/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
-                                            :aria-label="`Abrir historial de ${item.meetingTitle}`"
-                                            @click.stop="openMeeting(item.meetingId)"
-                                        >
-                                            <ChevronRight
-                                                class="size-4 transition-transform group-hover:translate-x-0.5"
-                                            />
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-
-                            <tfoot class="sticky bottom-0 z-10 bg-surface-container-high shadow-sm">
-                                <tr>
-                                    <th
-                                        :colspan="isSingleSectorScope ? 2 : 3"
-                                        scope="row"
-                                        class="border-t border-outline-variant px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface"
-                                    >
-                                        Totales del resultado
-                                    </th>
-                                    <td
-                                        class="border-t border-outline-variant px-5 py-3 text-right text-sm font-bold tabular-nums text-on-surface"
-                                    >
-                                        {{ stats.attendance }}
-                                    </td>
-                                    <td
-                                        class="border-t border-outline-variant px-5 py-3 text-right text-sm font-bold tabular-nums text-primary"
-                                    >
-                                        ${{ formatMoney(stats.total) }}
-                                    </td>
-                                    <td
-                                        class="border-t border-outline-variant px-5 py-3 text-left text-xs font-medium tabular-nums text-on-surface-variant"
-                                    >
-                                        {{ stats.count }}
-                                        {{ stats.count === 1 ? 'registro' : 'registros' }}
-                                    </td>
-                                    <td class="border-t border-outline-variant" />
-                                </tr>
-                            </tfoot>
-                        </table>
+                            <MapPin class="size-4" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-semibold text-on-surface">
+                                {{ sectorScopeName }}
+                            </p>
+                            <p class="truncate text-xs text-on-surface-variant">
+                                {{ sectorScopeDescription }}
+                            </p>
+                        </div>
                     </div>
+
+                    <div class="flex items-center gap-6 text-right">
+                        <div>
+                            <p class="text-lg font-semibold tabular-nums text-on-surface">
+                                {{ stats.count }}
+                            </p>
+                            <p
+                                class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                registros
+                            </p>
+                        </div>
+                        <span class="h-9 w-px bg-outline-variant" />
+                        <div>
+                            <p class="text-lg font-semibold tabular-nums text-on-surface">
+                                {{ stats.attendance }}
+                            </p>
+                            <p
+                                class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                asistencia
+                            </p>
+                        </div>
+                        <span class="h-9 w-px bg-outline-variant" />
+                        <div>
+                            <p class="text-lg font-semibold tabular-nums text-primary">
+                                ${{ formatMoney(stats.total) }}
+                            </p>
+                            <p
+                                class="text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                acumulado
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div data-testid="offering-history-table">
+                    <DataTable
+                        :rows="tableRows"
+                        :columns="historyColumns"
+                        row-key="id"
+                        :page-size="10"
+                        dense
+                        empty-title="Sin movimientos"
+                        empty-message="No hay fechas registradas con estos filtros."
+                    >
+                        <template #cell-date="{ row }">
+                            <div class="flex items-center gap-2.5">
+                                <div
+                                    class="w-9 shrink-0 overflow-hidden rounded-md border border-outline-variant bg-surface text-center"
+                                >
+                                    <p
+                                        class="py-1 font-display text-sm font-semibold leading-none tabular-nums text-on-surface"
+                                    >
+                                        {{ formatDateDay(row.date) }}
+                                    </p>
+                                    <p
+                                        class="bg-surface-container-high py-0.5 text-[8px] font-bold uppercase tracking-wider text-on-surface-variant"
+                                    >
+                                        {{ formatDateMonth(row.date) }}
+                                    </p>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-semibold capitalize text-on-surface">
+                                        {{ formatDateContext(row.date) }}
+                                    </p>
+                                    <p
+                                        class="whitespace-nowrap text-[11px] tabular-nums text-on-surface-variant"
+                                    >
+                                        {{ formatShortIsoDate(row.date) }}
+                                    </p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template #cell-meeting="{ row }">
+                            <button
+                                type="button"
+                                class="group flex gap-2.5 text-left"
+                                @click="openMeeting(row.meetingId)"
+                            >
+                                <span
+                                    class="mt-0.5 h-9 w-1 shrink-0 rounded-full"
+                                    :style="{ backgroundColor: row.meetingColor }"
+                                />
+                                <span class="min-w-0">
+                                    <span
+                                        class="block font-semibold leading-snug text-on-surface group-hover:text-primary group-hover:underline"
+                                    >
+                                        {{ row.meetingTitle }}
+                                    </span>
+                                    <span
+                                        class="mt-0.5 block font-mono text-[10px] uppercase tracking-wider text-on-surface-variant"
+                                    >
+                                        {{ row.meetingCode }}
+                                    </span>
+                                    <span
+                                        class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant"
+                                    >
+                                        <span v-if="row.meetingTypeName" class="font-medium">
+                                            {{ row.meetingTypeName }}
+                                        </span>
+                                        <span class="inline-flex items-center gap-1">
+                                            <CalendarClock class="size-3" />
+                                            {{ formatTimeRange(row.startTime, row.endTime) }}
+                                        </span>
+                                    </span>
+                                </span>
+                            </button>
+                        </template>
+
+                        <template #cell-territory="{ row }">
+                            <div class="flex gap-2">
+                                <MapPin class="mt-0.5 size-3.5 shrink-0 text-primary" />
+                                <div>
+                                    <p class="font-semibold text-on-surface">
+                                        {{ row.sectorName ?? GENERAL_MEETING_SCOPE_LABEL }}
+                                    </p>
+                                    <p
+                                        v-if="row.sectorName"
+                                        class="text-[11px] text-on-surface-variant"
+                                    >
+                                        {{ row.zoneName }} · {{ row.districtName }}
+                                    </p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template #cell-attendance="{ row }">
+                            <p class="font-semibold tabular-nums text-on-surface">
+                                {{ row.attendance ?? '—' }}
+                                <span class="text-[10px] font-normal text-on-surface-variant">
+                                    personas
+                                </span>
+                            </p>
+                            <p
+                                v-if="row.attendanceDetails.length > 0"
+                                class="text-[10px] tabular-nums text-on-surface-variant"
+                            >
+                                {{
+                                    row.attendanceDetails
+                                        .slice(0, 2)
+                                        .map(
+                                            (detail) =>
+                                                `${detail.quantity} ${detail.typeName ?? 'sin tipo'}`,
+                                        )
+                                        .join(' · ')
+                                }}
+                                <template v-if="row.attendanceDetails.length > 2">
+                                    · +{{ row.attendanceDetails.length - 2 }}
+                                </template>
+                            </p>
+                        </template>
+
+                        <template #cell-offering="{ row }">
+                            <p class="font-bold tabular-nums text-primary">
+                                ${{ formatMoney(row.totalAmount ?? 0) }}
+                            </p>
+                            <p
+                                v-if="offeringPerAttendee(row) !== null"
+                                class="text-[10px] tabular-nums text-on-surface-variant"
+                            >
+                                ${{ formatMoney(offeringPerAttendee(row) ?? 0) }} por persona
+                            </p>
+                            <div
+                                v-if="row.details.length > 0"
+                                class="mt-1 flex flex-wrap justify-end gap-1"
+                            >
+                                <span
+                                    v-for="detail in row.details.slice(0, 2)"
+                                    :key="detail.id"
+                                    class="rounded bg-primary/[0.07] px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-on-surface-variant"
+                                >
+                                    {{ detail.categoryName ?? 'Sin categoría' }} · ${{
+                                        formatMoney(detail.amount)
+                                    }}
+                                </span>
+                                <span
+                                    v-if="row.details.length > 2"
+                                    class="rounded bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant"
+                                >
+                                    +{{ row.details.length - 2 }}
+                                </span>
+                            </div>
+                        </template>
+
+                        <template #cell-recorded="{ row }">
+                            <div v-if="row.recordedByName" class="flex gap-2">
+                                <span
+                                    class="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant"
+                                >
+                                    <UserRound class="size-3" />
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="font-medium text-on-surface">
+                                        {{ row.recordedByName }}
+                                    </p>
+                                    <p
+                                        v-if="formatRecordedAt(row.recordedAt)"
+                                        class="text-[10px] tabular-nums text-on-surface-variant"
+                                    >
+                                        {{ formatRecordedAt(row.recordedAt) }}
+                                    </p>
+                                    <p
+                                        v-if="row.updatedByName"
+                                        class="text-[10px] text-on-surface-variant"
+                                    >
+                                        Corregido por {{ row.updatedByName }}
+                                    </p>
+                                </div>
+                            </div>
+                            <span v-else class="text-on-surface-variant">—</span>
+                        </template>
+
+                        <template #cell-actions="{ row }">
+                            <button
+                                type="button"
+                                class="mx-auto flex size-8 items-center justify-center rounded-full text-on-surface-variant outline-none transition-colors hover:bg-primary/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
+                                :aria-label="`Abrir historial de ${row.meetingTitle}`"
+                                @click="openMeeting(row.meetingId)"
+                            >
+                                <ChevronRight class="size-4" />
+                            </button>
+                        </template>
+                    </DataTable>
                 </div>
             </section>
         </template>
