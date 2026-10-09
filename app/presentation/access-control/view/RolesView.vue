@@ -48,7 +48,6 @@ withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const toast = useAppToast()
 const authStore = useAuthStore()
-// Crear, editar y activar/desactivar roles es exclusivo del super administrador.
 const canManage = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 const rolesQuery = useRolesQuery()
 const permissionsQuery = usePermissionsQuery()
