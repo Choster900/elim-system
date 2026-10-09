@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowLeft, Check, CheckCircle2, Loader2 } from '@lucide/
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import EnvelopeHeader from '../components/EnvelopeHeader.vue'
+import DirectCountSummary from '../components/DirectCountSummary.vue'
 import ReceptionComparison from '../components/ReceptionComparison.vue'
 import ReceptionSteps from '../components/ReceptionSteps.vue'
 import { useSaveReceptionMutation } from '../composables/useReceptionMutations'
@@ -44,7 +45,16 @@ const comparisonQuery = useEnvelopeComparisonQuery(occurrenceId, countInput)
 
 const envelope = computed(() => envelopeQuery.data.value?.envelope ?? null)
 const comparison = computed(() => comparisonQuery.data.value ?? null)
-const needsNote = computed(() => comparison.value?.status === 'con_diferencia')
+const isDirectEntry = computed(
+    () =>
+        !!(
+            envelopeQuery.data.value?.envelope.directEntry ||
+            envelopeQuery.data.value?.reception?.directEntry
+        ),
+)
+const needsNote = computed(
+    () => !isDirectEntry.value && comparison.value?.status === 'con_diferencia',
+)
 const totalMatches = computed(() =>
     comparison.value ? toCents(comparison.value.difference) === 0 : false,
 )
@@ -108,7 +118,13 @@ async function onConfirm() {
         })
         isFinishing.value = true
         draftStore.clearDraft(id)
-        toast.success(isCorrection.value ? 'Conteo corregido' : 'Sobre recibido')
+        toast.success(
+            isCorrection.value
+                ? 'Conteo corregido'
+                : isDirectEntry.value
+                  ? 'Ofrenda registrada'
+                  : 'Sobre recibido',
+        )
         await navigateTo(
             `${envelopePath(id)}?listo=${isCorrection.value ? 'corregido' : 'recibido'}`,
             { replace: true },
@@ -152,67 +168,101 @@ async function onConfirm() {
             v-else-if="isFinishing || !envelope || !comparison"
             class="rounded-xl border border-outline-variant bg-surface-container-low px-6 py-16 text-center text-sm text-on-surface-variant"
         >
-            {{ isFinishing ? 'Guardando…' : 'Comparando con lo que registró el líder…' }}
+            {{
+                isFinishing
+                    ? 'Guardando…'
+                    : isDirectEntry
+                      ? 'Preparando el resumen del conteo…'
+                      : 'Comparando con lo que registró el líder…'
+            }}
         </div>
 
         <template v-else>
             <EnvelopeHeader :envelope="envelope" />
 
-            <section
-                class="mt-6 flex flex-col gap-4 rounded-2xl border p-6 sm:flex-row sm:items-center"
-                :class="
-                    needsNote
-                        ? 'border-amber-500/40 bg-amber-500/10'
-                        : 'border-emerald-500/40 bg-emerald-500/10'
-                "
-                role="status"
-            >
-                <AlertTriangle
-                    v-if="needsNote"
-                    class="size-12 shrink-0 text-amber-600 dark:text-amber-300"
-                />
-                <CheckCircle2
-                    v-else
-                    class="size-12 shrink-0 text-emerald-600 dark:text-emerald-300"
-                />
-                <div>
-                    <h1
-                        class="font-display text-3xl font-semibold"
-                        :class="
-                            needsNote
-                                ? 'text-amber-800 dark:text-amber-200'
-                                : 'text-emerald-800 dark:text-emerald-200'
-                        "
-                    >
-                        <template v-if="!needsNote">¡Cuadra!</template>
-                        <template v-else-if="totalMatches">El total cuadra, los tipos no</template>
-                        <template v-else
-                            >No cuadra:
-                            {{ differenceLabel(comparison.difference).toLowerCase() }}</template
-                        >
-                    </h1>
-                    <p class="mt-1 text-sm text-on-surface">
-                        <template v-if="!needsNote">
-                            Contaste {{ formatMoney(comparison.countedAmount) }}, igual a lo que
-                            registró el líder.
-                        </template>
-                        <template v-else>
-                            Contaste {{ formatMoney(comparison.countedAmount) }} y el líder registró
-                            {{ formatMoney(comparison.registeredAmount) }}. Revisa la tabla: puedes
-                            volver a contar o confirmar explicando qué pasó.
-                        </template>
-                    </p>
+            <template v-if="isDirectEntry">
+                <section
+                    class="mt-6 flex flex-col gap-4 rounded-2xl border border-primary/30 bg-primary/[0.06] p-6 sm:flex-row sm:items-center"
+                    role="status"
+                >
+                    <CheckCircle2 class="size-12 shrink-0 text-primary" aria-hidden="true" />
+                    <div>
+                        <h1 class="font-display text-3xl font-semibold text-on-surface">
+                            Ofrenda del culto: {{ formatMoney(comparison.countedAmount) }}
+                        </h1>
+                        <p class="mt-1 text-sm text-on-surface">
+                            Este culto general no tiene líder. Al confirmar, este conteo queda como
+                            la ofrenda registrada de la fecha.
+                        </p>
+                    </div>
+                </section>
+                <div class="mt-6">
+                    <DirectCountSummary
+                        :categories="comparison.categories"
+                        :total="comparison.countedAmount"
+                    />
                 </div>
-            </section>
+            </template>
 
-            <div class="mt-6">
-                <ReceptionComparison
-                    :categories="comparison.categories"
-                    :registered-amount="comparison.registeredAmount"
-                    :counted-amount="comparison.countedAmount"
-                    :difference="comparison.difference"
-                />
-            </div>
+            <template v-else>
+                <section
+                    class="mt-6 flex flex-col gap-4 rounded-2xl border p-6 sm:flex-row sm:items-center"
+                    :class="
+                        needsNote
+                            ? 'border-amber-500/40 bg-amber-500/10'
+                            : 'border-emerald-500/40 bg-emerald-500/10'
+                    "
+                    role="status"
+                >
+                    <AlertTriangle
+                        v-if="needsNote"
+                        class="size-12 shrink-0 text-amber-600 dark:text-amber-300"
+                    />
+                    <CheckCircle2
+                        v-else
+                        class="size-12 shrink-0 text-emerald-600 dark:text-emerald-300"
+                    />
+                    <div>
+                        <h1
+                            class="font-display text-3xl font-semibold"
+                            :class="
+                                needsNote
+                                    ? 'text-amber-800 dark:text-amber-200'
+                                    : 'text-emerald-800 dark:text-emerald-200'
+                            "
+                        >
+                            <template v-if="!needsNote">¡Cuadra!</template>
+                            <template v-else-if="totalMatches"
+                                >El total cuadra, los tipos no</template
+                            >
+                            <template v-else
+                                >No cuadra:
+                                {{ differenceLabel(comparison.difference).toLowerCase() }}</template
+                            >
+                        </h1>
+                        <p class="mt-1 text-sm text-on-surface">
+                            <template v-if="!needsNote">
+                                Contaste {{ formatMoney(comparison.countedAmount) }}, igual a lo que
+                                registró el líder.
+                            </template>
+                            <template v-else>
+                                Contaste {{ formatMoney(comparison.countedAmount) }} y el líder
+                                registró {{ formatMoney(comparison.registeredAmount) }}. Revisa la
+                                tabla: puedes volver a contar o confirmar explicando qué pasó.
+                            </template>
+                        </p>
+                    </div>
+                </section>
+
+                <div class="mt-6">
+                    <ReceptionComparison
+                        :categories="comparison.categories"
+                        :registered-amount="comparison.registeredAmount"
+                        :counted-amount="comparison.countedAmount"
+                        :difference="comparison.difference"
+                    />
+                </div>
+            </template>
 
             <section class="mt-6">
                 <label for="reception-notes" class="block text-sm font-semibold text-on-surface">
@@ -269,7 +319,13 @@ async function onConfirm() {
                 >
                     <Loader2 v-if="saveMutation.isPending.value" class="size-4 animate-spin" />
                     <Check v-else class="size-4" />
-                    {{ isCorrection ? 'Guardar corrección' : 'Confirmar recepción' }}
+                    {{
+                        isCorrection
+                            ? 'Guardar corrección'
+                            : isDirectEntry
+                              ? 'Registrar ofrenda'
+                              : 'Confirmar recepción'
+                    }}
                 </UiButton>
             </div>
         </template>
