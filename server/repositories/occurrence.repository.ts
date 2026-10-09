@@ -10,8 +10,9 @@ import type {
 } from '../dto/offering/occurrence.dto'
 import { meetingFullCode } from '../utils/code/entity-code.util'
 import { mapPrismaError } from '../utils/database/prisma-error.util'
+import { businessDayStart, nextIsoDate } from '../utils/date/business-time.util'
 
-const occurrenceInclude = {
+export const occurrenceInclude = {
     meeting: {
         include: {
             type: true,
@@ -26,7 +27,7 @@ const occurrenceInclude = {
     attendanceDetails: { include: { type: true }, orderBy: { type: { sortOrder: 'asc' } } },
 } satisfies Prisma.MeetingOccurrenceInclude
 
-type OccurrenceWithRelations = Prisma.MeetingOccurrenceGetPayload<{
+export type OccurrenceWithRelations = Prisma.MeetingOccurrenceGetPayload<{
     include: typeof occurrenceInclude
 }>
 
@@ -54,7 +55,7 @@ function resolveTotal(details: OccurrenceDetailDto[], totalAmount: number | null
     return totalAmount === null ? 0 : round2(totalAmount)
 }
 
-function personName(
+export function personName(
     user: {
         username: string | null
         email: string
@@ -75,6 +76,7 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
         meetingTitle: occurrence.meeting.title,
         meetingCode: meetingFullCode(occurrence.meeting.code, occurrence.meeting.sector),
         meetingTypeName: occurrence.meeting.type?.name ?? null,
+        isGeneralMeeting: occurrence.meeting.type?.isGeneral ?? false,
         meetingColor: occurrence.meeting.color,
         startTime: occurrence.meeting.startTime.toISOString().slice(11, 16),
         endTime: occurrence.meeting.endTime.toISOString().slice(11, 16),
@@ -123,7 +125,7 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
 
 export type OccurrenceRecord = ReturnType<typeof toOccurrenceRecord>
 
-function scopeWhere(scope: OccurrenceScopeFilter): Prisma.MeetingOccurrenceWhereInput {
+export function scopeWhere(scope: OccurrenceScopeFilter): Prisma.MeetingOccurrenceWhereInput {
     if (scope.seesAll) return {}
 
     const clauses: Prisma.MeetingOccurrenceWhereInput[] = []
@@ -134,20 +136,33 @@ function scopeWhere(scope: OccurrenceScopeFilter): Prisma.MeetingOccurrenceWhere
     return { OR: clauses }
 }
 
+function recordedAtRange(filters: OccurrenceFiltersDto) {
+    return {
+        recordedAt: {
+            ...(filters.from ? { gte: businessDayStart(filters.from.slice(0, 10)) } : {}),
+            ...(filters.to ? { lt: businessDayStart(nextIsoDate(filters.to.slice(0, 10))) } : {}),
+        },
+    }
+}
+
+function meetingDateRange(filters: OccurrenceFiltersDto) {
+    return {
+        date: {
+            ...(filters.from ? { gte: dateOf(filters.from) } : {}),
+            ...(filters.to ? { lte: dateOf(filters.to) } : {}),
+        },
+    }
+}
+
 function filtersWhere(filters: OccurrenceFiltersDto): Prisma.MeetingOccurrenceWhereInput {
+    const hasRange = !!(filters.from || filters.to)
     return {
         ...(filters.meetingId ? { meetingId: filters.meetingId } : {}),
         ...(filters.status
             ? { status: filters.status === 'registrada' ? 'RECORDED' : 'PENDING' }
             : {}),
-        ...(filters.from || filters.to
-            ? {
-                  date: {
-                      ...(filters.from ? { gte: dateOf(filters.from) } : {}),
-                      ...(filters.to ? { lte: dateOf(filters.to) } : {}),
-                  },
-              }
-            : {}),
+        ...(hasRange && filters.dateField === 'registro' ? recordedAtRange(filters) : {}),
+        ...(hasRange && filters.dateField !== 'registro' ? meetingDateRange(filters) : {}),
     }
 }
 
@@ -205,7 +220,10 @@ export async function findOccurrences(
     const occurrences = await prisma.meetingOccurrence.findMany({
         where: { AND: [scopeWhere(scope), filtersWhere(filters)] },
         include: occurrenceInclude,
-        orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        orderBy:
+            filters.dateField === 'registro'
+                ? [{ recordedAt: 'desc' }, { id: 'desc' }]
+                : [{ date: 'desc' }, { id: 'desc' }],
     })
     return occurrences.map(toOccurrenceRecord)
 }
