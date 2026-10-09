@@ -49,7 +49,6 @@ const isRangeTooLong = computed(() => {
     const days = (Date.parse(end) - Date.parse(start)) / 86_400_000 + 1
     return days > DASHBOARD_MAX_RANGE_DAYS
 })
-// Solo se consulta cuando el rango está completo; mientras tanto sigue el período rápido.
 const appliedRange = computed<DashboardDateRange | null>(() => {
     const { start, end } = customRange.value
     if (!start || !end || isRangeTooLong.value) return null
