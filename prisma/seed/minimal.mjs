@@ -8,6 +8,7 @@ import { seedRolePermissionAssignments, seedRoles } from './seeders/role.seeder.
 import { seedMeetingTypes } from './seeders/meeting.seeder.mjs'
 import { seedOfferingCategories } from './seeders/offering.seeder.mjs'
 import { seedAttendanceTypes } from './seeders/attendance.seeder.mjs'
+import { seedDenominations } from './seeders/denomination.seeder.mjs'
 import {
     assertAdminCredentials,
     assertTargetAllowed,
@@ -85,6 +86,7 @@ async function seed() {
     const meetingTypes = await seedMeetingTypes(prisma)
     const offeringCategories = await seedOfferingCategories(prisma)
     const attendanceTypes = await seedAttendanceTypes(prisma)
+    const denominations = await seedDenominations(prisma)
 
     return {
         permissions: permissions.length,
@@ -92,6 +94,7 @@ async function seed() {
         meetingTypes: meetingTypes.size,
         offeringCategories: offeringCategories.size,
         attendanceTypes: attendanceTypes.size,
+        denominations: denominations.size,
     }
 }
 
@@ -101,7 +104,8 @@ seed()
         console.log(
             `[${SCRIPT_NAME}] Completado: ${summary.permissions} permisos, ${summary.roles} roles, ` +
                 `${summary.meetingTypes} tipos de reunión, ${summary.offeringCategories} categorías de ofrenda, ` +
-                `${summary.attendanceTypes} tipos de asistencia y 1 usuario administrador.`,
+                `${summary.attendanceTypes} tipos de asistencia, ${summary.denominations} denominaciones ` +
+                'y 1 usuario administrador.',
         )
     })
     .catch(async (error) => {
