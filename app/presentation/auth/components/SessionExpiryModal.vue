@@ -44,7 +44,6 @@ async function expireSession() {
     try {
         await logoutRequest(apiClient)
     } catch {
-        // La expiración debe limpiar la sesión local incluso si la cookie ya venció.
     } finally {
         queryClient.clear()
         authStore.clearUser()
