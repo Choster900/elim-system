@@ -10,7 +10,6 @@ import { SYSTEM_PERMISSION_CODE } from '../constants/permission.constants'
 import { publishAuthSessionEvent } from '../utils/auth-session-sync.util'
 
 const STORAGE_KEY = 'auth-user'
-// Solo el correo. La contraseña nunca se guarda en el navegador.
 const REMEMBERED_EMAIL_KEY = 'auth-remembered-email'
 
 interface AuthState {
@@ -92,7 +91,6 @@ export const useAuthStore = defineStore('auth', {
             removeStorageItem(STORAGE_KEY)
             removeStorageItem('auth-session-expires-at')
         },
-        // El correo recordado sobrevive al cierre de sesión: ese es su propósito.
         setRememberedEmail(email: string) {
             const normalizedEmail = email.trim()
             if (!normalizedEmail) {
