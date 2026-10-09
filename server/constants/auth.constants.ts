@@ -4,5 +4,10 @@ export const BCRYPT_SALT_ROUNDS = 12
 export const ACCESS_TOKEN_COOKIE_NAME = 'access_token'
 export const REFRESH_TOKEN_COOKIE_NAME = 'refresh_token'
 
-export const OFFERING_SEES_ALL_ROLE_CODES = ['SUPER_ADMIN', 'ADMINISTRATOR', 'FINANCE']
+export const OFFERING_SEES_ALL_ROLE_CODES = [
+    'SUPER_ADMIN',
+    'ADMINISTRATOR',
+    'FINANCE',
+    'SUPPORT_COMMITTEE',
+]
 export const SUPERVISOR_ROLE_CODE = 'SUPERVISOR'
