@@ -109,7 +109,12 @@ const navItems: DashboardMenuItem[] = [
             {
                 label: 'Comité de apoyo',
                 href: '/finanzas/comite-de-apoyo',
-                requiredPermission: routePermissionCodes.financeView,
+                requiredPermission: routePermissionCodes.financeReceive,
+            },
+            {
+                label: 'Conciliación de ofrendas',
+                href: '/finanzas/conciliacion',
+                requiredPermission: routePermissionCodes.financeAudit,
             },
             { label: 'Gastos', href: '#' },
             {
