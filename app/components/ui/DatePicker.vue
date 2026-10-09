@@ -216,6 +216,13 @@ function setThisWeek() {
     emit('update:modelValue', { start: startIso, end: endIso })
 }
 
+function setThisMonth() {
+    const t = today(getLocalTimeZone())
+    const start = new CalendarDate(t.year, t.month, 1)
+    const end = start.add({ months: 1 }).subtract({ days: 1 })
+    emit('update:modelValue', { start: start.toString(), end: end.toString() })
+}
+
 const triggerHeight = computed(() => (props.size === 'sm' ? 'h-8' : 'h-11'))
 const triggerPad = computed(() => (props.size === 'sm' ? 'px-2' : 'px-3'))
 const triggerText = computed(() => (props.size === 'sm' ? 'text-xs' : 'text-sm'))
@@ -284,7 +291,7 @@ const headCellClass =
             >
                 <div
                     v-if="mode === 'range'"
-                    class="mb-2 flex items-center gap-1.5 border-b border-outline-variant pb-2"
+                    class="mb-2 flex flex-wrap items-center gap-1.5 border-b border-outline-variant pb-2"
                 >
                     <button
                         type="button"
@@ -299,6 +306,13 @@ const headCellClass =
                         @click="setThisWeek"
                     >
                         Esta semana
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded border border-outline-variant px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary"
+                        @click="setThisMonth"
+                    >
+                        Este mes
                     </button>
                     <span class="flex-1" />
                     <button
