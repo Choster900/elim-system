@@ -9,6 +9,7 @@ import type {
 import * as repo from '../repositories/occurrence.repository'
 import { findAttendanceTypeIdsByIds } from '../repositories/attendance.repository'
 import { findOfferingCategoryIdsByIds } from '../repositories/offering.repository'
+import { findReceptionIdByOccurrenceId } from '../repositories/reception.repository'
 import { ApiErrorCode } from '../types/api-response.types'
 import {
     expectedDatesFor,
@@ -73,6 +74,14 @@ function assertOccurrenceEnded(occurrence: repo.OccurrenceRecord, now = new Date
         `La reunión ${occurrence.meetingTitle} del ${occurrence.date} todavía no ha terminado; ` +
             `podrás registrar la ofrenda y la asistencia después de las ${occurrence.endTime}`,
     )
+}
+
+function assertNotGeneralMeeting(occurrence: repo.OccurrenceRecord) {
+    if (occurrence.isGeneralMeeting) {
+        businessRule(
+            `${occurrence.meetingTitle} es un culto general: su ofrenda la registra el comité de apoyo al recibir el sobre`,
+        )
+    }
 }
 
 async function assertCategoriesExist(details: { categoryId: number }[]) {
@@ -140,6 +149,7 @@ export async function getPendingOccurrences(
     await syncOccurrences({}, now)
     const occurrences = await repo.findPendingOccurrences(scope)
     return occurrences
+        .filter((occurrence) => !occurrence.isGeneralMeeting)
         .map((occurrence) => ({ ...occurrence, isRecordable: hasOccurrenceEnded(occurrence, now) }))
         .filter((occurrence) => options.includeUnfinished || occurrence.isRecordable)
 }
@@ -181,6 +191,7 @@ export async function recordOccurrence(
     userId: number,
 ) {
     const occurrence = await getScopedOccurrence(id, scope)
+    assertNotGeneralMeeting(occurrence)
 
     if (occurrence.status === 'registrada') {
         businessRule('Esta fecha ya fue registrada; solo un supervisor puede corregirla')
@@ -204,6 +215,7 @@ export async function recordOccurrencesBulk(
     }
 
     const occurrences = await Promise.all(ids.map((id) => getScopedOccurrence(id, scope)))
+    occurrences.forEach(assertNotGeneralMeeting)
 
     const alreadyRecorded = occurrences.find((occurrence) => occurrence.status === 'registrada')
     if (alreadyRecorded) {
@@ -230,6 +242,14 @@ export async function updateOccurrence(
 
     if (occurrence.status !== 'registrada') {
         businessRule('Esta fecha todavía no ha sido registrada')
+    }
+
+    const changesAmounts =
+        dto.details !== undefined || dto.totalAmount !== undefined || dto.currency !== undefined
+    if (changesAmounts && (await findReceptionIdByOccurrenceId(id))) {
+        businessRule(
+            'El comité de apoyo ya recibió este sobre; las ofrendas registradas ya no se pueden corregir',
+        )
     }
 
     if (dto.details !== undefined) await assertCategoriesExist(dto.details)
