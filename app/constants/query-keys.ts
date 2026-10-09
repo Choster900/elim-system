@@ -60,6 +60,31 @@ const offeringCategories = {
     list: ['offering-categories', 'list'] as const,
 }
 
+const offeringReceptions = {
+    all: ['offering-receptions'] as const,
+    pending: ['offering-receptions', 'pending'] as const,
+    pendingPage: <TParams extends object>(params: TParams) =>
+        ['offering-receptions', 'pending', params] as const,
+    list: <TFilters extends object>(filters: TFilters) =>
+        ['offering-receptions', 'list', filters] as const,
+    envelope: (occurrenceId: number) => ['offering-receptions', 'envelope', occurrenceId] as const,
+    comparison: <TInput extends object>(occurrenceId: number, input: TInput) =>
+        ['offering-receptions', 'comparison', occurrenceId, input] as const,
+}
+
+const offeringReconciliation = {
+    all: ['offering-reconciliation'] as const,
+    summary: <TFilters extends object>(filters: TFilters) =>
+        ['offering-reconciliation', 'summary', filters] as const,
+    envelope: (occurrenceId: number) =>
+        ['offering-reconciliation', 'envelope', occurrenceId] as const,
+}
+
+const denominations = {
+    all: ['denominations'] as const,
+    list: ['denominations', 'list'] as const,
+}
+
 const users = {
     all: ['users'] as const,
     list: ['users', 'list'] as const,
@@ -99,6 +124,9 @@ export const queryKeys = {
     occurrences,
     attendanceTypes,
     offeringCategories,
+    offeringReceptions,
+    offeringReconciliation,
+    denominations,
     dashboard,
     users,
     roles,
