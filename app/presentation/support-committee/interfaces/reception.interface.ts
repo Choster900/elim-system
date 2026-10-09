@@ -18,6 +18,9 @@ export interface EnvelopeCategory {
 }
 
 export interface Envelope {
+    isGeneral: boolean
+    directEntry: boolean
+    isReady: boolean
     occurrenceId: number
     meetingId: number
     meetingTitle: string
@@ -77,6 +80,7 @@ export interface ReceptionRecord extends ReceptionComparison {
     closedByName: string | null
     closedAt: string | null
     closingNotes: string | null
+    directEntry: boolean
     envelope: Envelope
 }
 
