@@ -184,6 +184,23 @@ export const PERMISSION_SEEDS = [
         description: 'Corregir o eliminar registros de ofrenda ya capturados.',
     },
     {
+        name: 'Recibir sobres de ofrenda',
+        code: 'finance.receive',
+        module: 'Finanzas',
+        resource: 'finance',
+        action: 'receive',
+        description: 'Contar y recibir los sobres de ofrenda entregados por los líderes.',
+    },
+    {
+        name: 'Revisar recepciones de ofrenda',
+        code: 'finance.audit',
+        module: 'Finanzas',
+        resource: 'finance',
+        action: 'audit',
+        description:
+            'Comparar lo registrado por los líderes con lo recibido por el comité y cerrar diferencias.',
+    },
+    {
         name: 'Exportar reportes',
         code: 'reports.export',
         module: 'Reportes',
