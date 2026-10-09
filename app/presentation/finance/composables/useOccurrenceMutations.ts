@@ -18,7 +18,6 @@ interface UpdateVariables {
     input: Partial<RecordOccurrenceInput>
 }
 
-// Registrar mueve la fecha fuera de la bandeja, así que se invalida todo lo que la refleja.
 async function invalidateOccurrenceViews(queryClient: QueryClient) {
     await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.occurrences.all }),
