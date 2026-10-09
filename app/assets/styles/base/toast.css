@@ -1,9 +1,3 @@
-/*
- * Toasts (vue-sonner) con la paleta del sistema.
- * Se carga después de 'vue-sonner/style.css'; los selectores llevan [data-sonner-theme]
- * para igualar la especificidad de los del paquete y ganarles por orden.
- */
-
 [data-sonner-toaster][data-sonner-theme] {
     --width: 380px;
     --border-radius: 0.875rem;
@@ -21,7 +15,6 @@
     font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Color por tipo; los selectores por tipo pesan más que este valor por defecto */
 [data-sonner-toast] {
     --toast-accent: var(--primary);
 }
@@ -52,7 +45,6 @@
     --toast-accent: var(--toast-error);
 }
 
-/* Ícono dentro de un círculo teñido con el color del tipo */
 [data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled='true'] [data-icon] {
     width: 28px;
     height: 28px;
@@ -90,7 +82,6 @@
     color: var(--on-surface-variant);
 }
 
-/* Botón de cerrar discreto, dentro de la tarjeta en la esquina superior derecha */
 [data-sonner-toaster][data-sonner-theme]
     [data-sonner-toast][data-styled='true']
     [data-close-button] {
@@ -124,7 +115,6 @@
     background: var(--surface-container-highest);
 }
 
-/* Botones de acción (toast con action/cancel) */
 [data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled='true'] [data-button] {
     height: 28px;
     padding: 0 12px;
