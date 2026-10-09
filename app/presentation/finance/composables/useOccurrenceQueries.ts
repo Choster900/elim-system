@@ -41,7 +41,6 @@ export function usePendingMeetingDetailQuery(id: Ref<number | null>) {
     })
 }
 
-// Solo se lee, así que acepta también un computed con los filtros derivados.
 export function useOccurrencesQuery(
     filters: Ref<OccurrenceFilters> | ComputedRef<OccurrenceFilters>,
 ) {
