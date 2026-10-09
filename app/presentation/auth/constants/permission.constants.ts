@@ -9,7 +9,6 @@ export const routePermissionCodes = {
     meetingTypesView: 'meeting-types.view',
     meetingTypesManage: 'meeting-types.manage',
     financeView: 'finance.view',
-    // Registrar lo propio; corregir lo ya registrado exige financeManage.
     financeRecord: 'finance.record',
     financeManage: 'finance.manage',
     territoriesView: 'territories.view',
