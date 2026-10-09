@@ -101,6 +101,13 @@ enum OfferingReceptionStatus {
   @@map("ero_estado_recepcion_ofrenda")
 }
 
+enum DenominationKind {
+  BILL @map("billete")
+  COIN @map("moneda")
+
+  @@map("tde_tipo_denominacion")
+}
+
 model Member {
   id                    Int                   @id(map: "pk_mie_miembro") @default(autoincrement()) @map("mie_id")
   code                  String                @unique(map: "uk_mie_codigo") @map("mie_codigo") @db.VarChar(100)
@@ -244,6 +251,7 @@ model User {
   editedOccurrences      MeetingOccurrence[]  @relation("OccurrenceEditor")
   receivedOfferings      OfferingReception[]  @relation("OfferingReceptionReceiver")
   reviewedOfferings      OfferingReception[]  @relation("OfferingReceptionReviewer")
+  closedOfferings        OfferingReception[]  @relation("OfferingReceptionCloser")
   receivedInvitations    UserInvitation[]     @relation("UserInvitationRecipient")
   createdInvitations     UserInvitation[]     @relation("UserInvitationCreator")
   passwordResetTokens    PasswordResetToken[]
@@ -658,48 +666,83 @@ model OfferingDetail {
 }
 
 model OfferingReception {
-  id                   Int                       @id(map: "pk_rof_recepcion_ofrenda") @default(autoincrement()) @map("rof_id")
-  occurrenceId         Int                       @unique(map: "uk_rof_ocurrencia") @map("rof_id_reo")
-  envelopeCode         String?                   @unique(map: "uk_rof_codigo_sobre") @map("rof_codigo_sobre") @db.VarChar(100)
-  systemAttendance     Int?                      @map("rof_asistencia_sistema")
-  systemAmount         Decimal?                  @map("rof_monto_sistema") @db.Decimal(19, 2)
-  receivedAttendance   Int?                      @map("rof_asistencia_recibida")
-  receivedAmount       Decimal                   @map("rof_monto_recibido") @db.Decimal(19, 2)
-  attendanceDifference Int?                      @map("rof_diferencia_asistencia")
-  amountDifference     Decimal?                  @map("rof_diferencia_monto") @db.Decimal(19, 2)
-  currency             String                    @default("USD") @map("rof_moneda") @db.VarChar(10)
-  status               OfferingReceptionStatus   @default(RECEIVED) @map("rof_estado")
-  receivedById         Int?                      @map("rof_id_usu_receptor")
-  receivedAt           DateTime                  @default(now()) @map("rof_fecha_recepcion")
-  reviewedById         Int?                      @map("rof_id_usu_revisor")
-  reviewedAt           DateTime?                 @map("rof_fecha_revision")
-  notes                String?                   @map("rof_nota") @db.VarChar(600)
-  createdAt            DateTime                  @default(now()) @map("rof_fecha_creacion")
-  updatedAt            DateTime                  @updatedAt @map("rof_fecha_modificacion")
-  occurrence           MeetingOccurrence         @relation(fields: [occurrenceId], references: [id], onDelete: Restrict, map: "fk_rof_id_reo")
-  receivedBy           User?                     @relation("OfferingReceptionReceiver", fields: [receivedById], references: [id], onDelete: SetNull, map: "fk_rof_id_usu_receptor")
-  reviewedBy           User?                     @relation("OfferingReceptionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, map: "fk_rof_id_usu_revisor")
-  details              OfferingReceptionDetail[]
+  id               Int                       @id(map: "pk_rof_recepcion_ofrenda") @default(autoincrement()) @map("rof_id")
+  occurrenceId     Int                       @unique(map: "uk_rof_ocurrencia") @map("rof_id_reo")
+  systemAmount     Decimal                   @map("rof_monto_sistema") @db.Decimal(19, 2)
+  receivedAmount   Decimal                   @map("rof_monto_recibido") @db.Decimal(19, 2)
+  amountDifference Decimal                   @map("rof_diferencia_monto") @db.Decimal(19, 2)
+  currency         String                    @default("USD") @map("rof_moneda") @db.VarChar(10)
+  status           OfferingReceptionStatus   @default(RECEIVED) @map("rof_estado")
+  receivedById     Int?                      @map("rof_id_usu_receptor")
+  receivedAt       DateTime                  @default(now()) @map("rof_fecha_recepcion")
+  reviewedById     Int?                      @map("rof_id_usu_revisor")
+  reviewedAt       DateTime?                 @map("rof_fecha_revision")
+  notes            String?                   @map("rof_nota") @db.VarChar(600)
+  closedById       Int?                      @map("rof_id_usu_cierre")
+  closedAt         DateTime?                 @map("rof_fecha_cierre")
+  closingNotes     String?                   @map("rof_nota_cierre") @db.VarChar(600)
+  createdAt        DateTime                  @default(now()) @map("rof_fecha_creacion")
+  updatedAt        DateTime                  @updatedAt @map("rof_fecha_modificacion")
+  occurrence       MeetingOccurrence         @relation(fields: [occurrenceId], references: [id], onDelete: Restrict, map: "fk_rof_id_reo")
+  receivedBy       User?                     @relation("OfferingReceptionReceiver", fields: [receivedById], references: [id], onDelete: SetNull, map: "fk_rof_id_usu_receptor")
+  reviewedBy       User?                     @relation("OfferingReceptionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, map: "fk_rof_id_usu_revisor")
+  closedBy         User?                     @relation("OfferingReceptionCloser", fields: [closedById], references: [id], onDelete: SetNull, map: "fk_rof_id_usu_cierre")
+  details          OfferingReceptionDetail[]
 
   @@index([status, receivedAt], map: "ix_rof_estado_recepcion")
   @@index([receivedById], map: "ix_rof_usuario_receptor")
   @@index([reviewedById], map: "ix_rof_usuario_revisor")
+  @@index([closedById], map: "ix_rof_usuario_cierre")
   @@map("rof_recepcion_ofrenda")
 }
 
 model OfferingReceptionDetail {
-  id          Int               @id(map: "pk_dro_detalle_recepcion_ofrenda") @default(autoincrement()) @map("dro_id")
-  receptionId Int               @map("dro_id_rof")
-  categoryId  Int               @map("dro_id_cof")
-  amount      Decimal           @map("dro_monto") @db.Decimal(19, 2)
-  notes       String?           @map("dro_nota") @db.VarChar(300)
-  createdAt   DateTime          @default(now()) @map("dro_fecha_creacion")
-  updatedAt   DateTime          @updatedAt @map("dro_fecha_modificacion")
-  reception   OfferingReception @relation(fields: [receptionId], references: [id], onDelete: Cascade, map: "fk_dro_id_rof")
-  category    OfferingCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict, map: "fk_dro_id_cof")
+  id           Int                      @id(map: "pk_dro_detalle_recepcion_ofrenda") @default(autoincrement()) @map("dro_id")
+  receptionId  Int                      @map("dro_id_rof")
+  categoryId   Int?                     @map("dro_id_cof")
+  systemAmount Decimal                  @default(0) @map("dro_monto_sistema") @db.Decimal(19, 2)
+  amount       Decimal                  @map("dro_monto") @db.Decimal(19, 2)
+  notes        String?                  @map("dro_nota") @db.VarChar(300)
+  createdAt    DateTime                 @default(now()) @map("dro_fecha_creacion")
+  updatedAt    DateTime                 @updatedAt @map("dro_fecha_modificacion")
+  reception    OfferingReception        @relation(fields: [receptionId], references: [id], onDelete: Cascade, map: "fk_dro_id_rof")
+  category     OfferingCategory?        @relation(fields: [categoryId], references: [id], onDelete: Restrict, map: "fk_dro_id_cof")
+  counts       OfferingReceptionCount[]
 
   @@unique([receptionId, categoryId], map: "uk_dro_recepcion_categoria")
   @@index([receptionId], map: "ix_dro_recepcion")
   @@index([categoryId], map: "ix_dro_categoria")
   @@map("dro_detalle_recepcion_ofrenda")
+}
+
+model Denomination {
+  id        Int                      @id(map: "pk_den_denominacion") @default(autoincrement()) @map("den_id")
+  code      String                   @unique(map: "uk_den_codigo") @map("den_codigo") @db.VarChar(100)
+  name      String                   @unique(map: "uk_den_nombre") @map("den_nombre") @db.VarChar(100)
+  value     Decimal                  @map("den_valor") @db.Decimal(19, 2)
+  kind      DenominationKind         @map("den_tipo")
+  sortOrder Int                      @default(0) @map("den_orden")
+  isActive  Boolean                  @default(true) @map("den_activo")
+  createdAt DateTime                 @default(now()) @map("den_fecha_creacion")
+  updatedAt DateTime                 @updatedAt @map("den_fecha_modificacion")
+  counts    OfferingReceptionCount[]
+
+  @@index([isActive], map: "ix_den_activo")
+  @@map("den_denominacion")
+}
+
+model OfferingReceptionCount {
+  id             Int                     @id(map: "pk_dxd_detalle_denominacion") @default(autoincrement()) @map("dxd_id")
+  detailId       Int                     @map("dxd_detalle")
+  denominationId Int                     @map("dxd_denominacion")
+  quantity       Int                     @map("dxd_cantidad")
+  amount         Decimal                 @map("dxd_monto") @db.Decimal(19, 2)
+  createdAt      DateTime                @default(now()) @map("dxd_fecha_creacion")
+  updatedAt      DateTime                @updatedAt @map("dxd_fecha_modificacion")
+  detail         OfferingReceptionDetail @relation(fields: [detailId], references: [id], onDelete: Cascade, map: "fk_dxd_detalle")
+  denomination   Denomination            @relation(fields: [denominationId], references: [id], onDelete: Restrict, map: "fk_dxd_denominacion")
+
+  @@unique([detailId, denominationId], map: "uk_dxd_detalle_denominacion")
+  @@index([denominationId], map: "ix_dxd_denominacion")
+  @@map("dxd_detalle_denominacion")
 }
