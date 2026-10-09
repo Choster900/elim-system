@@ -681,6 +681,7 @@ model OfferingReception {
   closedById       Int?                      @map("rof_id_usu_cierre")
   closedAt         DateTime?                 @map("rof_fecha_cierre")
   closingNotes     String?                   @map("rof_nota_cierre") @db.VarChar(600)
+  directEntry      Boolean                   @default(false) @map("rof_registro_directo")
   createdAt        DateTime                  @default(now()) @map("rof_fecha_creacion")
   updatedAt        DateTime                  @updatedAt @map("rof_fecha_modificacion")
   occurrence       MeetingOccurrence         @relation(fields: [occurrenceId], references: [id], onDelete: Restrict, map: "fk_rof_id_reo")
