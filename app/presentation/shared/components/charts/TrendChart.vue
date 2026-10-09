@@ -86,7 +86,7 @@ function formatValue(value: number) {
         >
             <defs>
                 <linearGradient :id="gradientId" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" :style="{ stopColor: color, stopOpacity: 0.32 }" />
+                    <stop offset="0%" :style="{ stopColor: color, stopOpacity: 0.14 }" />
                     <stop offset="100%" :style="{ stopColor: color, stopOpacity: 0.02 }" />
                 </linearGradient>
             </defs>
@@ -119,7 +119,7 @@ function formatValue(value: number) {
                 :stroke="color"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                stroke-width="3"
+                stroke-width="2"
             />
 
             <g v-for="point in points" :key="`${point.label}-${point.x}`" class="group">
@@ -144,5 +144,24 @@ function formatValue(value: number) {
                 </text>
             </g>
         </svg>
+        <table class="sr-only">
+            <caption>
+                {{
+                    label
+                }}
+            </caption>
+            <thead>
+                <tr>
+                    <th scope="col">Período</th>
+                    <th scope="col">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="point in values" :key="point.label">
+                    <th scope="row">{{ point.label }}</th>
+                    <td>{{ formatValue(point.value) }}</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 </template>
