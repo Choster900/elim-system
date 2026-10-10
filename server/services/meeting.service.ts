@@ -94,16 +94,7 @@ async function assertMeetingCoSupervisors(memberIds: number[], supervisorId: num
 
 async function sectorSupervisorId(sectorId: number) {
     const sector = await getSectorById(sectorId)
-    if (sector.supervisorId) return sector.supervisorId
-
-    throw createError({
-        statusCode: 409,
-        message: 'El sector debe tener un supervisor antes de asignarle reuniones',
-        data: {
-            code: ApiErrorCode.BUSINESS_RULE_ERROR,
-            fields: { sectorId: ['Asigna un supervisor al sector seleccionado'] },
-        },
-    })
+    return sector.supervisorId ?? null
 }
 
 function missingField(field: 'sectorId' | 'leaderId' | 'hostId', message: string): never {

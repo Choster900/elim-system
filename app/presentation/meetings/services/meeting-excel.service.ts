@@ -277,7 +277,7 @@ function catalogSheets(catalogs: MeetingImportCatalogs) {
         catalogSheet(
             'Sectores',
             'Sectores disponibles',
-            'Copia el código del sector: distrito + zona + sector (D1Z2S3). Su supervisor se asignará automáticamente.',
+            'Copia el código del sector: distrito + zona + sector (D1Z2S3). Si el sector tiene supervisor, se asignará automáticamente; si no, la reunión lo recibirá cuando se le asigne uno al sector.',
             ['Código', 'Nombre', 'Zona', 'Distrito', 'Supervisor'],
             catalogs.sectors.map((sector) => [
                 sector.pathCode,
@@ -651,10 +651,6 @@ export async function parseMeetingsWorkbook(
                   (item) => item.code,
                   (item) => item.fullName,
               )
-        if (sector && !sector.supervisorId) {
-            issues.push('Sector: debe tener un supervisor asignado antes de crear reuniones.')
-        }
-
         const date = parseDate(value(row, 'Fecha de inicio *'), 'Fecha de inicio', issues, true)
         const startTime = parseTime(value(row, 'Hora de inicio *'), 'Hora de inicio', issues)
         const endTime = parseTime(value(row, 'Hora de fin *'), 'Hora de fin', issues)
@@ -697,7 +693,7 @@ export async function parseMeetingsWorkbook(
             typeId: type?.id ?? 0,
             sectorId: isGeneral ? null : (sector?.id ?? 0),
             leaderId: isGeneral ? null : (leader?.id ?? 0),
-            supervisorId: isGeneral ? null : (sector?.supervisorId ?? 0),
+            supervisorId: isGeneral ? null : (sector?.supervisorId ?? null),
             hostId: isGeneral ? null : (host?.id ?? 0),
             coSupervisorIds: [],
             title: '',
