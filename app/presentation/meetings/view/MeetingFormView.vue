@@ -513,10 +513,6 @@ function validateForm() {
         formErrors.leaderId = 'Asigna un líder con rol Líder'
         ok = false
     }
-    if (form.sectorId && !form.supervisorId) {
-        formErrors.supervisorId = 'El sector seleccionado no tiene un supervisor asignado'
-        ok = false
-    }
     if (!form.hostId) {
         formErrors.hostId = 'Asigna un anfitrión con rol Anfitrión'
         ok = false
@@ -614,7 +610,7 @@ function buildInput(): MeetingInput {
         typeId: form.typeId,
         sectorId: isUnassigned ? null : form.sectorId,
         leaderId: isGeneral ? null : form.leaderId,
-        supervisorId: isUnassigned ? null : form.supervisorId,
+        supervisorId: isUnassigned || !form.supervisorId ? null : form.supervisorId,
         hostId: isGeneral ? null : form.hostId,
         coSupervisorIds: isGeneral ? [] : [...form.coSupervisorIds],
         title: manualTitle.value ? form.title.trim() : '',
@@ -1253,34 +1249,27 @@ const labelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-s
                                 </p>
                             </div>
                             <div>
-                                <label :class="labelClass">Supervisor *</label>
+                                <label :class="labelClass">Supervisor</label>
                                 <div class="mt-1">
                                     <div
                                         aria-disabled="true"
                                         title="Se asigna automáticamente desde el sector"
-                                        class="flex min-h-11 cursor-not-allowed items-center rounded border bg-surface-container-high px-3 text-sm"
-                                        :class="
-                                            formErrors.supervisorId
-                                                ? 'border-destructive text-destructive'
-                                                : 'border-outline-variant text-on-surface'
-                                        "
+                                        class="flex min-h-11 cursor-not-allowed items-center rounded border border-outline-variant bg-surface-container-high px-3 text-sm text-on-surface"
                                     >
                                         {{
                                             selectedSupervisor?.fullName ||
                                             (form.sectorId
-                                                ? 'Selecciona un sector con supervisor'
+                                                ? 'Este sector aún no tiene supervisor'
                                                 : 'Se asignará con el sector')
                                         }}
                                     </div>
                                 </div>
-                                <p
-                                    v-if="formErrors.supervisorId"
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{ formErrors.supervisorId }}
-                                </p>
-                                <p v-else class="mt-1 text-xs text-on-surface-variant">
-                                    Se hereda automáticamente del sector.
+                                <p class="mt-1 text-xs text-on-surface-variant">
+                                    {{
+                                        form.sectorId && !selectedSupervisor?.fullName
+                                            ? 'La reunión lo recibirá cuando se le asigne uno al sector.'
+                                            : 'Se hereda automáticamente del sector.'
+                                    }}
                                 </p>
                             </div>
                             <div>
