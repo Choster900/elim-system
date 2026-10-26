@@ -5,6 +5,7 @@ import type {
     ReceptionCategoryResult,
     ReceptionCountInput,
 } from '../interfaces/reception.interface'
+import { toCents } from '../utils/reception-format.util'
 
 const STORAGE_KEY = 'support-committee-reception-drafts'
 const DRAFT_TTL_MS = 14 * 24 * 60 * 60 * 1000
@@ -13,6 +14,7 @@ export type DraftMode = 'recibir' | 'corregir'
 
 export interface DraftCategory extends EnvelopeCategory {
     quantities: Record<string, number | null>
+    amount?: number | null
     extra?: boolean
 }
 
@@ -36,8 +38,8 @@ function quantitiesFromCounts(counts: ReceptionCategoryResult['counts']) {
     ) as Record<string, number | null>
 }
 
-function hasCounts(category: DraftCategory) {
-    return Object.values(category.quantities).some((quantity) => !!quantity)
+function hasEntries(category: DraftCategory) {
+    return !!category.amount || Object.values(category.quantities).some((quantity) => !!quantity)
 }
 
 export const useReceptionDraftStore = defineStore('support-committee-reception-draft', {
@@ -54,7 +56,11 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
             (state) =>
             (occurrenceId: number): boolean => {
                 const draft = state.drafts[String(occurrenceId)]
-                return !!draft && draft.mode === 'recibir'
+                return (
+                    !!draft &&
+                    draft.mode === 'recibir' &&
+                    (draft.categories.some(hasEntries) || !!draft.notes.trim())
+                )
             },
     },
     actions: {
@@ -84,7 +90,11 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
             this.drafts[String(occurrenceId)] = {
                 occurrenceId,
                 mode: 'recibir',
-                categories: registered.map((category) => ({ ...category, quantities: {} })),
+                categories: registered.map((category) => ({
+                    ...category,
+                    quantities: {},
+                    amount: null,
+                })),
                 currentIndex: 0,
                 notes: '',
                 updatedAt: Date.now(),
@@ -105,6 +115,7 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
                     categoryId: category.categoryId,
                     categoryName: category.categoryName,
                     quantities: quantitiesFromCounts(category.counts),
+                    amount: category.countedAmount,
                     extra: !registeredIds.has(category.categoryId),
                 })),
                 currentIndex: 0,
@@ -124,6 +135,12 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
             category.quantities[String(denominationId)] = quantity
             this.touch(occurrenceId)
         },
+        setAmount(occurrenceId: number, categoryIndex: number, amount: number | null) {
+            const category = this.drafts[String(occurrenceId)]?.categories[categoryIndex]
+            if (!category) return
+            category.amount = amount
+            this.touch(occurrenceId)
+        },
         setCurrentIndex(occurrenceId: number, index: number) {
             const draft = this.drafts[String(occurrenceId)]
             if (!draft) return
@@ -138,11 +155,16 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
             const byId = new Map(draft.categories.map((item) => [item.categoryId, item]))
             const registeredIds = new Set(registered.map((category) => category.categoryId))
             const extras = draft.categories.filter(
-                (item) => !registeredIds.has(item.categoryId) && (item.extra || hasCounts(item)),
+                (item) => !registeredIds.has(item.categoryId) && (item.extra || hasEntries(item)),
             )
             const next = [
                 ...registered.map(
-                    (category) => byId.get(category.categoryId) ?? { ...category, quantities: {} },
+                    (category) =>
+                        byId.get(category.categoryId) ?? {
+                            ...category,
+                            quantities: {},
+                            amount: null,
+                        },
                 ),
                 ...extras,
             ]
@@ -168,7 +190,7 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
                 (item) => item.categoryId === category.categoryId,
             )
             if (existing === -1) {
-                draft.categories.push({ ...category, quantities: {}, extra: true })
+                draft.categories.push({ ...category, quantities: {}, amount: null, extra: true })
                 draft.currentIndex = draft.categories.length - 1
             } else {
                 draft.currentIndex = existing
@@ -203,7 +225,18 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
     },
 })
 
-export function draftToCountInput(draft: ReceptionDraft): ReceptionCountInput {
+export function draftToCountInput(draft: ReceptionDraft, direct: boolean): ReceptionCountInput {
+    if (!direct) {
+        return {
+            categories: draft.categories
+                .map((category) => ({
+                    categoryId: category.categoryId,
+                    amount: toCents(category.amount ?? 0) / 100,
+                }))
+                .filter((category) => category.amount > 0),
+        }
+    }
+
     return {
         categories: draft.categories
             .map((category) => ({

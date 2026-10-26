@@ -150,6 +150,7 @@ model Member {
   hostedMeetings        Meeting[]             @relation("MeetingHost")
   ledOccurrences        MeetingOccurrence[]   @relation("OccurrenceLeader")
   coSupervisedMeetings  MeetingCoSupervisor[]
+  tithes                Tithe[]
 
   @@index([status], map: "ix_mie_estado")
   @@index([lastName, firstName], map: "ix_mie_nombre")
@@ -252,6 +253,8 @@ model User {
   receivedOfferings      OfferingReception[]  @relation("OfferingReceptionReceiver")
   reviewedOfferings      OfferingReception[]  @relation("OfferingReceptionReviewer")
   closedOfferings        OfferingReception[]  @relation("OfferingReceptionCloser")
+  receivedTithes         Tithe[]              @relation("TitheReceiver")
+  updatedTithes          Tithe[]              @relation("TitheEditor")
   receivedInvitations    UserInvitation[]     @relation("UserInvitationRecipient")
   createdInvitations     UserInvitation[]     @relation("UserInvitationCreator")
   passwordResetTokens    PasswordResetToken[]
@@ -616,18 +619,38 @@ model MeetingOccurrence {
   @@map("reo_reunion_ocurrencia")
 }
 
+model AttendanceGroup {
+  id                     Int              @id(map: "pk_gas_grupo_asistencia") @default(autoincrement()) @map("gas_id")
+  code                   String           @unique(map: "uk_gas_codigo") @map("gas_codigo") @db.VarChar(100)
+  name                   String           @unique(map: "uk_gas_nombre") @map("gas_nombre") @db.VarChar(100)
+  description            String?          @map("gas_descripcion") @db.VarChar(300)
+  countsTowardAttendance Boolean          @default(true) @map("gas_suma_asistencia")
+  isActive               Boolean          @default(true) @map("gas_activo")
+  sortOrder              Int              @default(0) @map("gas_orden")
+  createdAt              DateTime         @default(now()) @map("gas_fecha_creacion")
+  updatedAt              DateTime         @updatedAt @map("gas_fecha_modificacion")
+  types                  AttendanceType[]
+
+  @@index([isActive], map: "ix_gas_activo")
+  @@map("gas_grupo_asistencia")
+}
+
 model AttendanceType {
   id          Int                @id(map: "pk_tas_tipo_asistencia") @default(autoincrement()) @map("tas_id")
+  groupId     Int?               @map("tas_id_gas")
   code        String             @unique(map: "uk_tas_codigo") @map("tas_codigo") @db.VarChar(100)
-  name        String             @unique(map: "uk_tas_nombre") @map("tas_nombre") @db.VarChar(100)
+  name        String             @map("tas_nombre") @db.VarChar(100)
   description String?            @map("tas_descripcion") @db.VarChar(300)
   isActive    Boolean            @default(true) @map("tas_activo")
   sortOrder   Int                @default(0) @map("tas_orden")
   createdAt   DateTime           @default(now()) @map("tas_fecha_creacion")
   updatedAt   DateTime           @updatedAt @map("tas_fecha_modificacion")
+  group       AttendanceGroup?   @relation(fields: [groupId], references: [id], onDelete: Restrict, map: "fk_tas_id_gas")
   details     AttendanceDetail[]
 
+  @@unique([groupId, name], map: "uk_tas_grupo_nombre")
   @@index([isActive], map: "ix_tas_activo")
+  @@index([groupId], map: "ix_tas_grupo")
   @@map("tas_tipo_asistencia")
 }
 
@@ -746,4 +769,25 @@ model OfferingReceptionCount {
   @@unique([detailId, denominationId], map: "uk_dxd_detalle_denominacion")
   @@index([denominationId], map: "ix_dxd_denominacion")
   @@map("dxd_detalle_denominacion")
+}
+
+model Tithe {
+  id           Int      @id(map: "pk_die_diezmo") @default(autoincrement()) @map("die_id")
+  memberId     Int      @map("die_id_mie")
+  amount       Decimal  @map("die_monto") @db.Decimal(19, 2)
+  date         DateTime @map("die_fecha") @db.Date
+  notes        String?  @map("die_nota") @db.VarChar(300)
+  receivedById Int?     @map("die_id_usu_receptor")
+  receivedAt   DateTime @default(now()) @map("die_fecha_recepcion")
+  updatedById  Int?     @map("die_id_usu_modificacion")
+  createdAt    DateTime @default(now()) @map("die_fecha_creacion")
+  updatedAt    DateTime @updatedAt @map("die_fecha_modificacion")
+  member       Member   @relation(fields: [memberId], references: [id], onDelete: Restrict, map: "fk_die_id_mie")
+  receivedBy   User?    @relation("TitheReceiver", fields: [receivedById], references: [id], onDelete: SetNull, map: "fk_die_id_usu_receptor")
+  updatedBy    User?    @relation("TitheEditor", fields: [updatedById], references: [id], onDelete: SetNull, map: "fk_die_id_usu_modificacion")
+
+  @@index([date], map: "ix_die_fecha")
+  @@index([memberId], map: "ix_die_miembro")
+  @@index([receivedById], map: "ix_die_usuario_receptor")
+  @@map("die_diezmo")
 }

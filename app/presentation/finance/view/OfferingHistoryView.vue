@@ -29,6 +29,7 @@ import {
 } from '~/utils/date/date-format.util'
 import { useOccurrencesQuery } from '../composables/useOccurrenceQueries'
 import { GENERAL_MEETING_SCOPE_LABEL } from '~/presentation/meetings/utils/meeting-format.util'
+import { attendanceDetailLabel, sumAttendanceDetails } from '../utils/attendance-format.util'
 import type {
     OccurrenceDateField,
     OccurrenceFilters,
@@ -388,22 +389,15 @@ const bySector = computed(() => {
     return [...map.entries()].map(([label, value]) => ({ id: label, label, value }))
 })
 
-const byAttendanceType = computed(() => {
-    const map = new Map<number, { label: string; value: number }>()
+const visibleAttendanceDetails = computed(() =>
+    visible.value.flatMap((item) => item.attendanceDetails),
+)
+const byAttendanceType = computed(() => sumAttendanceDetails(visibleAttendanceDetails.value, true))
+const byResult = computed(() => sumAttendanceDetails(visibleAttendanceDetails.value, false))
 
-    for (const item of visible.value) {
-        for (const detail of item.attendanceDetails) {
-            const current = map.get(detail.typeId) ?? {
-                label: detail.typeName ?? 'Sin tipo',
-                value: 0,
-            }
-            current.value += detail.quantity
-            map.set(detail.typeId, current)
-        }
-    }
-
-    return [...map.entries()].map(([id, entry]) => ({ id, ...entry }))
-})
+function countedDetails(details: OccurrenceRecord['attendanceDetails']) {
+    return details.filter((detail) => detail.countsTowardAttendance)
+}
 
 function formatMoney(value: number) {
     return value.toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -739,8 +733,11 @@ const filterLabelClass =
                 </UiCard>
             </section>
 
-            <section v-if="byAttendanceType.length > 0" class="mt-4">
-                <UiCard class="p-6">
+            <section
+                v-if="byAttendanceType.length > 0 || byResult.length > 0"
+                class="mt-4 grid gap-4 xl:grid-cols-2"
+            >
+                <UiCard v-if="byAttendanceType.length > 0" class="p-6">
                     <h2 class="mb-5 text-sm font-semibold text-on-surface">
                         Composición de la asistencia
                     </h2>
@@ -749,6 +746,15 @@ const filterLabelClass =
                         format="number"
                         label="Asistencia acumulada por tipo"
                         empty-message="Las fechas visibles no tienen desglose de asistencia."
+                    />
+                </UiCard>
+                <UiCard v-if="byResult.length > 0" class="p-6">
+                    <h2 class="mb-5 text-sm font-semibold text-on-surface">Resultados</h2>
+                    <RankedBarList
+                        :items="byResult"
+                        format="number"
+                        label="Resultados acumulados"
+                        empty-message="Las fechas visibles no tienen resultados registrados."
                     />
                 </UiCard>
             </section>
@@ -926,20 +932,20 @@ const filterLabelClass =
                                 </span>
                             </p>
                             <p
-                                v-if="row.attendanceDetails.length > 0"
+                                v-if="countedDetails(row.attendanceDetails).length > 0"
                                 class="text-[10px] tabular-nums text-on-surface-variant"
                             >
                                 {{
-                                    row.attendanceDetails
+                                    countedDetails(row.attendanceDetails)
                                         .slice(0, 2)
                                         .map(
                                             (detail) =>
-                                                `${detail.quantity} ${detail.typeName ?? 'sin tipo'}`,
+                                                `${detail.quantity} ${attendanceDetailLabel(detail)}`,
                                         )
                                         .join(' · ')
                                 }}
-                                <template v-if="row.attendanceDetails.length > 2">
-                                    · +{{ row.attendanceDetails.length - 2 }}
+                                <template v-if="countedDetails(row.attendanceDetails).length > 2">
+                                    · +{{ countedDetails(row.attendanceDetails).length - 2 }}
                                 </template>
                             </p>
                         </template>

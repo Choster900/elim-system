@@ -20,7 +20,7 @@ import {
 import type { OccurrenceRecord } from '../repositories/occurrence.repository'
 import * as repo from '../repositories/reception.repository'
 import { ApiErrorCode } from '../types/api-response.types'
-import { hasOccurrenceEnded } from '../utils/date/business-time.util'
+import { businessIsoDate } from '../utils/date/business-time.util'
 import { getOccurrenceById, syncOccurrences } from './meeting-occurrence.service'
 
 interface RegisteredCategory {
@@ -74,7 +74,7 @@ export function toEnvelope(occurrence: OccurrenceRecord) {
     return {
         isGeneral: occurrence.isGeneralMeeting,
         directEntry,
-        isReady: !directEntry || hasOccurrenceEnded(occurrence),
+        isReady: !directEntry || occurrence.date <= businessIsoDate(),
         occurrenceId: occurrence.id,
         meetingId: occurrence.meetingId,
         meetingTitle: occurrence.meetingTitle,
@@ -117,9 +117,9 @@ async function getReceivableOccurrence(
     if (!occurrence.isGeneralMeeting) {
         businessRule('El líder todavía no registra la ofrenda de esta fecha')
     }
-    if (!hasOccurrenceEnded(occurrence, now)) {
+    if (occurrence.date > businessIsoDate(now)) {
         businessRule(
-            `El culto todavía no termina; podrás registrar su ofrenda después de las ${occurrence.endTime}`,
+            `Este culto es el ${occurrence.date}; podrás registrar su ofrenda ese mismo día`,
         )
     }
     return occurrence
@@ -180,11 +180,23 @@ function assertNoDuplicates(dto: ReceptionCountDto) {
     }
 }
 
+function assertEntryMode(dto: ReceptionCountDto, direct: boolean) {
+    if (direct && dto.categories.some((category) => category.amount !== undefined)) {
+        businessRule(
+            'En un culto general se cuentan los billetes y monedas de cada tipo de ofrenda',
+        )
+    }
+    if (!direct && dto.categories.some((category) => category.counts.length > 0)) {
+        businessRule('Los sobres del líder se reciben por monto, sin contar billetes ni monedas')
+    }
+}
+
 async function buildComparison(
     occurrence: OccurrenceRecord,
     dto: ReceptionCountDto,
     direct = false,
 ) {
+    assertEntryMode(dto, direct)
     assertNoDuplicates(dto)
 
     const registered = direct ? [] : registeredCategories(occurrence)
@@ -194,9 +206,8 @@ async function buildComparison(
     ])
 
     const counted = new Map(
-        dto.categories.map((category) => [
-            category.categoryId,
-            category.counts
+        dto.categories.map((category) => {
+            const counts = category.counts
                 .filter((count) => count.quantity > 0)
                 .map((count) => {
                     const denomination = denominations.get(count.denominationId)!
@@ -206,8 +217,12 @@ async function buildComparison(
                         cents: toCents(denomination.value) * count.quantity,
                     }
                 })
-                .sort((left, right) => left.denomination.sortOrder - right.denomination.sortOrder),
-        ]),
+                .sort((left, right) => left.denomination.sortOrder - right.denomination.sortOrder)
+            const cents = direct
+                ? counts.reduce((sum, count) => sum + count.cents, 0)
+                : toCents(category.amount ?? 0)
+            return [category.categoryId, { counts, cents }]
+        }),
     )
 
     const categoryIds = [
@@ -217,13 +232,12 @@ async function buildComparison(
             .filter(
                 (id) =>
                     !registered.some((category) => category.categoryId === id) &&
-                    (counted.get(id)?.length ?? 0) > 0,
+                    (counted.get(id)?.cents ?? 0) > 0,
             ),
     ]
 
     const categories = categoryIds.map((categoryId) => {
-        const counts = counted.get(categoryId) ?? []
-        const countedCents = counts.reduce((sum, count) => sum + count.cents, 0)
+        const { counts, cents: countedCents } = counted.get(categoryId) ?? { counts: [], cents: 0 }
         const registeredCents = direct
             ? countedCents
             : (registered.find((category) => category.categoryId === categoryId)?.cents ?? 0)
@@ -304,11 +318,11 @@ export async function getPendingEnvelopes(
     page: { skip: number; take: number },
 ) {
     if (page.skip === 0) await syncOccurrences()
-    const [{ items, totalItems }, zones] = await Promise.all([
+    const [{ items, totalItems }, territories] = await Promise.all([
         repo.findPendingEnvelopeOccurrences(scope, filters, page),
-        repo.findPendingEnvelopeZones(scope),
+        repo.findPendingEnvelopeTerritories(scope),
     ])
-    return { items: items.map(toEnvelope), zones, totalItems }
+    return { items: items.map(toEnvelope), ...territories, totalItems }
 }
 
 export async function getReceptions(scope: OccurrenceScopeFilter, filters: ReceptionFiltersDto) {

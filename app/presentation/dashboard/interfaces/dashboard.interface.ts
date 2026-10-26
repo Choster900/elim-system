@@ -11,6 +11,12 @@ export interface DashboardMetric {
     changePercentage: number | null
 }
 
+export interface DashboardResult extends DashboardMetric {
+    id: number
+    code: string
+    name: string
+}
+
 export interface DashboardTrendPoint {
     key: string
     label: string
@@ -84,6 +90,7 @@ export interface DashboardSummary {
         attendanceGoalRate: number
         offeringPerAttendee: number
     }
+    results: DashboardResult[]
     trends: DashboardTrendPoint[]
     categoryDistribution: DashboardDistribution[]
     districtPerformance: DashboardDistrict[]

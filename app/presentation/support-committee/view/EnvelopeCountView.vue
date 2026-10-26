@@ -3,12 +3,14 @@ import { AlertTriangle, ArrowLeft, ArrowRight, EyeOff, Plus, Trash2 } from '@luc
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import CategoryStepper, { type CategoryStep } from '../components/CategoryStepper.vue'
 import DenominationCountGrid from '../components/DenominationCountGrid.vue'
+import EnvelopeAmountForm from '../components/EnvelopeAmountForm.vue'
 import EnvelopeHeader from '../components/EnvelopeHeader.vue'
 import ReceptionSteps from '../components/ReceptionSteps.vue'
 import { useDenominationsQuery, useEnvelopeQuery } from '../composables/useReceptionQueries'
 import type { EnvelopeCategory } from '../interfaces/reception.interface'
 import { useReceptionDraftStore } from '../stores/reception-draft.store'
 import {
+    GENERAL_SERVICES_PATH,
     SUPPORT_COMMITTEE_HOME,
     categoryLabel,
     countPath,
@@ -16,6 +18,7 @@ import {
     envelopePath,
     formatMoney,
     reviewPath,
+    toCents,
 } from '../utils/reception-format.util'
 
 defineOptions({ name: 'EnvelopeCountView' })
@@ -60,18 +63,21 @@ const isNotReady = computed(() => detail.value?.envelope.isReady === false)
 const isLoading = computed(
     () =>
         envelopeQuery.isPending.value ||
-        denominationsQuery.isPending.value ||
+        (isDirectEntry.value && denominationsQuery.isPending.value) ||
         (!draft.value && !isNotReady.value),
 )
 const loadError = computed(() => {
-    const error = envelopeQuery.error.value ?? denominationsQuery.error.value
+    const error =
+        envelopeQuery.error.value ?? (isDirectEntry.value ? denominationsQuery.error.value : null)
     return error ? resolveHttpErrorMessage(error, 'No fue posible abrir el sobre') : ''
 })
 
 const backPath = computed(() =>
     isCorrection.value && occurrenceId.value
         ? envelopePath(occurrenceId.value)
-        : SUPPORT_COMMITTEE_HOME,
+        : isDirectEntry.value
+          ? GENERAL_SERVICES_PATH
+          : SUPPORT_COMMITTEE_HOME,
 )
 
 function initDraft() {
@@ -127,7 +133,10 @@ const isLastCategory = computed(() => currentIndex.value >= categories.value.len
 
 function categoryTotal(index: number) {
     const category = categories.value[index]
-    return category ? countedCents(category.quantities, denominations.value) / 100 : 0
+    if (!category) return 0
+    return isDirectEntry.value
+        ? countedCents(category.quantities, denominations.value) / 100
+        : toCents(category.amount ?? 0) / 100
 }
 
 const steps = computed<CategoryStep[]>(() =>
@@ -146,7 +155,28 @@ const remainingCategories = computed(() =>
     ),
 )
 
-const envelopeTotal = computed(() => steps.value.reduce((sum, step) => sum + step.amount, 0))
+const envelopeTotal = computed(() =>
+    categories.value.reduce((sum, _category, index) => sum + categoryTotal(index), 0),
+)
+
+const countHint = computed(() =>
+    isCorrection.value ? 'Corrigiendo un conteo guardado' : 'Lo del líder lo verás al revisar',
+)
+
+function onAmountChange(index: number, amount: number | null) {
+    if (!occurrenceId.value) return
+    draftStore.setAmount(occurrenceId.value, index, amount)
+}
+
+function onAmountCategoryAdd(category: EnvelopeCategory) {
+    if (!occurrenceId.value) return
+    draftStore.addCategory(occurrenceId.value, category)
+}
+
+function onAmountCategoryRemove(categoryId: number | null) {
+    if (!occurrenceId.value) return
+    draftStore.removeCategory(occurrenceId.value, categoryId)
+}
 
 function onQuantityChange(denominationId: number, quantity: number | null) {
     if (!occurrenceId.value) return
@@ -245,7 +275,19 @@ function onPrimaryAction() {
         <template v-else>
             <EnvelopeHeader :envelope="envelope" />
 
+            <EnvelopeAmountForm
+                v-if="!isDirectEntry"
+                :categories="categories"
+                :remaining="remainingCategories"
+                :hint="countHint"
+                @change="onAmountChange"
+                @add="onAmountCategoryAdd"
+                @remove="onAmountCategoryRemove"
+                @submit="goToReview"
+            />
+
             <section
+                v-else
                 ref="countSectionRef"
                 class="mt-4 scroll-mt-24 overflow-hidden rounded-xl border border-outline-variant bg-surface"
             >
@@ -307,11 +349,9 @@ function onPrimaryAction() {
                             >
                                 <EyeOff class="size-3.5 text-primary" />
                                 {{
-                                    isDirectEntry
-                                        ? 'Culto general: lo que cuentes será la ofrenda registrada'
-                                        : isCorrection
-                                          ? 'Corrigiendo un conteo guardado'
-                                          : 'Lo del líder lo verás al revisar'
+                                    isCorrection
+                                        ? 'Corrigiendo un conteo guardado'
+                                        : 'Culto general: lo que cuentes será la ofrenda registrada'
                                 }}
                             </p>
                             <button
@@ -344,17 +384,19 @@ function onPrimaryAction() {
                     class="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6"
                 >
                     <div class="flex min-w-0 items-center gap-4">
-                        <div class="min-w-0">
-                            <p
-                                class="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface-variant"
-                            >
-                                {{ categoryLabel(currentCategory.categoryName) }}
-                            </p>
-                            <p class="text-lg font-semibold tabular-nums text-on-surface">
-                                {{ formatMoney(categoryTotal(currentIndex)) }}
-                            </p>
-                        </div>
-                        <span class="h-8 w-px bg-outline-variant" />
+                        <template v-if="isDirectEntry">
+                            <div class="min-w-0">
+                                <p
+                                    class="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface-variant"
+                                >
+                                    {{ categoryLabel(currentCategory.categoryName) }}
+                                </p>
+                                <p class="text-lg font-semibold tabular-nums text-on-surface">
+                                    {{ formatMoney(categoryTotal(currentIndex)) }}
+                                </p>
+                            </div>
+                            <span class="h-8 w-px bg-outline-variant" />
+                        </template>
                         <div>
                             <p
                                 class="text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface-variant"
@@ -368,27 +410,38 @@ function onPrimaryAction() {
                     </div>
 
                     <div class="flex shrink-0 items-center gap-3">
-                        <button
-                            v-if="currentIndex > 0"
-                            type="button"
-                            class="hidden items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-on-surface sm:inline-flex"
-                            @click="goToCategory(currentIndex - 1)"
-                        >
-                            <ArrowLeft class="size-4" />
-                            Anterior
-                        </button>
                         <UiButton
+                            v-if="!isDirectEntry"
                             type="button"
                             class="h-11 rounded-lg px-5 text-sm"
-                            @click="onPrimaryAction"
+                            @click="goToReview"
                         >
-                            <template v-if="isLastCategory">Revisar conteo</template>
-                            <template v-else>
-                                <span class="hidden sm:inline">Siguiente:</span>
-                                {{ categoryLabel(nextCategory?.categoryName ?? null) }}
-                            </template>
+                            Revisar
                             <ArrowRight class="size-4" />
                         </UiButton>
+                        <template v-else>
+                            <button
+                                v-if="currentIndex > 0"
+                                type="button"
+                                class="hidden items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-on-surface sm:inline-flex"
+                                @click="goToCategory(currentIndex - 1)"
+                            >
+                                <ArrowLeft class="size-4" />
+                                Anterior
+                            </button>
+                            <UiButton
+                                type="button"
+                                class="h-11 rounded-lg px-5 text-sm"
+                                @click="onPrimaryAction"
+                            >
+                                <template v-if="isLastCategory">Revisar conteo</template>
+                                <template v-else>
+                                    <span class="hidden sm:inline">Siguiente:</span>
+                                    {{ categoryLabel(nextCategory?.categoryName ?? null) }}
+                                </template>
+                                <ArrowRight class="size-4" />
+                            </UiButton>
+                        </template>
                     </div>
                 </div>
             </div>

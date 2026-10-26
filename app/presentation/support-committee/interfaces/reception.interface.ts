@@ -93,7 +93,8 @@ export interface EnvelopeDetail {
 export interface ReceptionCountInput {
     categories: {
         categoryId: number | null
-        counts: { denominationId: number; quantity: number }[]
+        counts?: { denominationId: number; quantity: number }[]
+        amount?: number
     }[]
 }
 
@@ -101,16 +102,29 @@ export interface ReceiveEnvelopeInput extends ReceptionCountInput {
     notes: string | null
 }
 
+export type PendingDateField = 'reunion' | 'registro'
+
+export type PendingKind = 'lideres' | 'generales'
+
 export interface PendingEnvelopesParams {
     page: number
     limit: number
+    kind?: PendingKind
+    order?: 'asc' | 'desc'
     search?: string
+    districtId?: number
     zoneId?: number
+    sectorId?: number
+    dateField?: PendingDateField
+    from?: string
+    to?: string
 }
 
 export interface PendingEnvelopesPage {
     items: Envelope[]
-    zones: { id: number; name: string }[]
+    districts: { id: number; name: string }[]
+    zones: { id: number; name: string; districtId: number }[]
+    sectors: { id: number; name: string; zoneId: number }[]
     pagination: {
         page: number
         limit: number

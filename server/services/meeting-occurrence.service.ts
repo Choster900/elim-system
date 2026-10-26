@@ -7,7 +7,7 @@ import type {
     UpdateOccurrenceDto,
 } from '../dto/offering/occurrence.dto'
 import * as repo from '../repositories/occurrence.repository'
-import { findAttendanceTypeIdsByIds } from '../repositories/attendance.repository'
+import { findAttendanceTypeCounting } from '../repositories/attendance.repository'
 import { findOfferingCategoryIdsByIds } from '../repositories/offering.repository'
 import { findReceptionIdByOccurrenceId } from '../repositories/reception.repository'
 import { ApiErrorCode } from '../types/api-response.types'
@@ -93,13 +93,14 @@ async function assertCategoriesExist(details: { categoryId: number }[]) {
     }
 }
 
-async function assertAttendanceTypesExist(details: { typeId: number }[]) {
-    if (details.length === 0) return
+async function resolveCountedAttendanceTypeIds(details: { typeId: number }[]) {
+    if (details.length === 0) return new Set<number>()
     const ids = [...new Set(details.map((detail) => detail.typeId))]
-    const existing = await findAttendanceTypeIdsByIds(ids)
-    if (existing.length !== ids.length) {
+    const types = await findAttendanceTypeCounting(ids)
+    if (types.length !== ids.length) {
         businessRule('Uno o más tipos de asistencia no existen')
     }
+    return new Set(types.filter((type) => type.countsTowardAttendance).map((type) => type.id))
 }
 
 export async function syncOccurrences(options: { meetingIds?: number[] } = {}, now = new Date()) {
@@ -200,8 +201,8 @@ export async function recordOccurrence(
     assertOccurrenceEnded(occurrence)
 
     await assertCategoriesExist(dto.details)
-    await assertAttendanceTypesExist(dto.attendanceDetails)
-    return repo.recordOccurrence(id, dto, userId)
+    const countedTypeIds = await resolveCountedAttendanceTypeIds(dto.attendanceDetails)
+    return repo.recordOccurrence(id, dto, userId, countedTypeIds)
 }
 
 export async function recordOccurrencesBulk(
@@ -228,8 +229,10 @@ export async function recordOccurrencesBulk(
     for (const occurrence of occurrences) assertOccurrenceEnded(occurrence, now)
 
     await assertCategoriesExist(dto.entries.flatMap((entry) => entry.details))
-    await assertAttendanceTypesExist(dto.entries.flatMap((entry) => entry.attendanceDetails))
-    return repo.recordOccurrencesBulk(dto.entries, userId)
+    const countedTypeIds = await resolveCountedAttendanceTypeIds(
+        dto.entries.flatMap((entry) => entry.attendanceDetails),
+    )
+    return repo.recordOccurrencesBulk(dto.entries, userId, countedTypeIds)
 }
 
 export async function updateOccurrence(
@@ -253,6 +256,6 @@ export async function updateOccurrence(
     }
 
     if (dto.details !== undefined) await assertCategoriesExist(dto.details)
-    if (dto.attendanceDetails !== undefined) await assertAttendanceTypesExist(dto.attendanceDetails)
-    return repo.updateOccurrence(id, dto, userId)
+    const countedTypeIds = await resolveCountedAttendanceTypeIds(dto.attendanceDetails ?? [])
+    return repo.updateOccurrence(id, dto, userId, countedTypeIds)
 }

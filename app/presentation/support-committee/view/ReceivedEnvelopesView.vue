@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, Inbox, Info, Search, ShieldCheck } from '@lucide/vue'
+import { ChevronDown, ChevronRight, Inbox, MapPin, Search, ShieldCheck, X } from '@lucide/vue'
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import { getMeetingScopeLabel } from '~/presentation/meetings/utils/meeting-format.util'
 import { formatLocalIsoDate } from '~/utils/date/date-format.util'
@@ -9,7 +9,7 @@ import ReceptionResultSummary, {
 } from '../components/ReceptionResultSummary.vue'
 import EnvelopeListSkeleton from '../components/EnvelopeListSkeleton.vue'
 import SupportCommitteeTabs from '../components/SupportCommitteeTabs.vue'
-import { usePendingCountQuery, useReceptionsQuery } from '../composables/useReceptionQueries'
+import { useReceptionsQuery } from '../composables/useReceptionQueries'
 import type {
     ReceptionFilters,
     ReceptionRecord,
@@ -50,6 +50,18 @@ const todayIso = localIsoDate(new Date())
 const selectedStatus = ref<ReceptionStatus | null>(null)
 const dateRange = ref<DatePickerRange>({ start: `${todayIso.slice(0, 8)}01`, end: todayIso })
 const search = ref('')
+const selectedDistrict = ref<number | null>(null)
+const selectedZone = ref<number | null>(null)
+const selectedSector = ref<number | null>(null)
+
+watch(selectedDistrict, () => {
+    selectedZone.value = null
+    selectedSector.value = null
+})
+
+watch(selectedZone, () => {
+    selectedSector.value = null
+})
 
 function dayLabel(isoDate: string) {
     return formatLocalIsoDate(isoDate, { day: 'numeric', month: 'short', year: 'numeric' })
@@ -74,22 +86,153 @@ const filters = computed<ReceptionFilters>(() => ({
 }))
 
 const receptionsQuery = useReceptionsQuery(filters)
-const pendingTotal = usePendingCountQuery()
+
+interface TerritoryOption {
+    value: number
+    label: string
+}
+
+function uniqueOptions(entries: { id: number | null; name: string | null }[]) {
+    const options = new Map<number, string>()
+    for (const entry of entries) {
+        if (entry.id !== null && entry.name) options.set(entry.id, entry.name)
+    }
+    return [...options.entries()]
+        .map<TerritoryOption>(([value, label]) => ({ value, label }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'es'))
+}
+
+const loadedEnvelopes = computed(() =>
+    (receptionsQuery.data.value ?? []).map((reception) => reception.envelope),
+)
+
+const districtOptions = computed(() =>
+    uniqueOptions(
+        loadedEnvelopes.value.map((envelope) => ({
+            id: envelope.districtId,
+            name: envelope.districtName,
+        })),
+    ),
+)
+
+const zoneOptions = computed(() =>
+    uniqueOptions(
+        loadedEnvelopes.value
+            .filter(
+                (envelope) =>
+                    selectedDistrict.value === null ||
+                    envelope.districtId === selectedDistrict.value,
+            )
+            .map((envelope) => ({ id: envelope.zoneId, name: envelope.zoneName })),
+    ),
+)
+
+const sectorOptions = computed(() =>
+    uniqueOptions(
+        loadedEnvelopes.value
+            .filter(
+                (envelope) =>
+                    (selectedDistrict.value === null ||
+                        envelope.districtId === selectedDistrict.value) &&
+                    (selectedZone.value === null || envelope.zoneId === selectedZone.value),
+            )
+            .map((envelope) => ({ id: envelope.sectorId, name: envelope.sectorName })),
+    ),
+)
+
+const hasTerritoryFilter = computed(
+    () =>
+        selectedDistrict.value !== null ||
+        selectedZone.value !== null ||
+        selectedSector.value !== null,
+)
+
+const territoryLabel = computed(() => {
+    const pick = (options: TerritoryOption[], id: number | null) =>
+        options.find((option) => option.value === id)?.label
+    return (
+        pick(sectorOptions.value, selectedSector.value) ??
+        pick(zoneOptions.value, selectedZone.value) ??
+        pick(districtOptions.value, selectedDistrict.value) ??
+        null
+    )
+})
+
+const showTerritory = ref(false)
+
+const territoryCount = computed(
+    () =>
+        [selectedDistrict.value, selectedZone.value, selectedSector.value].filter(
+            (value) => value !== null,
+        ).length,
+)
+
+function clearTerritory() {
+    selectedDistrict.value = null
+    selectedZone.value = null
+    selectedSector.value = null
+}
+
+const activeChips = computed(() => {
+    const chips: { key: string; label: string; clear: () => void }[] = []
+    if (territoryLabel.value) {
+        chips.push({ key: 'territory', label: territoryLabel.value, clear: clearTerritory })
+    }
+    const status = statusOptions.find(
+        (option) => option.value !== null && option.value === selectedStatus.value,
+    )
+    if (status) {
+        chips.push({
+            key: 'status',
+            label: status.label,
+            clear: () => {
+                selectedStatus.value = null
+            },
+        })
+    }
+    const term = search.value.trim()
+    if (term) {
+        chips.push({
+            key: 'search',
+            label: `“${term}”`,
+            clear: () => {
+                search.value = ''
+            },
+        })
+    }
+    return chips
+})
+
+function clearFilters() {
+    clearTerritory()
+    selectedStatus.value = null
+    search.value = ''
+}
+
+function matchesTerritory(reception: ReceptionRecord) {
+    const { envelope } = reception
+    return (
+        (selectedDistrict.value === null || envelope.districtId === selectedDistrict.value) &&
+        (selectedZone.value === null || envelope.zoneId === selectedZone.value) &&
+        (selectedSector.value === null || envelope.sectorId === selectedSector.value)
+    )
+}
 
 const receptions = computed(() => {
     const term = normalize(search.value.trim())
     return (receptionsQuery.data.value ?? []).filter(
         (reception) =>
-            !term ||
-            normalize(
-                [
-                    reception.envelope.meetingTitle,
-                    reception.envelope.meetingCode,
-                    reception.envelope.leaderName ?? '',
-                    reception.envelope.sectorName ?? '',
-                    reception.receivedByName ?? '',
-                ].join(' '),
-            ).includes(term),
+            matchesTerritory(reception) &&
+            (!term ||
+                normalize(
+                    [
+                        reception.envelope.meetingTitle,
+                        reception.envelope.meetingCode,
+                        reception.envelope.leaderName ?? '',
+                        reception.envelope.sectorName ?? '',
+                        reception.receivedByName ?? '',
+                    ].join(' '),
+                ).includes(term)),
     )
 })
 
@@ -174,9 +317,15 @@ const resultSummary = computed<ResultSummary>(() => {
     return summary
 })
 
+function capitalizeFirst(text: string) {
+    return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 function groupTitle(isoDate: string) {
     if (isoDate === todayIso) return 'Hoy'
-    return formatLocalIsoDate(isoDate, { weekday: 'long', day: 'numeric', month: 'long' })
+    return capitalizeFirst(
+        formatLocalIsoDate(isoDate, { weekday: 'long', day: 'numeric', month: 'long' }),
+    )
 }
 
 function timeOf(value: string) {
@@ -208,54 +357,26 @@ const loadError = computed(() =>
 </script>
 
 <template>
-    <main class="mx-auto w-full max-w-system px-6 pb-20 pt-24 lg:px-10">
-        <header class="pb-8">
-            <p class="text-xs font-semibold uppercase tracking-[0.4em] text-on-surface-variant">
+    <main class="mx-auto w-full max-w-system px-6 pb-16 pt-20 lg:px-10">
+        <header class="pb-4">
+            <p
+                class="text-[11px] font-semibold uppercase tracking-[0.35em] text-on-surface-variant"
+            >
                 Finanzas · Comité de apoyo
             </p>
-            <h1 class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl">
+            <h1 class="mt-1.5 font-display text-3xl font-semibold text-on-surface">
                 Sobres recibidos
             </h1>
-            <p class="mt-3 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-                Los sobres que ya contó el comité. Abre uno para ver el detalle o corregir su
-                conteo.
-            </p>
         </header>
 
-        <SupportCommitteeTabs active="received" :pending-count="pendingTotal" />
+        <SupportCommitteeTabs active="received" />
 
-        <section class="mt-6 flex flex-col gap-3">
-            <div class="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
-                <div class="w-full sm:w-80">
-                    <label
-                        class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                    >
-                        Recibidos por el comité entre
-                    </label>
-                    <UiDatePicker
-                        v-model="dateRange"
-                        mode="range"
-                        placeholder="Cualquier fecha de recepción"
-                    />
-                </div>
-                <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar por resultado">
-                    <button
-                        v-for="option in statusOptions"
-                        :key="option.label"
-                        type="button"
-                        class="h-11 rounded-full border px-4 text-sm font-semibold transition-colors"
-                        :class="
-                            selectedStatus === option.value
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-outline-variant bg-surface text-on-surface hover:border-primary'
-                        "
-                        :aria-pressed="selectedStatus === option.value"
-                        @click="selectedStatus = option.value"
-                    >
-                        {{ option.label }}
-                    </button>
-                </div>
-                <label class="relative block w-full lg:ml-auto lg:w-72">
+        <section
+            class="mt-4 rounded-xl border border-outline-variant bg-surface-container-low p-3"
+            aria-label="Filtros de sobres recibidos"
+        >
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+                <label class="relative block min-w-0 lg:flex-1">
                     <span class="sr-only">Buscar sobre recibido</span>
                     <Search
                         class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-on-surface-variant"
@@ -264,21 +385,129 @@ const loadError = computed(() =>
                         v-model="search"
                         type="search"
                         placeholder="Buscar reunión, líder o quién recibió"
-                        class="h-11 pl-9"
+                        class="h-11 bg-surface pl-9"
                     />
                 </label>
+                <div class="w-full lg:w-64">
+                    <UiDatePicker
+                        v-model="dateRange"
+                        mode="range"
+                        placeholder="Cualquier fecha de recepción"
+                    />
+                </div>
+                <div
+                    class="flex h-11 items-center gap-1 rounded-lg border border-outline-variant bg-surface p-1"
+                    role="group"
+                    aria-label="Filtrar por resultado"
+                >
+                    <button
+                        v-for="option in statusOptions"
+                        :key="option.label"
+                        type="button"
+                        class="h-full flex-1 whitespace-nowrap rounded-md px-3 text-xs font-semibold transition-colors lg:flex-none"
+                        :class="
+                            selectedStatus === option.value
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                        "
+                        :aria-pressed="selectedStatus === option.value"
+                        @click="selectedStatus = option.value"
+                    >
+                        {{ option.label }}
+                    </button>
+                </div>
+                <button
+                    type="button"
+                    class="inline-flex h-11 items-center justify-center gap-2 rounded-lg border px-3.5 text-sm font-semibold transition-colors"
+                    :class="
+                        showTerritory || territoryCount > 0
+                            ? 'border-primary bg-surface text-primary'
+                            : 'border-outline-variant bg-surface text-on-surface hover:border-primary'
+                    "
+                    :aria-expanded="showTerritory"
+                    aria-controls="received-territory-filters"
+                    @click="showTerritory = !showTerritory"
+                >
+                    <MapPin class="size-4" />
+                    Territorio
+                    <span
+                        v-if="territoryCount > 0"
+                        class="rounded-full bg-primary px-1.5 text-[11px] font-bold tabular-nums text-primary-foreground"
+                    >
+                        {{ territoryCount }}
+                    </span>
+                    <ChevronDown
+                        class="size-4 transition-transform"
+                        :class="{ 'rotate-180': showTerritory }"
+                    />
+                </button>
             </div>
-            <p class="flex items-start gap-2 text-xs text-on-surface-variant">
-                <Info class="mt-0.5 size-3.5 shrink-0 text-primary" />
-                <span>
-                    Mostrando los sobres que el comité recibió
-                    <strong class="text-on-surface">{{ periodLabel }}</strong
-                    >. La fecha es el día en que se contó el sobre, no el día de la reunión.
-                </span>
-            </p>
+
+            <div
+                v-if="showTerritory"
+                id="received-territory-filters"
+                class="mt-3 grid gap-2 border-t border-outline-variant pt-3 sm:grid-cols-3"
+                role="group"
+                aria-label="Filtrar por territorio"
+            >
+                <UiSearchSelect
+                    v-model="selectedDistrict"
+                    :options="districtOptions"
+                    clearable
+                    placeholder="Todos los distritos"
+                    search-placeholder="Buscar distrito..."
+                    empty-message="Sin distritos en este período"
+                    aria-label="Filtrar por distrito"
+                />
+                <UiSearchSelect
+                    v-model="selectedZone"
+                    :options="zoneOptions"
+                    clearable
+                    placeholder="Todas las zonas"
+                    search-placeholder="Buscar zona..."
+                    empty-message="Sin zonas en este período"
+                    aria-label="Filtrar por zona"
+                />
+                <UiSearchSelect
+                    v-model="selectedSector"
+                    :options="sectorOptions"
+                    clearable
+                    placeholder="Todos los sectores"
+                    search-placeholder="Buscar sector..."
+                    empty-message="Sin sectores en este período"
+                    aria-label="Filtrar por sector"
+                />
+            </div>
         </section>
 
-        <section class="mt-6">
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+                <button
+                    v-for="chip in activeChips"
+                    :key="chip.key"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-on-surface transition-colors hover:border-primary"
+                    :aria-label="`Quitar filtro ${chip.label}`"
+                    @click="chip.clear()"
+                >
+                    {{ chip.label }}
+                    <X class="size-3 text-on-surface-variant" />
+                </button>
+                <button
+                    v-if="activeChips.length > 1"
+                    type="button"
+                    class="text-xs font-semibold text-primary hover:underline"
+                    @click="clearFilters"
+                >
+                    Limpiar filtros
+                </button>
+            </div>
+            <p class="text-xs text-on-surface-variant">
+                Recibidos {{ periodLabel }} · por fecha de conteo del comité
+            </p>
+        </div>
+
+        <section class="mt-4">
             <EnvelopeListSkeleton v-if="receptionsQuery.isPending.value" />
 
             <div
@@ -315,7 +544,7 @@ const loadError = computed(() =>
                         <header
                             class="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-outline-variant pb-2"
                         >
-                            <h2 class="text-sm font-semibold capitalize text-on-surface">
+                            <h2 class="text-sm font-semibold text-on-surface">
                                 {{ groupTitle(group.date) }}
                             </h2>
                             <p class="text-xs tabular-nums text-on-surface-variant">
@@ -360,9 +589,11 @@ const loadError = computed(() =>
                                             </h3>
                                             <p class="truncate text-xs text-on-surface-variant">
                                                 Reunión del
-                                                <span class="capitalize">
-                                                    {{ shortDateLabel(reception.envelope.date) }}
-                                                </span>
+                                                {{
+                                                    capitalizeFirst(
+                                                        shortDateLabel(reception.envelope.date),
+                                                    )
+                                                }}
                                                 <template v-if="reception.envelope.leaderName">
                                                     · {{ reception.envelope.leaderName }}
                                                 </template>

@@ -7,7 +7,13 @@ import { mapPrismaError } from '../utils/database/prisma-error.util'
 
 export function findAttendanceTypes() {
     return prisma.attendanceType.findMany({
-        orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+        include: { group: true },
+        orderBy: [
+            { isActive: 'desc' },
+            { group: { sortOrder: 'asc' } },
+            { sortOrder: 'asc' },
+            { name: 'asc' },
+        ],
     })
 }
 
@@ -15,10 +21,18 @@ export function findAttendanceTypeById(id: number) {
     return prisma.attendanceType.findUnique({ where: { id } })
 }
 
-export function findAttendanceTypeIdsByIds(ids: number[]) {
+export function findAttendanceTypeCounting(ids: number[]) {
     return prisma.attendanceType
-        .findMany({ where: { id: { in: ids } }, select: { id: true } })
-        .then((rows) => rows.map((row) => row.id))
+        .findMany({
+            where: { id: { in: ids } },
+            select: { id: true, group: { select: { countsTowardAttendance: true } } },
+        })
+        .then((rows) =>
+            rows.map((row) => ({
+                id: row.id,
+                countsTowardAttendance: row.group?.countsTowardAttendance ?? true,
+            })),
+        )
 }
 
 export function createAttendanceType(dto: CreateAttendanceTypeDto) {

@@ -38,6 +38,7 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
         newMembers,
         previousNewMembers,
         districts,
+        resultTypes,
     ] = await Promise.all([
         prisma.meetingOccurrence.findMany({
             where: {
@@ -53,6 +54,7 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
                     },
                 },
                 details: { include: { category: true } },
+                attendanceDetails: { include: { type: { include: { group: true } } } },
             },
             orderBy: [{ date: 'desc' }, { id: 'desc' }],
         }),
@@ -91,6 +93,14 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
             select: { id: true, name: true },
             orderBy: { name: 'asc' },
         }),
+        prisma.attendanceType.findMany({
+            where: {
+                isActive: true,
+                group: { isActive: true, countsTowardAttendance: false },
+            },
+            select: { id: true, code: true, name: true },
+            orderBy: [{ group: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+        }),
     ])
 
     return {
@@ -105,5 +115,6 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
         newMembers,
         previousNewMembers,
         districts,
+        resultTypes,
     }
 }

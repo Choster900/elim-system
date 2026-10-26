@@ -13,6 +13,12 @@ export interface DashboardMetricDto {
     changePercentage: number | null
 }
 
+export interface DashboardResultDto extends DashboardMetricDto {
+    id: number
+    code: string
+    name: string
+}
+
 export interface DashboardTrendPointDto {
     key: string
     label: string
@@ -88,6 +94,7 @@ export interface DashboardSummaryDto {
         recordingCoverage: number
         pendingOccurrences: number
     }
+    results: DashboardResultDto[]
     trends: DashboardTrendPointDto[]
     categoryDistribution: DashboardDistributionDto[]
     districtPerformance: DashboardDistrictDto[]

@@ -30,13 +30,20 @@ export async function getPendingEnvelopes(
     signal?: AbortSignal,
 ): Promise<PendingEnvelopesPage> {
     const response = await apiClient.get<
-        ApiResponse<{ items: Envelope[]; zones: PendingEnvelopesPage['zones'] }>
+        ApiResponse<Pick<PendingEnvelopesPage, 'items' | 'districts' | 'zones' | 'sectors'>>
     >('/offering-receptions/pendientes', {
         params: {
             page: params.page,
             limit: params.limit,
+            ...(params.kind ? { kind: params.kind } : {}),
+            ...(params.order ? { order: params.order } : {}),
             ...(params.search ? { search: params.search } : {}),
+            ...(params.districtId ? { districtId: params.districtId } : {}),
             ...(params.zoneId ? { zoneId: params.zoneId } : {}),
+            ...(params.sectorId ? { sectorId: params.sectorId } : {}),
+            ...(params.from || params.to ? { dateField: params.dateField ?? 'reunion' } : {}),
+            ...(params.from ? { from: params.from } : {}),
+            ...(params.to ? { to: params.to } : {}),
         },
         signal,
     })

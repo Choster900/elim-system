@@ -13,12 +13,13 @@ export default defineEventHandler(async (event) => {
         const filters = validateDto(pendingEnvelopesFiltersSchema, getQuery(event))
         const { page, limit, skip } = parsePaginationParams(event)
         const scope = await resolveOccurrenceScope(auth)
-        const { items, zones, totalItems } = await getPendingEnvelopes(scope, filters, {
-            skip,
-            take: limit,
-        })
+        const { items, districts, zones, sectors, totalItems } = await getPendingEnvelopes(
+            scope,
+            filters,
+            { skip, take: limit },
+        )
         return ApiResponseFactory.success(
-            { items, zones },
+            { items, districts, zones, sectors },
             'Sobres por recibir obtenidos correctamente',
             { pagination: buildPaginationMeta(page, limit, totalItems) },
         )

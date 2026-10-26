@@ -43,6 +43,11 @@ const COMMUNITY_ROLE_SEEDS = [
     ['SECRETARY', 'Secretario', 'Miembro que apoya la gestión documental y administrativa.'],
     ['ADMINISTRATOR', 'Administrador', 'Miembro que apoya la administración de la comunidad.'],
     ['AUDITOR', 'Auditor', 'Miembro que apoya la revisión y transparencia administrativa.'],
+    [
+        'TITHER',
+        'Diezmador',
+        'Miembro que entrega diezmos; solo ellos aparecen en la recepción de diezmos.',
+    ],
 ].map(([code, name, description]) => ({
     code,
     name,
@@ -395,7 +400,8 @@ export async function seedMembers(prisma) {
     const coordinatorRole = communityRoles.find((role) => role.code === 'COORDINATOR')
     const supervisorRole = communityRoles.find((role) => role.code === 'SUPERVISOR')
     const pastorRole = communityRoles.find((role) => role.code === 'PASTOR')
-    if (!leaderRole || !coordinatorRole || !supervisorRole || !pastorRole) {
+    const titherRole = communityRoles.find((role) => role.code === 'TITHER')
+    if (!leaderRole || !coordinatorRole || !supervisorRole || !pastorRole || !titherRole) {
         throw new Error('Community role catalog was not created.')
     }
 
@@ -490,6 +496,28 @@ export async function seedMembers(prisma) {
                     create: {
                         memberId: member.id,
                         roleId: supervisorRole.id,
+                    },
+                    update: {
+                        endedAt: null,
+                    },
+                }),
+            ),
+    )
+
+    await prisma.$transaction(
+        members
+            .filter((member) => member.status === 'ACTIVE')
+            .map((member) =>
+                prisma.memberCommunityRole.upsert({
+                    where: {
+                        memberId_roleId: {
+                            memberId: member.id,
+                            roleId: titherRole.id,
+                        },
+                    },
+                    create: {
+                        memberId: member.id,
+                        roleId: titherRole.id,
                     },
                     update: {
                         endedAt: null,

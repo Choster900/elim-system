@@ -181,6 +181,42 @@ async function findPendingIdsMatching(search: string) {
     return rows.map((row) => row.id)
 }
 
+function pendingDateWhere(filters: PendingEnvelopesFiltersDto): Prisma.MeetingOccurrenceWhereInput {
+    if (!filters.from && !filters.to) return {}
+    const from = filters.from?.slice(0, 10)
+    const to = filters.to?.slice(0, 10)
+    if (filters.dateField === 'registro') {
+        return {
+            recordedAt: {
+                ...(from ? { gte: businessDayStart(from) } : {}),
+                ...(to ? { lt: businessDayStart(nextIsoDate(to)) } : {}),
+            },
+        }
+    }
+    return {
+        date: {
+            ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
+            ...(to ? { lte: new Date(`${to}T00:00:00.000Z`) } : {}),
+        },
+    }
+}
+
+function pendingKindWhere(filters: PendingEnvelopesFiltersDto): Prisma.MeetingOccurrenceWhereInput {
+    if (filters.kind === 'generales') return { meeting: { type: { isGeneral: true } } }
+    if (filters.kind === 'lideres') return { meeting: { type: { isGeneral: false } } }
+    return {}
+}
+
+function pendingTerritoryWhere(
+    filters: PendingEnvelopesFiltersDto,
+): Prisma.MeetingOccurrenceWhereInput[] {
+    return [
+        filters.districtId ? { sector: { zone: { districtId: filters.districtId } } } : {},
+        filters.zoneId ? { sector: { zoneId: filters.zoneId } } : {},
+        filters.sectorId ? { sectorId: filters.sectorId } : {},
+    ]
+}
+
 async function pendingWhere(
     scope: OccurrenceScopeFilter,
     filters: PendingEnvelopesFiltersDto = {},
@@ -202,7 +238,9 @@ async function pendingWhere(
                 ],
             },
             { offeringReception: { is: null } },
-            filters.zoneId ? { sector: { zoneId: filters.zoneId } } : {},
+            pendingKindWhere(filters),
+            ...pendingTerritoryWhere(filters),
+            pendingDateWhere(filters),
             matchingIds ? { id: { in: matchingIds } } : {},
         ],
     }
@@ -218,7 +256,7 @@ export async function findPendingEnvelopeOccurrences(
         prisma.meetingOccurrence.findMany({
             where,
             include: occurrenceInclude,
-            orderBy: [{ date: 'asc' }, { id: 'asc' }],
+            orderBy: [{ date: filters.order ?? 'asc' }, { id: filters.order ?? 'asc' }],
             skip: page.skip,
             take: page.take,
         }),
@@ -227,19 +265,43 @@ export async function findPendingEnvelopeOccurrences(
     return { items: occurrences.map(toOccurrenceRecord), totalItems }
 }
 
-export async function findPendingEnvelopeZones(scope: OccurrenceScopeFilter) {
-    const sectors = await prisma.meetingOccurrence.findMany({
+export async function findPendingEnvelopeTerritories(scope: OccurrenceScopeFilter) {
+    const rows = await prisma.meetingOccurrence.findMany({
         where: await pendingWhere(scope),
         distinct: ['sectorId'],
-        select: { sector: { select: { zone: { select: { id: true, name: true } } } } },
+        select: {
+            sector: {
+                select: {
+                    id: true,
+                    name: true,
+                    zone: {
+                        select: {
+                            id: true,
+                            name: true,
+                            district: { select: { id: true, name: true } },
+                        },
+                    },
+                },
+            },
+        },
     })
-    const zones = new Map<number, string>()
-    for (const row of sectors) {
-        if (row.sector) zones.set(row.sector.zone.id, row.sector.zone.name)
+    const districts = new Map<number, { id: number; name: string }>()
+    const zones = new Map<number, { id: number; name: string; districtId: number }>()
+    const sectors = new Map<number, { id: number; name: string; zoneId: number }>()
+    for (const { sector } of rows) {
+        if (!sector) continue
+        const { zone } = sector
+        districts.set(zone.district.id, { id: zone.district.id, name: zone.district.name })
+        zones.set(zone.id, { id: zone.id, name: zone.name, districtId: zone.district.id })
+        sectors.set(sector.id, { id: sector.id, name: sector.name, zoneId: zone.id })
     }
-    return [...zones.entries()]
-        .map(([id, name]) => ({ id, name }))
-        .sort((left, right) => left.name.localeCompare(right.name, 'es'))
+    const byName = (left: { name: string }, right: { name: string }) =>
+        left.name.localeCompare(right.name, 'es')
+    return {
+        districts: [...districts.values()].sort(byName),
+        zones: [...zones.values()].sort(byName),
+        sectors: [...sectors.values()].sort(byName),
+    }
 }
 
 export async function findReceptions(scope: OccurrenceScopeFilter, filters: ReceptionFiltersDto) {

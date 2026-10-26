@@ -1,12 +1,7 @@
 export type MemberStatus = 'ACTIVE' | 'INACTIVE' | 'VISITOR' | 'TRANSFERRED' | 'DECEASED'
 export type MemberGender = 'FEMALE' | 'MALE'
 export type MemberMaritalStatus =
-    | 'SINGLE'
-    | 'MARRIED'
-    | 'DIVORCED'
-    | 'WIDOWED'
-    | 'UNION'
-    | 'UNSPECIFIED'
+    'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED' | 'UNION' | 'UNSPECIFIED'
 export type MemberCommunityRole =
     | 'MEMBER'
     | 'PASTOR'
@@ -40,6 +35,7 @@ export type MemberCommunityRole =
     | 'SECRETARY'
     | 'ADMINISTRATOR'
     | 'AUDITOR'
+    | 'TITHER'
 
 export interface Member extends Record<string, unknown> {
     id: number

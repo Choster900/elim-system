@@ -7,6 +7,7 @@ import type {
 const baseFields = {
     code: Joi.string().trim().uppercase().min(1).max(100),
     name: Joi.string().trim().min(2).max(100),
+    groupId: Joi.number().integer().positive().allow(null),
     description: Joi.string().trim().max(300).allow('', null),
     sortOrder: Joi.number().integer().min(0),
     isActive: Joi.boolean(),
@@ -15,6 +16,7 @@ const baseFields = {
 export const createAttendanceTypeSchema = Joi.object<CreateAttendanceTypeDto>({
     code: baseFields.code.required(),
     name: baseFields.name.required(),
+    groupId: baseFields.groupId.default(null),
     description: baseFields.description.default(null),
     sortOrder: baseFields.sortOrder.default(0),
     isActive: baseFields.isActive.default(true),

@@ -38,13 +38,8 @@ const notesRef = ref<HTMLTextAreaElement | null>(null)
 const draft = computed(() =>
     isClientReady.value && occurrenceId.value ? draftStore.draftFor(occurrenceId.value) : null,
 )
-const countInput = computed(() => (draft.value ? draftToCountInput(draft.value) : null))
 
 const envelopeQuery = useEnvelopeQuery(occurrenceId)
-const comparisonQuery = useEnvelopeComparisonQuery(occurrenceId, countInput)
-
-const envelope = computed(() => envelopeQuery.data.value?.envelope ?? null)
-const comparison = computed(() => comparisonQuery.data.value ?? null)
 const isDirectEntry = computed(
     () =>
         !!(
@@ -52,6 +47,15 @@ const isDirectEntry = computed(
             envelopeQuery.data.value?.reception?.directEntry
         ),
 )
+const countInput = computed(() =>
+    draft.value && envelopeQuery.data.value
+        ? draftToCountInput(draft.value, isDirectEntry.value)
+        : null,
+)
+const comparisonQuery = useEnvelopeComparisonQuery(occurrenceId, countInput)
+
+const envelope = computed(() => envelopeQuery.data.value?.envelope ?? null)
+const comparison = computed(() => comparisonQuery.data.value ?? null)
 const needsNote = computed(
     () => !isDirectEntry.value && comparison.value?.status === 'con_diferencia',
 )

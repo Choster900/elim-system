@@ -2,15 +2,20 @@
 import {
     Activity,
     ArrowRight,
+    CalendarCheck,
     CalendarDays,
     CalendarPlus,
     CircleDollarSign,
     Clock3,
     Compass,
+    Droplets,
     HandCoins,
+    Handshake,
+    Heart,
     MapPin,
     Minus,
     RefreshCw,
+    Sparkles,
     TrendingDown,
     TrendingUp,
     UserPlus,
@@ -33,6 +38,7 @@ import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import { formatTime12h } from '~/utils/date/date-format.util'
+import type { Component } from 'vue'
 
 defineOptions({ name: 'DashboardView' })
 
@@ -90,6 +96,13 @@ const tourSteps: TourStep[] = [
         title: 'Indicadores principales',
         description:
             'Revisa ofrendas, asistencia, reuniones y miembros. Los cambios comparan con el período anterior.',
+    },
+    {
+        id: 'results',
+        target: '[data-tour="dashboard-results"]',
+        title: 'Resultados de las reuniones',
+        description:
+            'Conversiones, reconciliaciones, visitas programadas y bautismos del período, comparados con el período anterior. No se suman a la asistencia.',
     },
     {
         id: 'attendance',
@@ -323,6 +336,25 @@ const metricCards = computed(() => {
         },
     ]
 })
+
+const RESULT_ICONS: Record<string, Component> = {
+    CONVERSIONES: Heart,
+    RECONCILIACIONES: Handshake,
+    VISITAS_PROGRAMADAS: CalendarCheck,
+    BAUTISMOS: Droplets,
+}
+
+const resultCards = computed(
+    () =>
+        summary.value?.results.map((result) => ({
+            id: result.id,
+            label: result.name,
+            value: formatNumber(result.value),
+            meta: changeLabel(result),
+            direction: changeDirection(result),
+            icon: RESULT_ICONS[result.code] ?? Sparkles,
+        })) ?? [],
+)
 
 function recentOfferingLink(meetingId: number) {
     return canViewFinance.value ? { to: `/finanzas/ofrendas/reunion/${meetingId}` } : {}
@@ -577,6 +609,76 @@ const quickActionClass =
                         </dd>
                     </UiCard>
                 </dl>
+            </section>
+
+            <section
+                v-if="resultCards.length"
+                data-tour="dashboard-results"
+                aria-labelledby="dashboard-results-title"
+                class="mt-6"
+            >
+                <UiCard class="rounded-xl p-6 md:p-8">
+                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                        Frutos
+                    </p>
+                    <h2
+                        id="dashboard-results-title"
+                        class="mt-2 font-display text-2xl font-semibold text-on-surface"
+                    >
+                        Resultados de las reuniones
+                    </h2>
+                    <p class="mt-1 text-xs text-on-surface-variant">
+                        Se registran junto con la asistencia de cada fecha y no se suman al total de
+                        personas.
+                    </p>
+                    <dl class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <div
+                            v-for="card in resultCards"
+                            :key="card.id"
+                            class="rounded-lg border border-outline-variant bg-surface-container-low p-5"
+                        >
+                            <div class="flex items-start justify-between gap-3">
+                                <dt
+                                    class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    {{ card.label }}
+                                </dt>
+                                <span
+                                    class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10"
+                                    aria-hidden="true"
+                                >
+                                    <component :is="card.icon" class="size-4 text-emerald-500" />
+                                </span>
+                            </div>
+                            <dd
+                                class="mt-2 font-sans text-3xl font-semibold tabular-nums text-on-surface"
+                            >
+                                {{ card.value }}
+                            </dd>
+                            <dd
+                                class="mt-2 flex items-start gap-1.5 text-xs leading-5"
+                                :class="{
+                                    'text-primary': card.direction === 'up',
+                                    'text-destructive': card.direction === 'down',
+                                    'text-on-surface-variant': card.direction === 'flat',
+                                }"
+                            >
+                                <TrendingUp
+                                    v-if="card.direction === 'up'"
+                                    class="mt-0.5 size-3.5 shrink-0"
+                                    aria-hidden="true"
+                                />
+                                <TrendingDown
+                                    v-else-if="card.direction === 'down'"
+                                    class="mt-0.5 size-3.5 shrink-0"
+                                    aria-hidden="true"
+                                />
+                                <Minus v-else class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                                <span>{{ card.meta }}</span>
+                            </dd>
+                        </div>
+                    </dl>
+                </UiCard>
             </section>
 
             <section class="mt-6 grid gap-6 xl:grid-cols-2">

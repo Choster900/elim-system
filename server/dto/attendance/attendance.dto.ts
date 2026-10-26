@@ -1,6 +1,7 @@
 export interface CreateAttendanceTypeDto {
     code: string
     name: string
+    groupId: number | null
     description: string | null
     sortOrder: number
     isActive: boolean

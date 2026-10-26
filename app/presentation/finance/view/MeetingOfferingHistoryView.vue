@@ -24,6 +24,7 @@ import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import { formatShortIsoDate } from '~/utils/date/date-format.util'
 import { useMeetingHistoryQuery } from '../composables/useOccurrenceQueries'
 import type { OccurrenceRecord } from '../interfaces/occurrence.interface'
+import { attendanceDetailLabel, sumAttendanceDetails } from '../utils/attendance-format.util'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import { getMeetingScopeLabel } from '~/presentation/meetings/utils/meeting-format.util'
@@ -171,22 +172,11 @@ const byCategory = computed(() => {
     return [...map.entries()].map(([id, entry]) => ({ id, ...entry }))
 })
 
-const byAttendanceType = computed(() => {
-    const map = new Map<number, { label: string; value: number }>()
-
-    for (const occurrence of recorded.value) {
-        for (const detail of occurrence.attendanceDetails) {
-            const current = map.get(detail.typeId) ?? {
-                label: detail.typeName ?? 'Sin tipo',
-                value: 0,
-            }
-            current.value += detail.quantity
-            map.set(detail.typeId, current)
-        }
-    }
-
-    return [...map.entries()].map(([id, entry]) => ({ id, ...entry }))
-})
+const recordedAttendanceDetails = computed(() =>
+    recorded.value.flatMap((occurrence) => occurrence.attendanceDetails),
+)
+const byAttendanceType = computed(() => sumAttendanceDetails(recordedAttendanceDetails.value, true))
+const byResult = computed(() => sumAttendanceDetails(recordedAttendanceDetails.value, false))
 
 function formatMoney(value: number) {
     return value.toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -461,7 +451,7 @@ function availableAfter(occurrence: OccurrenceRecord) {
             </section>
 
             <section
-                v-if="byCategory.length > 0 || byAttendanceType.length > 0"
+                v-if="byCategory.length > 0 || byAttendanceType.length > 0 || byResult.length > 0"
                 class="mt-4 grid gap-4 xl:grid-cols-2"
             >
                 <UiCard v-if="byCategory.length > 0" class="p-6">
@@ -481,6 +471,15 @@ function availableAfter(occurrence: OccurrenceRecord) {
                         format="number"
                         label="Asistencia acumulada por tipo"
                         empty-message="Esta reunión no tiene desglose de asistencia."
+                    />
+                </UiCard>
+                <UiCard v-if="byResult.length > 0" class="p-6">
+                    <h2 class="mb-5 text-sm font-semibold text-on-surface">Resultados</h2>
+                    <RankedBarList
+                        :items="byResult"
+                        format="number"
+                        label="Resultados acumulados"
+                        empty-message="Esta reunión no tiene resultados registrados."
                     />
                 </UiCard>
             </section>
@@ -725,7 +724,7 @@ function availableAfter(occurrence: OccurrenceRecord) {
                                         class="flex items-center justify-between gap-4 px-3 py-2 text-sm"
                                     >
                                         <span class="text-on-surface-variant">{{
-                                            detail.typeName ?? 'Sin tipo'
+                                            attendanceDetailLabel(detail)
                                         }}</span>
                                         <strong class="tabular-nums text-on-surface">{{
                                             detail.quantity

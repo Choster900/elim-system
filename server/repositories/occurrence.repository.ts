@@ -24,7 +24,10 @@ export const occurrenceInclude = {
     recordedBy: { include: { member: true } },
     updatedBy: { include: { member: true } },
     details: { include: { category: true }, orderBy: { category: { sortOrder: 'asc' } } },
-    attendanceDetails: { include: { type: true }, orderBy: { type: { sortOrder: 'asc' } } },
+    attendanceDetails: {
+        include: { type: { include: { group: true } } },
+        orderBy: { type: { sortOrder: 'asc' } },
+    },
 } satisfies Prisma.MeetingOccurrenceInclude
 
 export type OccurrenceWithRelations = Prisma.MeetingOccurrenceGetPayload<{
@@ -43,9 +46,15 @@ function round2(value: number) {
     return Math.round(value * 100) / 100
 }
 
-function resolveAttendance(details: { quantity: number }[], attendance: number) {
+function resolveAttendance(
+    details: { typeId: number; quantity: number }[],
+    attendance: number,
+    countedTypeIds: ReadonlySet<number>,
+) {
     if (details.length === 0) return attendance
-    return details.reduce((sum, detail) => sum + detail.quantity, 0)
+    return details
+        .filter((detail) => countedTypeIds.has(detail.typeId))
+        .reduce((sum, detail) => sum + detail.quantity, 0)
 }
 
 function resolveTotal(details: OccurrenceDetailDto[], totalAmount: number | null) {
@@ -109,6 +118,8 @@ export function toOccurrenceRecord(occurrence: OccurrenceWithRelations) {
             id: detail.id,
             typeId: detail.typeId,
             typeName: detail.type?.name ?? null,
+            groupName: detail.type?.group?.name ?? null,
+            countsTowardAttendance: detail.type?.group?.countsTowardAttendance ?? true,
             quantity: detail.quantity,
         })),
         details: occurrence.details.map((detail) => ({
@@ -251,10 +262,14 @@ export async function findOccurrenceById(id: number) {
     return occurrence ? toOccurrenceRecord(occurrence) : null
 }
 
-function recordData(dto: RecordOccurrenceDto, userId: number | null) {
+function recordData(
+    dto: RecordOccurrenceDto,
+    userId: number | null,
+    countedTypeIds: ReadonlySet<number>,
+) {
     return {
         status: 'RECORDED' as const,
-        attendance: resolveAttendance(dto.attendanceDetails, dto.attendance),
+        attendance: resolveAttendance(dto.attendanceDetails, dto.attendance, countedTypeIds),
         totalAmount: resolveTotal(dto.details, dto.totalAmount),
         currency: dto.currency,
         notes: dto.notes,
@@ -278,20 +293,33 @@ function recordData(dto: RecordOccurrenceDto, userId: number | null) {
     }
 }
 
-export function recordOccurrence(id: number, dto: RecordOccurrenceDto, userId: number | null) {
+export function recordOccurrence(
+    id: number,
+    dto: RecordOccurrenceDto,
+    userId: number | null,
+    countedTypeIds: ReadonlySet<number>,
+) {
     return prisma.meetingOccurrence
-        .update({ where: { id }, data: recordData(dto, userId), include: occurrenceInclude })
+        .update({
+            where: { id },
+            data: recordData(dto, userId, countedTypeIds),
+            include: occurrenceInclude,
+        })
         .then(toOccurrenceRecord)
         .catch(mapPrismaError)
 }
 
-export async function recordOccurrencesBulk(entries: BulkRecordEntryDto[], userId: number | null) {
+export async function recordOccurrencesBulk(
+    entries: BulkRecordEntryDto[],
+    userId: number | null,
+    countedTypeIds: ReadonlySet<number>,
+) {
     try {
         const occurrences = await prisma.$transaction(
             entries.map((entry) =>
                 prisma.meetingOccurrence.update({
                     where: { id: entry.occurrenceId },
-                    data: recordData(entry, userId),
+                    data: recordData(entry, userId, countedTypeIds),
                     include: occurrenceInclude,
                 }),
             ),
@@ -302,14 +330,23 @@ export async function recordOccurrencesBulk(entries: BulkRecordEntryDto[], userI
     }
 }
 
-export function updateOccurrence(id: number, dto: UpdateOccurrenceDto, userId: number | null) {
+export function updateOccurrence(
+    id: number,
+    dto: UpdateOccurrenceDto,
+    userId: number | null,
+    countedTypeIds: ReadonlySet<number>,
+) {
     const data: Prisma.MeetingOccurrenceUpdateInput = {
         updatedBy: { connect: { id: userId ?? 0 } },
     }
 
     if (userId === null) delete data.updatedBy
     if (dto.attendanceDetails !== undefined) {
-        data.attendance = resolveAttendance(dto.attendanceDetails, dto.attendance ?? 0)
+        data.attendance = resolveAttendance(
+            dto.attendanceDetails,
+            dto.attendance ?? 0,
+            countedTypeIds,
+        )
         data.attendanceDetails = {
             deleteMany: {},
             create: dto.attendanceDetails.map((detail) => ({

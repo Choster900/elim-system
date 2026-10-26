@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ArrowRight, Clock, HandCoins, Inbox, PackageX, Scale } from '@lucide/vue'
+import { ArrowRight, Clock, HandCoins, HandHeart, Inbox, PackageX, Scale } from '@lucide/vue'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
 import {
     categoryLabel,
@@ -16,6 +18,7 @@ import ReconciliationTabs from '../components/ReconciliationTabs.vue'
 import { useReconciliationFilters } from '../composables/useReconciliationFilters'
 import { useReconciliationQuery } from '../composables/useReconciliationQueries'
 import type { ReconciliationEnvelope } from '../interfaces/reconciliation.interface'
+import { TITHES_PATH } from '~/presentation/support-committee/utils/reception-format.util'
 import {
     RECONCILIATION_ENVELOPES,
     RECONCILIATION_LEADERS,
@@ -39,6 +42,14 @@ const receivedCount = computed(() =>
           totals.value.counts.diferencia_abierta +
           totals.value.counts.diferencia_cerrada
         : 0,
+)
+
+const authStore = useAuthStore()
+const canViewTithes = computed(() => authStore.hasPermission(routePermissionCodes.financeReceive))
+
+const tithes = computed(() => summary.value?.tithes ?? { count: 0, members: 0, amount: 0 })
+const committeeTotal = computed(() =>
+    totals.value ? (toCents(totals.value.receivedAmount) + toCents(tithes.value.amount)) / 100 : 0,
 )
 
 const loadError = computed(() =>
@@ -120,7 +131,7 @@ function differenceClass(value: number) {
         <ReconciliationSummarySkeleton v-else-if="!summary || !totals" />
 
         <div
-            v-else-if="totals.envelopes === 0"
+            v-else-if="totals.envelopes === 0 && tithes.count === 0"
             class="mt-8 flex flex-col items-center gap-3 rounded-xl border border-outline-variant bg-surface-container-low px-6 py-14 text-center"
         >
             <Inbox class="size-9 text-on-surface-variant" />
@@ -151,7 +162,7 @@ function differenceClass(value: number) {
                     </p>
                     <p class="mt-1 text-xs text-on-surface-variant">
                         {{ receivedCount }}
-                        {{ receivedCount === 1 ? 'sobre recibido' : 'sobres recibidos' }}
+                        {{ receivedCount === 1 ? 'sobre de reunión' : 'sobres de reunión' }}
                         en el periodo
                     </p>
                 </UiCard>
@@ -216,6 +227,83 @@ function differenceClass(value: number) {
                     </p>
                 </UiCard>
             </section>
+
+            <UiCard class="mt-4 p-5">
+                <div class="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                    <div class="flex items-start gap-3">
+                        <span
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+                            aria-hidden="true"
+                        >
+                            <HandHeart class="size-5 text-primary" />
+                        </span>
+                        <div>
+                            <h2 class="font-display text-lg font-semibold text-on-surface">
+                                Diezmos individuales
+                            </h2>
+                            <p class="mt-0.5 max-w-md text-xs text-on-surface-variant">
+                                Sobres de diezmo que el comité registró a nombre de cada diezmador.
+                                No tienen registro de líder, por eso no entran en la diferencia.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
+                        <dl class="flex flex-wrap gap-x-8 gap-y-3">
+                            <div>
+                                <dt
+                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    Diezmos
+                                </dt>
+                                <dd class="text-xl font-semibold tabular-nums text-on-surface">
+                                    {{ formatMoney(tithes.amount) }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt
+                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    Sobres
+                                </dt>
+                                <dd class="text-xl font-semibold tabular-nums text-on-surface">
+                                    {{ tithes.count }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt
+                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    Diezmadores
+                                </dt>
+                                <dd class="text-xl font-semibold tabular-nums text-on-surface">
+                                    {{ tithes.members }}
+                                </dd>
+                            </div>
+                            <div class="sm:border-l sm:border-outline-variant sm:pl-8">
+                                <dt
+                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    Total recibido por el comité
+                                </dt>
+                                <dd class="text-xl font-semibold tabular-nums text-primary">
+                                    {{ formatMoney(committeeTotal) }}
+                                </dd>
+                                <dd class="text-[11px] text-on-surface-variant">
+                                    Sobres de reunión + diezmos
+                                </dd>
+                            </div>
+                        </dl>
+                        <NuxtLink
+                            v-if="canViewTithes"
+                            :to="TITHES_PATH"
+                            class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                        >
+                            Ver diezmos
+                            <ArrowRight class="size-3.5" />
+                        </NuxtLink>
+                    </div>
+                </div>
+            </UiCard>
 
             <section class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <NuxtLink

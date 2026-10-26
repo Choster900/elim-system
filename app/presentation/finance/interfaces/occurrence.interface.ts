@@ -1,7 +1,19 @@
 export type OccurrenceStatus = 'pendiente' | 'registrada'
 
+export interface AttendanceGroupOption {
+    id: number
+    code: string
+    name: string
+    description: string | null
+    countsTowardAttendance: boolean
+    isActive: boolean
+    sortOrder: number
+}
+
 export interface AttendanceTypeOption {
     id: number
+    groupId: number | null
+    group: AttendanceGroupOption | null
     code: string
     name: string
     description: string | null
@@ -13,6 +25,8 @@ export interface AttendanceDetail {
     id: number
     typeId: number
     typeName: string | null
+    groupName: string | null
+    countsTowardAttendance: boolean
     quantity: number
 }
 

@@ -1,49 +1,80 @@
 <script setup lang="ts">
-import { Inbox, ListChecks } from '@lucide/vue'
-import { RECEIVED_ENVELOPES_PATH, SUPPORT_COMMITTEE_HOME } from '../utils/reception-format.util'
+import { Church, HandCoins, Inbox, ListChecks } from '@lucide/vue'
+import type { Component } from 'vue'
+import { usePendingCountQuery } from '../composables/useReceptionQueries'
+import {
+    GENERAL_SERVICES_PATH,
+    RECEIVED_ENVELOPES_PATH,
+    SUPPORT_COMMITTEE_HOME,
+    TITHES_PATH,
+} from '../utils/reception-format.util'
+
+type SupportCommitteeTab = 'pending' | 'generals' | 'received' | 'tithes'
 
 defineProps<{
-    active: 'pending' | 'received'
-    pendingCount?: number | null
+    active: SupportCommitteeTab
 }>()
 
+const leaderCount = usePendingCountQuery('lideres')
+const generalCount = usePendingCountQuery('generales')
+
+const tabs = computed<
+    { key: SupportCommitteeTab; label: string; to: string; icon: Component; count: number | null }[]
+>(() => [
+    {
+        key: 'pending',
+        label: 'Por recibir',
+        to: SUPPORT_COMMITTEE_HOME,
+        icon: Inbox,
+        count: leaderCount.value,
+    },
+    {
+        key: 'generals',
+        label: 'Cultos generales',
+        to: GENERAL_SERVICES_PATH,
+        icon: Church,
+        count: generalCount.value,
+    },
+    {
+        key: 'received',
+        label: 'Recibidos',
+        to: RECEIVED_ENVELOPES_PATH,
+        icon: ListChecks,
+        count: null,
+    },
+    { key: 'tithes', label: 'Diezmos', to: TITHES_PATH, icon: HandCoins, count: null },
+])
+
 const tabClass =
-    'inline-flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition-colors'
+    'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition-colors'
+
+function stateClass(isActive: boolean) {
+    return isActive
+        ? 'border-primary text-on-surface'
+        : 'border-transparent text-on-surface-variant hover:text-on-surface'
+}
 </script>
 
 <template>
-    <nav class="flex gap-6 border-b border-outline-variant" aria-label="Secciones del comité">
+    <nav
+        class="flex gap-4 overflow-x-auto border-b border-outline-variant sm:gap-6"
+        aria-label="Secciones del comité"
+    >
         <NuxtLink
-            :to="SUPPORT_COMMITTEE_HOME"
-            :class="[
-                tabClass,
-                active === 'pending'
-                    ? 'border-primary text-on-surface'
-                    : 'border-transparent text-on-surface-variant hover:text-on-surface',
-            ]"
-            :aria-current="active === 'pending' ? 'page' : undefined"
+            v-for="tab in tabs"
+            :key="tab.key"
+            :to="tab.to"
+            :class="[tabClass, stateClass(active === tab.key)]"
+            :aria-current="active === tab.key ? 'page' : undefined"
         >
-            <Inbox class="size-4" />
-            Por recibir
+            <component :is="tab.icon" class="hidden size-4 sm:block" />
+            {{ tab.label }}
             <span
-                v-if="pendingCount !== null && pendingCount !== undefined"
+                v-if="tab.count !== null && tab.count > 0"
                 class="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground"
             >
-                {{ pendingCount }}
+                {{ tab.count }}
             </span>
-        </NuxtLink>
-        <NuxtLink
-            :to="RECEIVED_ENVELOPES_PATH"
-            :class="[
-                tabClass,
-                active === 'received'
-                    ? 'border-primary text-on-surface'
-                    : 'border-transparent text-on-surface-variant hover:text-on-surface',
-            ]"
-            :aria-current="active === 'received' ? 'page' : undefined"
-        >
-            <ListChecks class="size-4" />
-            Recibidos
         </NuxtLink>
     </nav>
 </template>

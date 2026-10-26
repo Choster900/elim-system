@@ -8,6 +8,7 @@ export interface ReceptionCountInputDto {
 export interface ReceptionCategoryInputDto {
     categoryId: number | null
     counts: ReceptionCountInputDto[]
+    amount?: number
 }
 
 export interface ReceptionCountDto {
@@ -18,9 +19,20 @@ export interface ReceiveEnvelopeDto extends ReceptionCountDto {
     notes: string | null
 }
 
+export type PendingEnvelopesDateField = 'reunion' | 'registro'
+
+export type PendingEnvelopesKind = 'lideres' | 'generales'
+
 export interface PendingEnvelopesFiltersDto {
+    kind?: PendingEnvelopesKind
+    order?: 'asc' | 'desc'
     search?: string
+    districtId?: number
     zoneId?: number
+    sectorId?: number
+    dateField?: PendingEnvelopesDateField
+    from?: string
+    to?: string
 }
 
 export interface ReceptionFiltersDto {

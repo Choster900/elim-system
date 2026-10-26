@@ -16,6 +16,7 @@ import {
     type ReceptionCore,
     type ReceptionRecord,
 } from '../repositories/reception.repository'
+import { summarizeTithes } from '../repositories/tithe.repository'
 import { ApiErrorCode } from '../types/api-response.types'
 import { businessIsoDate } from '../utils/date/business-time.util'
 import { getOccurrenceById } from './meeting-occurrence.service'
@@ -284,7 +285,15 @@ export async function getReconciliation(
 ) {
     const period = resolvePeriod(filters, now)
     const today = businessIsoDate(now)
-    const periodRows = await findReconciliationRows(scope, period)
+    const [periodRows, tithes] = await Promise.all([
+        findReconciliationRows(scope, period),
+        summarizeTithes({
+            from: period.from,
+            to: period.to,
+            zoneId: period.zoneId,
+            sectorIds: scope.seesAll ? undefined : scope.sectorIds,
+        }),
+    ])
     const zones = [
         ...new Map(
             periodRows
@@ -306,6 +315,7 @@ export async function getReconciliation(
         byType: buildByType(rows),
         byLeader: buildByLeader(envelopes),
         envelopes,
+        tithes,
     }
 }
 

@@ -24,7 +24,18 @@ export const OFFERING_CATEGORY_SEEDS = [
 export const OFFERING_SEEDS = [
     {
         meetingTitle: 'Servicio Dominical de Adoración',
-        attendance: { HERMANOS: 180, AMIGOS: 42, NUEVOS: 11, NINOS: 45, JOVENES: 20 },
+        attendance: {
+            NINOS_HERMANOS: 30,
+            NINOS_AMIGOS: 15,
+            JOVENES_HERMANOS: 14,
+            JOVENES_AMIGOS: 6,
+            ADULTOS_HERMANOS: 160,
+            ADULTOS_AMIGOS: 33,
+            CONVERSIONES: 4,
+            RECONCILIACIONES: 2,
+            VISITAS_PROGRAMADAS: 6,
+            BAUTISMOS: 1,
+        },
         notes: 'Servicio con alta asistencia.',
         details: [
             { categoryCode: 'COF-DIEZMOS', amount: 1850.0 },
@@ -34,7 +45,13 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Célula del Buen Pastor',
-        attendance: { HERMANOS: 9, AMIGOS: 4, NUEVOS: 1, NINOS: 2 },
+        attendance: {
+            NINOS_HERMANOS: 2,
+            ADULTOS_HERMANOS: 9,
+            ADULTOS_AMIGOS: 5,
+            CONVERSIONES: 1,
+            VISITAS_PROGRAMADAS: 2,
+        },
         notes: '',
         details: [
             { categoryCode: 'COF-OFRENDA', amount: 45.75 },
@@ -43,13 +60,13 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Reunión de Líderes de Sector',
-        attendance: { HERMANOS: 20 },
+        attendance: { ADULTOS_HERMANOS: 20 },
         notes: 'Ofrenda de gratitud de los líderes.',
         details: [{ categoryCode: 'COF-OFRENDA', amount: 120.0 }],
     },
     {
         meetingTitle: 'Capacitación de Voluntarios',
-        attendance: { HERMANOS: 12, JOVENES: 5 },
+        attendance: { JOVENES_HERMANOS: 5, ADULTOS_HERMANOS: 12 },
         notes: '',
         details: [
             { categoryCode: 'COF-OFRENDA', amount: 35.0 },
@@ -58,7 +75,13 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Estudio Bíblico de Jueves',
-        attendance: { HERMANOS: 28, AMIGOS: 6, NUEVOS: 2, NINOS: 4, JOVENES: 2 },
+        attendance: {
+            NINOS_HERMANOS: 4,
+            JOVENES_HERMANOS: 2,
+            ADULTOS_HERMANOS: 28,
+            ADULTOS_AMIGOS: 8,
+            RECONCILIACIONES: 1,
+        },
         notes: '',
         details: [
             { categoryCode: 'COF-DIEZMOS', amount: 260.0 },
@@ -67,7 +90,18 @@ export const OFFERING_SEEDS = [
     },
     {
         meetingTitle: 'Servicio de Sanidad y Liberación',
-        attendance: { HERMANOS: 96, AMIGOS: 24, NUEVOS: 14, NINOS: 18, JOVENES: 13 },
+        attendance: {
+            NINOS_HERMANOS: 12,
+            NINOS_AMIGOS: 6,
+            JOVENES_HERMANOS: 9,
+            JOVENES_AMIGOS: 4,
+            ADULTOS_HERMANOS: 96,
+            ADULTOS_AMIGOS: 38,
+            CONVERSIONES: 7,
+            RECONCILIACIONES: 3,
+            VISITAS_PROGRAMADAS: 9,
+            BAUTISMOS: 2,
+        },
         notes: 'Noche de gratitud, ofrenda especial de primicias.',
         details: [
             { categoryCode: 'COF-DIEZMOS', amount: 920.0 },
@@ -78,8 +112,11 @@ export const OFFERING_SEEDS = [
     },
 ]
 
-function attendanceTotal(attendance) {
-    return Object.values(attendance).reduce((sum, quantity) => sum + quantity, 0)
+function attendanceTotal(attendance, attendanceTypes) {
+    return Object.entries(attendance).reduce((sum, [typeCode, quantity]) => {
+        const counts = attendanceTypes.get(typeCode)?.group?.countsTowardAttendance ?? true
+        return counts ? sum + quantity : sum
+    }, 0)
 }
 
 export async function seedOfferingCategories(prisma) {
@@ -136,7 +173,7 @@ export async function seedOfferings(prisma, meetings, categories, attendanceType
 
         const captureData = {
             status: 'RECORDED',
-            attendance: attendanceTotal(seed.attendance),
+            attendance: attendanceTotal(seed.attendance, attendanceTypes),
             totalAmount,
             currency: 'USD',
             notes: seed.notes || null,

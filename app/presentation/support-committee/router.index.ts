@@ -20,6 +20,18 @@ export default [
         meta,
     },
     {
+        name: 'support-committee-general-services',
+        path: '/finanzas/comite-de-apoyo/cultos-generales',
+        component: () => import('~/presentation/support-committee/view/GeneralServicesView.vue'),
+        meta,
+    },
+    {
+        name: 'support-committee-tithes',
+        path: '/finanzas/comite-de-apoyo/diezmos',
+        component: () => import('~/presentation/support-committee/view/TitheReceptionView.vue'),
+        meta,
+    },
+    {
         name: 'support-committee-count',
         path: '/finanzas/comite-de-apoyo/sobres/:occurrenceId/contar',
         component: () => import('~/presentation/support-committee/view/EnvelopeCountView.vue'),

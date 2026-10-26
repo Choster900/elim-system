@@ -17,6 +17,7 @@ import ReceptionSteps from '../components/ReceptionSteps.vue'
 import { useEnvelopeQuery, usePendingEnvelopesQuery } from '../composables/useReceptionQueries'
 import {
     RECEIVED_ENVELOPES_PATH,
+    GENERAL_SERVICES_PATH,
     SUPPORT_COMMITTEE_HOME,
     countPath,
     formatDateTime,
@@ -38,9 +39,18 @@ const finishedAs = computed(() => {
 })
 
 const envelopeQuery = useEnvelopeQuery(occurrenceId)
-const pendingQuery = usePendingEnvelopesQuery(computed(() => ({ page: 1, limit: 2 })))
-
 const envelope = computed(() => envelopeQuery.data.value?.envelope ?? null)
+const isGeneral = computed(() => envelope.value?.isGeneral ?? false)
+const inboxPath = computed(() => (isGeneral.value ? GENERAL_SERVICES_PATH : SUPPORT_COMMITTEE_HOME))
+
+const pendingQuery = usePendingEnvelopesQuery(
+    computed(() => ({
+        page: 1,
+        limit: 2,
+        kind: isGeneral.value ? ('generales' as const) : ('lideres' as const),
+    })),
+)
+
 const reception = computed(() => envelopeQuery.data.value?.reception ?? null)
 const nextEnvelope = computed(
     () =>
@@ -76,7 +86,7 @@ watch(
     <main class="mx-auto w-full max-w-system px-4 pb-24 pt-24 sm:px-6 lg:px-10">
         <div class="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <NuxtLink
-                :to="finishedAs ? SUPPORT_COMMITTEE_HOME : RECEIVED_ENVELOPES_PATH"
+                :to="finishedAs ? inboxPath : RECEIVED_ENVELOPES_PATH"
                 class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
             >
                 <ArrowLeft class="size-4" />
@@ -134,7 +144,11 @@ watch(
                                 </span>
                             </template>
                             <template v-else-if="!pendingQuery.isPending.value">
-                                Ya no quedan sobres por recibir.
+                                {{
+                                    isGeneral
+                                        ? 'Ya no quedan cultos generales por registrar.'
+                                        : 'Ya no quedan sobres por recibir.'
+                                }}
                             </template>
                         </p>
                     </div>
@@ -144,12 +158,12 @@ watch(
                     :to="countPath(nextEnvelope.occurrenceId)"
                     class="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                 >
-                    Recibir el siguiente sobre
+                    {{ isGeneral ? 'Registrar el siguiente culto' : 'Recibir el siguiente sobre' }}
                     <ArrowRight class="size-4" />
                 </NuxtLink>
                 <NuxtLink
                     v-else-if="!pendingQuery.isPending.value"
-                    :to="SUPPORT_COMMITTEE_HOME"
+                    :to="inboxPath"
                     class="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                 >
                     <PartyPopper class="size-4" />

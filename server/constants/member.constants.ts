@@ -53,7 +53,10 @@ export const MEMBER_ROLE_CODES = [
     'SECRETARY',
     'ADMINISTRATOR',
     'AUDITOR',
+    'TITHER',
 ] as const
+
+export const TITHER_ROLE_CODE = 'TITHER'
 
 export const MEMBER_COUNTRIES = [{ code: 'SV', name: 'El Salvador' }] as const
 

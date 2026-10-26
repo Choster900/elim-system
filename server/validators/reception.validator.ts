@@ -14,6 +14,7 @@ const countSchema = Joi.object({
 const categorySchema = Joi.object({
     categoryId: Joi.number().integer().positive().allow(null).required(),
     counts: Joi.array().items(countSchema).max(50).default([]),
+    amount: Joi.number().min(0).max(10000000).precision(2),
 })
 
 const countFields = {
@@ -28,8 +29,15 @@ export const receiveEnvelopeSchema = Joi.object<ReceiveEnvelopeDto>({
 })
 
 export const pendingEnvelopesFiltersSchema = Joi.object<PendingEnvelopesFiltersDto>({
+    kind: Joi.string().valid('lideres', 'generales'),
+    order: Joi.string().valid('asc', 'desc').default('asc'),
     search: Joi.string().trim().max(100).allow(''),
+    districtId: Joi.number().integer().positive(),
     zoneId: Joi.number().integer().positive(),
+    sectorId: Joi.number().integer().positive(),
+    dateField: Joi.string().valid('reunion', 'registro').default('reunion'),
+    from: Joi.string().isoDate(),
+    to: Joi.string().isoDate(),
 }).unknown(true)
 
 export const receptionFiltersSchema = Joi.object<ReceptionFiltersDto>({

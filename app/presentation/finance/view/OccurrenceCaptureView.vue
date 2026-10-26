@@ -9,6 +9,7 @@ import {
     HandCoins,
     Loader2,
     MapPin,
+    Sparkles,
     UserRound,
     Users,
 } from '@lucide/vue'
@@ -26,6 +27,8 @@ import {
     useOfferingCategoriesQuery,
     usePendingOccurrencesQuery,
 } from '../composables/useOccurrenceQueries'
+import type { AttendanceTypeOption } from '../interfaces/occurrence.interface'
+import { groupAttendanceTypes } from '../utils/attendance-format.util'
 
 defineOptions({ name: 'OccurrenceCaptureView' })
 
@@ -68,7 +71,13 @@ const attendanceTypes = computed(() =>
     (attendanceTypesQuery.data.value ?? []).filter((type) => type.isActive),
 )
 
-const hasAttendanceTypes = computed(() => attendanceTypes.value.length > 0)
+const attendanceGroups = computed(() => groupAttendanceTypes(attendanceTypes.value))
+const countedTypes = computed(() =>
+    attendanceGroups.value.attendance.flatMap((group) => group.types),
+)
+const resultTypes = computed(() => attendanceGroups.value.results.flatMap((group) => group.types))
+
+const hasAttendanceTypes = computed(() => countedTypes.value.length > 0)
 
 const occurrences = computed(() =>
     (pendingQuery.data.value ?? [])
@@ -186,15 +195,12 @@ function rowTotal(row: CaptureRow) {
 
 function rowAttendance(row: CaptureRow) {
     if (!hasAttendanceTypes.value) return row.attendanceTotal ?? 0
-    return Object.values(row.attendanceByType).reduce<number>(
-        (sum, quantity) => sum + (quantity ?? 0),
-        0,
-    )
+    return countedTypes.value.reduce((sum, type) => sum + (row.attendanceByType[type.id] ?? 0), 0)
 }
 
 function hasAttendance(row: CaptureRow) {
     if (!hasAttendanceTypes.value) return row.attendanceTotal !== null
-    return Object.values(row.attendanceByType).some((quantity) => quantity !== null)
+    return countedTypes.value.some((type) => row.attendanceByType[type.id] !== null)
 }
 
 const grandTotal = computed(() => selectedRows.value.reduce((sum, row) => sum + rowTotal(row), 0))
@@ -202,12 +208,16 @@ const totalAttendance = computed(() =>
     selectedRows.value.reduce((sum, row) => sum + rowAttendance(row), 0),
 )
 const attendanceColumnCount = computed(() =>
-    hasAttendanceTypes.value ? attendanceTypes.value.length + 1 : 1,
+    hasAttendanceTypes.value ? countedTypes.value.length + 1 : 1,
 )
 const offeringColumnCount = computed(() => (hasCategories.value ? categories.value.length + 1 : 1))
 
 function attendanceTypeTotal(typeId: number) {
     return selectedRows.value.reduce((sum, row) => sum + (row.attendanceByType[typeId] ?? 0), 0)
+}
+
+function typeLabel(type: AttendanceTypeOption) {
+    return type.group ? `${type.group.name} ${type.name}` : type.name
 }
 
 function categoryTotal(categoryId: number) {
@@ -377,7 +387,7 @@ async function onSubmit() {
 }
 
 const cellInputClass =
-    'h-9 w-full min-w-[84px] border-0 bg-transparent px-2 text-right text-sm font-semibold tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/35 focus:bg-primary/[0.07] focus:ring-2 focus:ring-inset focus:ring-primary/60'
+    'h-9 w-full min-w-0 border-0 bg-transparent px-1.5 text-right text-sm font-semibold tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/35 focus:bg-primary/[0.07] focus:ring-2 focus:ring-inset focus:ring-primary/60'
 </script>
 
 <template>
@@ -636,7 +646,7 @@ const cellInputClass =
                     </div>
 
                     <div
-                        class="overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-sm"
+                        class="w-fit max-w-full overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-sm"
                     >
                         <div
                             class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -652,18 +662,18 @@ const cellInputClass =
                             </span>
                         </div>
 
-                        <div class="max-h-[68vh] overflow-auto overscroll-contain">
+                        <div class="overflow-x-auto overscroll-x-contain">
                             <table
                                 data-testid="occurrence-capture-matrix"
-                                class="w-full min-w-max border-separate border-spacing-0 text-sm"
+                                class="w-max border-separate border-spacing-0 text-sm"
                             >
                                 <caption class="sr-only">
                                     Fechas pendientes con asistencia y ofrendas por categoría
                                 </caption>
-                                <thead class="sticky top-0 z-30 bg-surface shadow-sm">
+                                <thead class="bg-surface">
                                     <tr>
                                         <th
-                                            rowspan="2"
+                                            rowspan="3"
                                             scope="col"
                                             class="sticky left-0 z-40 w-[190px] min-w-[190px] border-b border-r border-outline-variant bg-surface-container px-3 py-2 text-left"
                                         >
@@ -696,6 +706,26 @@ const cellInputClass =
                                             </span>
                                         </th>
                                         <th
+                                            v-for="group in attendanceGroups.results"
+                                            :key="`result-group-${group.key}`"
+                                            :colspan="group.types.length"
+                                            rowspan="2"
+                                            scope="colgroup"
+                                            class="border-b border-r border-outline-variant bg-emerald-500/10 px-3 py-1.5 text-left align-top"
+                                        >
+                                            <span
+                                                class="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface"
+                                            >
+                                                <Sparkles class="size-3.5 text-emerald-500" />
+                                                {{ group.name }}
+                                            </span>
+                                            <span
+                                                class="mt-0.5 block text-[10px] font-normal normal-case tracking-normal text-on-surface-variant"
+                                            >
+                                                No suman a la asistencia
+                                            </span>
+                                        </th>
+                                        <th
                                             :colspan="offeringColumnCount"
                                             scope="colgroup"
                                             class="border-b border-outline-variant bg-primary/10 px-3 py-1.5 text-left"
@@ -711,25 +741,27 @@ const cellInputClass =
                                     <tr>
                                         <template v-if="hasAttendanceTypes">
                                             <th
-                                                v-for="type in attendanceTypes"
-                                                :key="`attendance-heading-${type.id}`"
-                                                scope="col"
-                                                class="min-w-[84px] border-b border-r border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
-                                                :title="type.description ?? undefined"
+                                                v-for="group in attendanceGroups.attendance"
+                                                :key="`attendance-group-${group.key}`"
+                                                :colspan="group.types.length"
+                                                scope="colgroup"
+                                                class="border-b border-r border-outline-variant bg-secondary/[0.05] px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide text-on-surface"
                                             >
-                                                {{ type.name }}
+                                                {{ group.name }}
                                             </th>
                                             <th
+                                                rowspan="2"
                                                 scope="col"
-                                                class="min-w-[76px] border-b border-r border-outline-variant bg-secondary/10 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
+                                                class="min-w-[72px] border-b border-r border-outline-variant bg-secondary/10 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
                                             >
                                                 Total
                                             </th>
                                         </template>
                                         <th
                                             v-else
+                                            rowspan="2"
                                             scope="col"
-                                            class="min-w-[100px] border-b border-r border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
+                                            class="min-w-[100px] border-b border-r border-outline-variant bg-surface px-1.5 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
                                         >
                                             Total personas
                                         </th>
@@ -738,25 +770,48 @@ const cellInputClass =
                                             <th
                                                 v-for="category in categories"
                                                 :key="`offering-heading-${category.id}`"
+                                                rowspan="2"
                                                 scope="col"
-                                                class="min-w-[96px] border-b border-r border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant last:border-r-0"
+                                                class="w-[96px] min-w-[96px] whitespace-normal border-b border-r border-outline-variant bg-surface px-1.5 py-1.5 text-right text-[11px] font-semibold leading-tight text-on-surface-variant last:border-r-0"
                                                 :title="category.description ?? undefined"
                                             >
                                                 {{ category.name }}
                                             </th>
                                             <th
+                                                rowspan="2"
                                                 scope="col"
-                                                class="min-w-[90px] border-b border-outline-variant bg-primary/10 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
+                                                class="min-w-[104px] border-b border-outline-variant bg-primary/10 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wide text-on-surface"
                                             >
                                                 Total
                                             </th>
                                         </template>
                                         <th
                                             v-else
+                                            rowspan="2"
                                             scope="col"
-                                            class="min-w-[104px] border-b border-outline-variant bg-surface px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
+                                            class="min-w-[112px] border-b border-outline-variant bg-surface px-1.5 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant"
                                         >
                                             Total ofrenda
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        <th
+                                            v-for="type in countedTypes"
+                                            :key="`attendance-heading-${type.id}`"
+                                            scope="col"
+                                            class="w-[72px] min-w-[72px] border-b border-r border-outline-variant bg-surface px-1.5 py-1.5 text-right text-[11px] font-semibold text-on-surface-variant"
+                                            :title="type.description ?? undefined"
+                                        >
+                                            {{ type.name }}
+                                        </th>
+                                        <th
+                                            v-for="type in resultTypes"
+                                            :key="`result-heading-${type.id}`"
+                                            scope="col"
+                                            class="w-[96px] min-w-[88px] whitespace-normal border-b border-r border-outline-variant bg-surface px-1.5 py-1.5 text-right text-[11px] font-semibold leading-tight text-on-surface-variant"
+                                            :title="type.description ?? undefined"
+                                        >
+                                            {{ type.name }}
                                         </th>
                                     </tr>
                                 </thead>
@@ -838,7 +893,7 @@ const cellInputClass =
 
                                         <template v-if="hasAttendanceTypes">
                                             <td
-                                                v-for="type in attendanceTypes"
+                                                v-for="type in countedTypes"
                                                 :key="`attendance-${row.occurrenceId}-${type.id}`"
                                                 class="border-b border-r border-outline-variant p-0"
                                             >
@@ -852,7 +907,7 @@ const cellInputClass =
                                                     placeholder="0"
                                                     autocomplete="off"
                                                     :disabled="!row.recordable"
-                                                    :aria-label="`${type.name} del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
+                                                    :aria-label="`${typeLabel(type)} del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
                                                     :data-capture-column="`attendance-${type.id}`"
                                                     :class="cellInputClass"
                                                     @input="
@@ -889,6 +944,30 @@ const cellInputClass =
                                                 data-capture-column="attendance-total"
                                                 :class="cellInputClass"
                                                 @input="setAttendanceTotal(row, $event)"
+                                                @keydown="moveVertically"
+                                                @focus="selectCellContents"
+                                            />
+                                        </td>
+
+                                        <td
+                                            v-for="type in resultTypes"
+                                            :key="`result-${row.occurrenceId}-${type.id}`"
+                                            class="border-b border-r border-outline-variant bg-emerald-500/[0.04] p-0"
+                                        >
+                                            <input
+                                                :id="`asis-${row.occurrenceId}-${type.id}`"
+                                                :value="row.attendanceByType[type.id] ?? ''"
+                                                type="number"
+                                                inputmode="numeric"
+                                                min="0"
+                                                step="1"
+                                                placeholder="0"
+                                                autocomplete="off"
+                                                :disabled="!row.recordable"
+                                                :aria-label="`${typeLabel(type)} del ${weekdayOf(row.date)} ${dayOf(row.date)} de ${monthOf(row.date)}`"
+                                                :data-capture-column="`attendance-${type.id}`"
+                                                :class="cellInputClass"
+                                                @input="setAttendanceValue(row, type.id, $event)"
                                                 @keydown="moveVertically"
                                                 @focus="selectCellContents"
                                             />
@@ -969,7 +1048,7 @@ const cellInputClass =
                                     </tr>
                                 </tbody>
 
-                                <tfoot class="sticky bottom-0 z-20 bg-surface-container shadow-sm">
+                                <tfoot class="bg-surface-container">
                                     <tr>
                                         <th
                                             scope="row"
@@ -979,7 +1058,7 @@ const cellInputClass =
                                         </th>
                                         <template v-if="hasAttendanceTypes">
                                             <td
-                                                v-for="type in attendanceTypes"
+                                                v-for="type in countedTypes"
                                                 :key="`attendance-total-${type.id}`"
                                                 class="border-r border-t border-outline-variant px-2 py-2 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
                                             >
@@ -996,6 +1075,13 @@ const cellInputClass =
                                             class="border-r border-t border-outline-variant bg-secondary/10 px-2 py-2 text-right text-sm font-bold tabular-nums text-on-surface"
                                         >
                                             {{ totalAttendance }}
+                                        </td>
+                                        <td
+                                            v-for="type in resultTypes"
+                                            :key="`result-total-${type.id}`"
+                                            class="border-r border-t border-outline-variant bg-emerald-500/[0.06] px-2 py-2 text-right text-xs font-semibold tabular-nums text-on-surface-variant"
+                                        >
+                                            {{ attendanceTypeTotal(type.id) }}
                                         </td>
 
                                         <template v-if="hasCategories">

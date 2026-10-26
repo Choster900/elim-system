@@ -60,4 +60,5 @@ export const memberRoleOptions: { value: MemberCommunityRole; label: string }[] 
     { value: 'SECRETARY', label: 'Secretario' },
     { value: 'ADMINISTRATOR', label: 'Administrador' },
     { value: 'AUDITOR', label: 'Auditor' },
+    { value: 'TITHER', label: 'Diezmador' },
 ]

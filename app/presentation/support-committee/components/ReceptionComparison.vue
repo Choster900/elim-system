@@ -64,17 +64,17 @@ function differenceClass(difference: number) {
                 </p>
             </div>
 
-            <details class="group border-t border-dashed border-outline-variant">
+            <details
+                v-if="category.counts.length > 0"
+                class="group border-t border-dashed border-outline-variant"
+            >
                 <summary
                     class="flex cursor-pointer list-none items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-primary hover:underline"
                 >
                     <ChevronDown class="size-3.5 transition-transform group-open:rotate-180" />
                     Ver billetes y monedas
                 </summary>
-                <ul
-                    v-if="category.counts.length > 0"
-                    class="grid gap-x-6 gap-y-1.5 px-5 pb-4 text-sm sm:grid-cols-2"
-                >
+                <ul class="grid gap-x-6 gap-y-1.5 px-5 pb-4 text-sm sm:grid-cols-2">
                     <li
                         v-for="count in category.counts"
                         :key="count.denomination.id"
@@ -94,9 +94,6 @@ function differenceClass(difference: number) {
                         </span>
                     </li>
                 </ul>
-                <p v-else class="px-5 pb-4 text-sm text-on-surface-variant">
-                    No se contó dinero de este tipo.
-                </p>
             </details>
         </article>
 

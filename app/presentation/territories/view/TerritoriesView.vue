@@ -7,11 +7,13 @@ import {
     Download,
     Expand,
     ExternalLink,
+    GripVertical,
     HandCoins,
     MapPin,
     MapPinned,
     Minimize,
     MoreHorizontal,
+    Move,
     Plus,
     RefreshCw,
     Search,
@@ -243,6 +245,7 @@ onMounted(() => {
     isClientReady.value = true
     startFirstVisitTour()
     window.addEventListener('keydown', onDrawerKeydown)
+    window.addEventListener('keydown', onMoveKeydown)
 })
 
 watch([() => authStore.user?.id, catalogLoading, catalogError], startFirstVisitTour)
@@ -280,7 +283,7 @@ const query = ref('')
 const menuFor = ref<string | null>(null)
 const menuLevel = ref<Level | null>(null)
 const menuPos = reactive({ left: 0, top: 0 })
-const menuMode = ref<'normal' | 'confirm' | 'move'>('normal')
+const menuMode = ref<'normal' | 'confirm'>('normal')
 
 const drawer = ref<{ level: Level; id: string } | null>(null)
 
@@ -903,12 +906,177 @@ function closeMenu() {
     menuMode.value = 'normal'
 }
 
-const canMove = computed(
-    () =>
-        menuLevel.value !== null &&
-        menuLevel.value !== 'distrito' &&
-        (menuLevel.value === 'reunion' ? canManageMeetings.value : canManage.value),
+const canMove = computed(() => menuLevel.value !== null && canMoveLevel(menuLevel.value))
+
+const PARENT_LEVEL: Partial<Record<Level, Level>> = {
+    zona: 'distrito',
+    sector: 'zona',
+    reunion: 'sector',
+}
+const SPRING_DELAY_MS = 550
+
+type MoveRole = 'source' | 'current' | 'target' | 'path'
+
+interface MovingItem {
+    level: Level
+    id: string
+    name: string
+    parentId: string | null
+    source: 'drag' | 'click'
+}
+
+const moving = ref<MovingItem | null>(null)
+const dropTargetId = ref<string | null>(null)
+const movePending = ref(false)
+let springTimer: ReturnType<typeof setTimeout> | undefined
+let springTargetId: string | null = null
+
+function canMoveLevel(level: Level) {
+    if (level === 'distrito') return false
+    return level === 'reunion' ? canManageMeetings.value : canManage.value
+}
+
+function currentParentId(level: Level, id: string) {
+    if (level === 'zona') return zoneParent(id)?.id ?? null
+    if (level === 'sector') return sectorParent(id)?.zone?.id ?? null
+    if (level === 'reunion') return meetingParent(id)?.sector?.id ?? null
+    return null
+}
+
+const moveTargetLevel = computed(() =>
+    moving.value ? (PARENT_LEVEL[moving.value.level] ?? null) : null,
 )
+
+const moveHint = computed(() => {
+    const level = moving.value?.level
+    if (level === 'zona') return 'Suéltala o haz clic en el distrito iluminado.'
+    if (level === 'sector') {
+        return 'Suéltalo o haz clic en la zona iluminada. Para llevarlo a otro distrito, ábrelo primero o deja el cursor encima mientras arrastras.'
+    }
+    if (level === 'reunion') {
+        return 'Suéltala o haz clic en el sector iluminado. Para llevarla a otra zona o distrito, ábrelos primero o deja el cursor encima mientras arrastras.'
+    }
+    return ''
+})
+
+function startMove(level: Level, id: string, source: MovingItem['source']) {
+    if (!canMoveLevel(level) || movePending.value) return
+    moving.value = {
+        level,
+        id,
+        name: findEntity(level, id)?.name ?? '',
+        parentId: currentParentId(level, id),
+        source,
+    }
+    dropTargetId.value = null
+    closeMenu()
+    const target = PARENT_LEVEL[level]
+    if (source === 'click' && target) mobileLevel.value = target
+}
+
+function clearSpring() {
+    clearTimeout(springTimer)
+    springTimer = undefined
+    springTargetId = null
+}
+
+function cancelMove() {
+    moving.value = null
+    dropTargetId.value = null
+    clearSpring()
+}
+
+function onMoveKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && moving.value && !movePending.value) cancelMove()
+}
+
+function moveRole(item: ColumnItem): MoveRole | null {
+    const current = moving.value
+    const targetLevel = moveTargetLevel.value
+    if (!current || !targetLevel) return null
+    if (item.level === current.level && item.id === current.id) return 'source'
+    if (item.level === targetLevel) return item.id === current.parentId ? 'current' : 'target'
+    return LEVEL_ORDER.indexOf(item.level) < LEVEL_ORDER.indexOf(targetLevel) ? 'path' : null
+}
+
+function itemClass(item: ColumnItem) {
+    const role = moveRole(item)
+    if (!moving.value) {
+        return item.selected
+            ? 'bg-primary/10 hover:bg-surface-container-high'
+            : 'hover:bg-surface-container-high'
+    }
+    if (role === 'target') {
+        return dropTargetId.value === item.id
+            ? 'bg-primary/20 ring-2 ring-inset ring-primary'
+            : 'cursor-pointer bg-primary/5 ring-1 ring-inset ring-primary/40 hover:bg-primary/15 hover:ring-2 hover:ring-primary'
+    }
+    if (role === 'source') return 'opacity-60'
+    if (role === 'current') return 'cursor-default opacity-70'
+    if (role === 'path') {
+        return item.selected
+            ? 'bg-primary/10 hover:bg-surface-container-high'
+            : 'hover:bg-surface-container-high'
+    }
+    return 'cursor-default opacity-40'
+}
+
+function onItemClick(item: ColumnItem) {
+    if (!moving.value) {
+        select(item.level, item.id)
+        return
+    }
+    const role = moveRole(item)
+    if (role === 'target') void performMove(item.id)
+    else if (role === 'path') select(item.level, item.id)
+}
+
+function onItemDragStart(item: ColumnItem, event: DragEvent) {
+    if (!canMoveLevel(item.level) || movePending.value) {
+        event.preventDefault()
+        return
+    }
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move'
+        event.dataTransfer.setData('text/plain', item.id)
+    }
+    startMove(item.level, item.id, 'drag')
+}
+
+function onItemDragEnd() {
+    if (moving.value?.source === 'drag' && !movePending.value) cancelMove()
+}
+
+function onItemDragOver(item: ColumnItem, event: DragEvent) {
+    const role = moveRole(item)
+    if (role === 'target') {
+        event.preventDefault()
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+        dropTargetId.value = item.id
+        clearSpring()
+        return
+    }
+    if (role === 'path' && !item.selected && springTargetId !== item.id) {
+        clearSpring()
+        springTargetId = item.id
+        springTimer = setTimeout(() => {
+            springTargetId = null
+            if (moving.value) select(item.level, item.id)
+        }, SPRING_DELAY_MS)
+    }
+}
+
+function onItemDragLeave(item: ColumnItem, event: DragEvent) {
+    const related = event.relatedTarget as Node | null
+    if (related && (event.currentTarget as Node).contains(related)) return
+    if (dropTargetId.value === item.id) dropTargetId.value = null
+    if (springTargetId === item.id) clearSpring()
+}
+
+function onItemDrop(item: ColumnItem, event: DragEvent) {
+    event.preventDefault()
+    if (moveRole(item) === 'target') void performMove(item.id)
+}
 
 const menuName = computed(() => {
     if (!menuFor.value || !menuLevel.value) return ''
@@ -1083,95 +1251,90 @@ const detail = computed(() => {
     }
 })
 
-interface MoveTarget {
-    id: string
-    name: string
-}
-const moveTargets = computed<MoveTarget[]>(() => {
-    if (!menuFor.value || !menuLevel.value) return []
-    const level = menuLevel.value
-    const id = menuFor.value
+async function applyMove(level: Level, id: string, targetId: string) {
     if (level === 'zona') {
-        const parent = zoneParent(id)
-        return districts.value
-            .filter((d) => !parent || d.id !== parent.id)
-            .map((d) => ({ id: d.id, name: d.name }))
-    }
-    if (level === 'sector') {
-        const parent = sectorParent(id)
-        const targets: MoveTarget[] = []
-        districts.value.forEach((d) =>
-            zonesOf(d.id).forEach((z) => {
-                if (!parent?.zone || z.id !== parent.zone.id)
-                    targets.push({ id: z.id, name: `${d.name} · ${z.name}` })
-            }),
-        )
-        return targets
-    }
-    if (level === 'reunion') {
-        const parent = meetingParent(id)
-        const targets: MoveTarget[] = []
-        zones.value.forEach((z) =>
-            sectorsOf(z.id).forEach((s) => {
-                if (!parent?.sector || s.id !== parent.sector.id)
-                    targets.push({ id: s.id, name: `${z.name} · ${s.name}` })
-            }),
-        )
-        return targets
-    }
-    return []
-})
+        await updateTerritoryMutation.mutateAsync({
+            level: 'zona',
+            id,
+            input: { parentId: targetId },
+        })
+        selD.value = targetId
+        selZ.value = id
+        selS.value = null
+        selM.value = null
+    } else if (level === 'sector') {
+        await updateTerritoryMutation.mutateAsync({
+            level: 'sector',
+            id,
+            input: { parentId: targetId },
+        })
+        const zone = zones.value.find((item) => item.id === targetId)
+        selD.value = zone?.districtId ?? selD.value
+        selZ.value = targetId
+        selS.value = id
+        selM.value = null
+    } else if (level === 'reunion') {
+        const meeting = meetings.value.find((item) => String(item.id) === id)
+        if (!meeting) throw new Error('La reunión seleccionada ya no está disponible.')
+        await updateMeetingMutation.mutateAsync({
+            id: meeting.id,
+            input: { sectorId: Number(targetId) },
+        })
 
-async function moveEntity(targetId: string) {
-    if (!menuFor.value || !menuLevel.value) return
-    const level = menuLevel.value
-    const id = menuFor.value
-    if (level === 'reunion' ? !canManageMeetings.value : !canManage.value) return
+        const targetSector = sectors.value.find((item) => item.id === targetId)
+        const targetZone = targetSector
+            ? zones.value.find((item) => item.id === targetSector.zoneId)
+            : null
+        selD.value = targetZone?.districtId ?? selD.value
+        selZ.value = targetSector?.zoneId ?? selZ.value
+        selS.value = targetId
+        selM.value = id
+    }
+}
+
+function moveErrorMessage(level: Level, error: unknown) {
+    return requestErrorMessage(
+        error,
+        `No fue posible mover ${level === 'zona' || level === 'reunion' ? 'la' : 'el'} ${LEVEL_LABEL[level].toLowerCase()}.`,
+    )
+}
+
+async function performMove(targetId: string) {
+    const current = moving.value
+    const targetLevel = moveTargetLevel.value
+    if (!current || !targetLevel || movePending.value) return
+    movePending.value = true
+    dropTargetId.value = targetId
+    clearSpring()
+    const targetName = findEntity(targetLevel, targetId)?.name ?? ''
     try {
-        if (level === 'zona') {
-            await updateTerritoryMutation.mutateAsync({
-                level: 'zona',
-                id,
-                input: { parentId: targetId },
-            })
-            selD.value = targetId
-            selZ.value = id
-        } else if (level === 'sector') {
-            await updateTerritoryMutation.mutateAsync({
-                level: 'sector',
-                id,
-                input: { parentId: targetId },
-            })
-            const zone = zones.value.find((item) => item.id === targetId)
-            selD.value = zone?.districtId ?? selD.value
-            selZ.value = targetId
-            selS.value = id
-        } else if (level === 'reunion') {
-            const meeting = meetings.value.find((item) => String(item.id) === id)
-            if (!meeting) throw new Error('La reunión seleccionada ya no está disponible.')
-            await updateMeetingMutation.mutateAsync({
-                id: meeting.id,
-                input: { sectorId: Number(targetId) },
-            })
-
-            const targetSector = sectors.value.find((item) => item.id === targetId)
-            const targetZone = targetSector
-                ? zones.value.find((item) => item.id === targetSector.zoneId)
-                : null
-            selD.value = targetZone?.districtId ?? selD.value
-            selZ.value = targetSector?.zoneId ?? selZ.value
-            selS.value = targetId
-            selM.value = id
-        }
-        closeMenu()
-        toast.success(`${LEVEL_LABEL[level]} movido`)
+        await applyMove(current.level, current.id, targetId)
+        cancelMove()
+        const previousParentId = current.parentId
+        toast.success(`«${current.name}» ahora está en «${targetName}»`, {
+            ...(previousParentId
+                ? {
+                      action: {
+                          label: 'Deshacer',
+                          onClick: () => void undoMove(current, previousParentId),
+                      },
+                  }
+                : {}),
+        })
     } catch (error) {
-        toast.error(
-            requestErrorMessage(
-                error,
-                `No fue posible mover el ${LEVEL_LABEL[level].toLowerCase()}.`,
-            ),
-        )
+        dropTargetId.value = null
+        toast.error(moveErrorMessage(current.level, error))
+    } finally {
+        movePending.value = false
+    }
+}
+
+async function undoMove(item: MovingItem, previousParentId: string) {
+    try {
+        await applyMove(item.level, item.id, previousParentId)
+        toast.success(`«${item.name}» volvió a su lugar`)
+    } catch (error) {
+        toast.error(moveErrorMessage(item.level, error))
     }
 }
 
@@ -1603,6 +1766,8 @@ watch(
 onBeforeUnmount(() => {
     isUnmounted = true
     window.removeEventListener('keydown', onDrawerKeydown)
+    window.removeEventListener('keydown', onMoveKeydown)
+    clearSpring()
     destroyMap()
 })
 </script>
@@ -1908,6 +2073,39 @@ onBeforeUnmount(() => {
                 </template>
             </nav>
 
+            <div
+                v-if="moving"
+                class="flex flex-none flex-wrap items-center gap-x-3 gap-y-2 border-b border-primary/40 bg-primary/10 px-4 py-2.5"
+                role="status"
+                aria-live="polite"
+            >
+                <span
+                    class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+                    aria-hidden="true"
+                >
+                    <Move class="size-4" />
+                </span>
+                <p class="min-w-0 flex-1 text-sm text-on-surface">
+                    Moviendo {{ LEVEL_LABEL[moving.level].toLowerCase() }}
+                    <strong>{{ moving.name }}</strong>
+                    <span class="block text-xs text-on-surface-variant sm:inline sm:pl-1">
+                        {{ moveHint }}
+                    </span>
+                </p>
+                <button
+                    type="button"
+                    class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant bg-surface px-3 text-xs font-semibold text-on-surface transition-colors hover:border-primary disabled:opacity-50"
+                    :disabled="movePending"
+                    @click="cancelMove"
+                >
+                    <X class="size-3.5" />
+                    Cancelar
+                    <kbd class="hidden font-sans text-[10px] text-on-surface-variant sm:inline">
+                        Esc
+                    </kbd>
+                </button>
+            </div>
+
             <main
                 data-tour="territories-hierarchy"
                 class="flex min-h-0 flex-1 overflow-x-auto bg-surface"
@@ -1931,6 +2129,13 @@ onBeforeUnmount(() => {
                                 :style="{ color: col.accent }"
                             >
                                 {{ col.label }}
+                            </span>
+                            <span
+                                v-if="moveTargetLevel === col.level"
+                                class="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground"
+                            >
+                                <span class="size-1.5 animate-pulse rounded-full bg-current" />
+                                Destino
                             </span>
                             <span
                                 class="rounded-full bg-surface-container-high px-2 py-0.5 text-[11px] font-semibold tabular-nums text-on-surface-variant"
@@ -1976,13 +2181,25 @@ onBeforeUnmount(() => {
                             v-for="it in col.items"
                             :key="it.id"
                             type="button"
-                            class="group relative flex w-full items-center gap-3 border-b border-outline-variant/50 px-4 py-3 text-left transition-colors hover:bg-surface-container-high"
-                            :class="it.selected ? 'bg-primary/10' : ''"
-                            @click="select(it.level, it.id)"
+                            class="group relative flex w-full items-center gap-3 border-b border-outline-variant/50 px-4 py-3 text-left transition-colors"
+                            :class="itemClass(it)"
+                            :draggable="canMoveLevel(it.level) && !movePending"
+                            :aria-disabled="moveRole(it) === 'current' || undefined"
+                            @click="onItemClick(it)"
+                            @dragstart="onItemDragStart(it, $event)"
+                            @dragend="onItemDragEnd"
+                            @dragover="onItemDragOver(it, $event)"
+                            @dragleave="onItemDragLeave(it, $event)"
+                            @drop="onItemDrop(it, $event)"
                         >
                             <span
-                                v-if="it.selected"
+                                v-if="it.selected && !moving"
                                 class="absolute inset-y-0 left-0 w-[3px] bg-primary"
+                            />
+                            <GripVertical
+                                v-if="canMoveLevel(it.level) && !moving"
+                                class="pointer-events-none absolute left-0.5 top-1/2 size-3.5 -translate-y-1/2 text-on-surface-variant opacity-0 transition-opacity group-hover:opacity-60"
+                                aria-hidden="true"
                             />
                             <span
                                 class="size-2.5 shrink-0 rounded-full"
@@ -2019,20 +2236,46 @@ onBeforeUnmount(() => {
                                 </span>
                             </span>
                             <span
-                                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
-                                :title="it.badgeTitle"
+                                v-if="moveRole(it) === 'target'"
+                                class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold"
+                                :class="
+                                    dropTargetId === it.id
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'border border-primary/50 text-primary'
+                                "
                             >
-                                <Users v-if="it.level === 'reunion'" class="size-3" />
-                                {{ it.badge }}
+                                {{ dropTargetId === it.id ? 'Soltar aquí' : 'Mover aquí' }}
                             </span>
                             <span
-                                class="flex size-7 shrink-0 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-                                role="button"
-                                :aria-label="`Acciones de ${it.name}`"
-                                @click="openMenu(it.level, it.id, $event)"
+                                v-else-if="moveRole(it) === 'current'"
+                                class="shrink-0 rounded-full border border-outline-variant px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant"
                             >
-                                <MoreHorizontal class="size-4" />
+                                Ubicación actual
                             </span>
+                            <span
+                                v-else-if="moveRole(it) === 'source'"
+                                class="shrink-0 rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-bold text-primary"
+                            >
+                                Moviendo
+                            </span>
+                            <template v-else>
+                                <span
+                                    class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
+                                    :title="it.badgeTitle"
+                                >
+                                    <Users v-if="it.level === 'reunion'" class="size-3" />
+                                    {{ it.badge }}
+                                </span>
+                                <span
+                                    v-if="!moving"
+                                    class="flex size-7 shrink-0 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+                                    role="button"
+                                    :aria-label="`Acciones de ${it.name}`"
+                                    @click.stop="openMenu(it.level, it.id, $event)"
+                                >
+                                    <MoreHorizontal class="size-4" />
+                                </span>
+                            </template>
                         </button>
                     </div>
                 </section>
@@ -2074,10 +2317,11 @@ onBeforeUnmount(() => {
                     <button
                         v-if="canMove"
                         type="button"
-                        class="block w-full rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
-                        @click="menuMode = 'move'"
+                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
+                        @click="startMove(menuLevel!, menuFor!, 'click')"
                     >
-                        Mover a…
+                        Mover…
+                        <Move class="size-3.5 text-on-surface-variant" />
                     </button>
                     <button
                         v-if="canManage && menuLevel !== 'reunion'"
@@ -2089,7 +2333,7 @@ onBeforeUnmount(() => {
                     </button>
                 </template>
 
-                <template v-else-if="menuMode === 'confirm'">
+                <template v-else>
                     <p class="px-3 py-2 text-sm leading-snug text-on-surface-variant">
                         ¿Eliminar <strong class="text-on-surface">{{ menuName }}</strong
                         >?
@@ -2111,38 +2355,6 @@ onBeforeUnmount(() => {
                             Cancelar
                         </button>
                     </div>
-                </template>
-
-                <template v-else>
-                    <p
-                        class="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant"
-                    >
-                        Mover a…
-                    </p>
-                    <div class="max-h-52 overflow-y-auto">
-                        <button
-                            v-for="t in moveTargets"
-                            :key="t.id"
-                            type="button"
-                            class="block w-full truncate rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
-                            @click="moveEntity(t.id)"
-                        >
-                            {{ t.name }}
-                        </button>
-                        <p
-                            v-if="moveTargets.length === 0"
-                            class="px-3 py-2 text-sm italic text-on-surface-variant"
-                        >
-                            No hay destinos disponibles.
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        class="block w-full rounded-lg px-3 py-2 text-left text-sm text-on-surface-variant hover:bg-surface-container-high"
-                        @click="menuMode = 'normal'"
-                    >
-                        Cancelar
-                    </button>
                 </template>
             </div>
         </template>

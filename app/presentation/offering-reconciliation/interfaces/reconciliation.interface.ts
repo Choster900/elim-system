@@ -79,6 +79,13 @@ export interface ReconciliationSummary {
     byType: ReconciliationTypeRow[]
     byLeader: ReconciliationLeaderRow[]
     envelopes: ReconciliationEnvelope[]
+    tithes: ReconciliationTithes
+}
+
+export interface ReconciliationTithes {
+    count: number
+    members: number
+    amount: number
 }
 
 export type ReviewReception = Omit<ReceptionRecord, 'envelope'>

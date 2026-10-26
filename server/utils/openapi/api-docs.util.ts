@@ -42,6 +42,11 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 description:
                     'Support committee: blind count of the physical envelope by denomination and comparison with what the leader recorded',
             },
+            {
+                name: 'Tithes',
+                description:
+                    'Support committee: individual tithe envelopes, each one with the member who gave it and its amount',
+            },
         ],
         paths: {
             '/api/healthcheck': {
@@ -508,8 +513,36 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             in: 'query',
                             schema: { type: 'integer', minimum: 1, maximum: 100 },
                         },
+                        {
+                            name: 'kind',
+                            in: 'query',
+                            description:
+                                'lideres: envelopes recorded by a leader; generales: general services the committee records directly by bills and coins, available from the day they take place.',
+                            schema: { type: 'string', enum: ['lideres', 'generales'] },
+                        },
+                        {
+                            name: 'order',
+                            in: 'query',
+                            description: 'By meeting date; oldest first by default.',
+                            schema: { type: 'string', enum: ['asc', 'desc'], default: 'asc' },
+                        },
                         { name: 'search', in: 'query', schema: { type: 'string' } },
+                        { name: 'districtId', in: 'query', schema: { type: 'integer' } },
                         { name: 'zoneId', in: 'query', schema: { type: 'integer' } },
+                        { name: 'sectorId', in: 'query', schema: { type: 'integer' } },
+                        {
+                            name: 'dateField',
+                            in: 'query',
+                            description:
+                                'reunion filters by the scheduled meeting date; registro by when the leader recorded offering and attendance (general meetings without a record are left out).',
+                            schema: {
+                                type: 'string',
+                                enum: ['reunion', 'registro'],
+                                default: 'reunion',
+                            },
+                        },
+                        { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+                        { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
                     ],
                     responses: {
                         200: {
@@ -565,7 +598,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Offering receptions'],
                     summary: 'Receive an envelope',
                     description:
-                        'Requires finance.receive. The server computes every amount from the quantities. A note is required when the count does not match.',
+                        'Requires finance.receive. Envelopes recorded by a leader are received by amount per offering type; general meetings without a leader are counted by bills and coins and the server computes their amounts. A note is required when the count does not match.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -657,12 +690,106 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     },
                 },
             },
+            '/api/tithes': {
+                get: {
+                    tags: ['Tithes'],
+                    summary: 'Tithes received between two dates',
+                    description:
+                        'Requires finance.receive. Without dates returns every tithe; from and to (both optional, inclusive) filter the tithe date. Ordered by tithe date then capture time, newest first, plus a summary with the count, distinct members and total.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'from',
+                            in: 'query',
+                            schema: { type: 'string', format: 'date' },
+                        },
+                        {
+                            name: 'to',
+                            in: 'query',
+                            schema: { type: 'string', format: 'date' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'Tithes and summary' },
+                        403: { description: 'Requires finance.receive' },
+                    },
+                },
+                post: {
+                    tags: ['Tithes'],
+                    summary: 'Register a tithe envelope',
+                    description:
+                        'Requires finance.receive. Records the user who received it. The date cannot be in the future and the member must have an active TITHER community role.',
+                    security: [{ BearerAuth: [] }],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/SaveTitheDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Tithe registered' },
+                        404: { description: 'Member not found' },
+                        409: { description: 'Future date, or the member is not an active tither' },
+                    },
+                },
+            },
+            '/api/tithes/{id}': {
+                put: {
+                    tags: ['Tithes'],
+                    summary: 'Correct a tithe',
+                    description:
+                        'Requires finance.receive. Records who corrected it. Changing the member requires the new one to be an active tither.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/SaveTitheDto' },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Tithe updated' },
+                        404: { description: 'Tithe or member not found' },
+                    },
+                },
+                delete: {
+                    tags: ['Tithes'],
+                    summary: 'Delete a tithe registered by mistake',
+                    description: 'Requires finance.receive. Returns the deleted tithe.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+                    ],
+                    responses: {
+                        200: { description: 'Tithe deleted' },
+                        404: { description: 'Tithe not found' },
+                    },
+                },
+            },
+            '/api/tithes/diezmadores': {
+                get: {
+                    tags: ['Tithes'],
+                    summary: 'Members a tithe can be registered to',
+                    description:
+                        'Requires finance.receive. Non-deceased members whose TITHER community role is active today, ordered by name, with their sector and zone.',
+                    security: [{ BearerAuth: [] }],
+                    responses: {
+                        200: { description: 'Tithers' },
+                    },
+                },
+            },
             '/api/attendance-types': {
                 get: {
                     tags: ['Attendance'],
                     summary: 'List attendance types',
                     description:
-                        'Inactive types are returned too; the capture screen filters them.',
+                        'Inactive types are returned too; the capture screen filters them. Each type includes its group (Niños, Jóvenes, Adultos, Resultados…); types of a group with countsTowardAttendance = false are captured but do not add to the attendance total.',
                     security: [{ BearerAuth: [] }],
                     responses: {
                         200: { description: 'Attendance type catalog' },
@@ -845,7 +972,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Dashboard'],
                     summary: 'Main panel indicators',
                     description:
-                        'Scoped by the caller: supervisors only aggregate their assigned sectors.',
+                        'Scoped by the caller: supervisors only aggregate their assigned sectors. `results` lists every active attendance type whose group does not count toward attendance (conversions, reconciliations, scheduled visits, baptisms), each with its period total and the change against the previous period.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -1553,8 +1680,16 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                                         description:
                                             'Null only when the leader recorded a total without offering types',
                                     },
+                                    amount: {
+                                        type: 'number',
+                                        minimum: 0,
+                                        description:
+                                            'Amount received for this offering type. Only for envelopes recorded by a leader',
+                                    },
                                     counts: {
                                         type: 'array',
+                                        description:
+                                            'Bills and coins counted. Only for general meetings without a leader',
                                         items: {
                                             type: 'object',
                                             required: ['denominationId', 'quantity'],
@@ -1580,6 +1715,21 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         },
                     ],
                 },
+                SaveTitheDto: {
+                    type: 'object',
+                    required: ['memberId', 'amount', 'date'],
+                    properties: {
+                        memberId: { type: 'integer', minimum: 1 },
+                        amount: {
+                            type: 'number',
+                            minimum: 0,
+                            exclusiveMinimum: true,
+                            maximum: 10000000,
+                        },
+                        date: { type: 'string', format: 'date' },
+                        notes: { type: 'string', maxLength: 300, nullable: true },
+                    },
+                },
                 RecordOccurrenceDto: {
                     type: 'object',
                     required: ['attendance'],
@@ -1595,7 +1745,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         attendanceDetails: {
                             type: 'array',
                             description:
-                                'Attendance broken down by type. When present, `attendance` is recalculated from it.',
+                                'Attendance broken down by type. When present, `attendance` is recalculated as the sum of the types whose group counts toward attendance; result types such as conversions are stored but not added.',
                             items: {
                                 type: 'object',
                                 required: ['typeId', 'quantity'],
@@ -1633,8 +1783,9 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     type: 'object',
                     required: ['code', 'name'],
                     properties: {
-                        code: { type: 'string', example: 'HERMANOS' },
+                        code: { type: 'string', example: 'ADULTOS_HERMANOS' },
                         name: { type: 'string', example: 'Hermanos' },
+                        groupId: { type: 'integer', nullable: true },
                         description: { type: 'string', nullable: true },
                         sortOrder: { type: 'integer', minimum: 0, default: 0 },
                         isActive: { type: 'boolean', default: true },
@@ -1645,6 +1796,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     properties: {
                         code: { type: 'string' },
                         name: { type: 'string' },
+                        groupId: { type: 'integer', nullable: true },
                         description: { type: 'string', nullable: true },
                         sortOrder: { type: 'integer', minimum: 0 },
                         isActive: { type: 'boolean' },
@@ -1898,6 +2050,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         'SECRETARY',
                         'ADMINISTRATOR',
                         'AUDITOR',
+                        'TITHER',
                     ],
                 },
                 CreateMemberDto: {

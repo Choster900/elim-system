@@ -91,6 +91,12 @@ const users = {
     catalog: ['users', 'catalog'] as const,
 }
 
+const tithes = {
+    all: ['tithes'] as const,
+    list: ['tithes', 'list'] as const,
+    tithers: ['tithes', 'tithers'] as const,
+}
+
 const roles = {
     all: ['roles'] as const,
     list: ['roles', 'list'] as const,
@@ -127,6 +133,7 @@ export const queryKeys = {
     offeringReceptions,
     offeringReconciliation,
     denominations,
+    tithes,
     dashboard,
     users,
     roles,

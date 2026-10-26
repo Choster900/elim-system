@@ -3,6 +3,8 @@ import type { Denomination, ReceptionStatus } from '../interfaces/reception.inte
 
 export const SUPPORT_COMMITTEE_HOME = '/finanzas/comite-de-apoyo'
 export const RECEIVED_ENVELOPES_PATH = `${SUPPORT_COMMITTEE_HOME}/recibidos`
+export const TITHES_PATH = `${SUPPORT_COMMITTEE_HOME}/diezmos`
+export const GENERAL_SERVICES_PATH = `${SUPPORT_COMMITTEE_HOME}/cultos-generales`
 
 export function envelopePath(occurrenceId: number) {
     return `${SUPPORT_COMMITTEE_HOME}/sobres/${occurrenceId}`

@@ -3,6 +3,7 @@ import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import type {
     PendingEnvelopesParams,
+    PendingKind,
     ReceptionCountInput,
     ReceptionFilters,
 } from '../interfaces/reception.interface'
@@ -28,8 +29,8 @@ export function usePendingEnvelopesQuery(
     })
 }
 
-export function usePendingCountQuery() {
-    const query = usePendingEnvelopesQuery(computed(() => ({ page: 1, limit: 1 })))
+export function usePendingCountQuery(kind: PendingKind) {
+    const query = usePendingEnvelopesQuery(computed(() => ({ page: 1, limit: 1, kind })))
     return computed(() => query.data.value?.pagination.totalItems ?? null)
 }
 

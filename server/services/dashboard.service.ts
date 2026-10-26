@@ -2,6 +2,7 @@ import type {
     DashboardDistributionDto,
     DashboardMetricDto,
     DashboardQueryDto,
+    DashboardResultDto,
     DashboardSummaryDto,
     DashboardTrendPointDto,
     DashboardUpcomingMeetingDto,
@@ -114,6 +115,33 @@ function buildCategoryDistribution(
             percentage: total > 0 ? round2((item.value / total) * 100) : 0,
         }))
         .sort((left, right) => right.value - left.value)
+}
+
+function sumResultQuantities(
+    offerings: Array<{ attendanceDetails: Array<{ typeId: number; quantity: number }> }>,
+) {
+    const totals = new Map<number, number>()
+    for (const offering of offerings) {
+        for (const detail of offering.attendanceDetails) {
+            totals.set(detail.typeId, (totals.get(detail.typeId) ?? 0) + detail.quantity)
+        }
+    }
+    return totals
+}
+
+function buildResults(
+    resultTypes: Array<{ id: number; code: string; name: string }>,
+    currentOfferings: Array<{ attendanceDetails: Array<{ typeId: number; quantity: number }> }>,
+    previousOfferings: Array<{ attendanceDetails: Array<{ typeId: number; quantity: number }> }>,
+) {
+    const current = sumResultQuantities(currentOfferings)
+    const previous = sumResultQuantities(previousOfferings)
+    return resultTypes.map<DashboardResultDto>((type) => ({
+        id: type.id,
+        code: type.code,
+        name: type.name,
+        ...metric(current.get(type.id) ?? 0, previous.get(type.id) ?? 0),
+    }))
 }
 
 function nextOccurrence(
@@ -294,6 +322,7 @@ export async function getDashboardSummary(
                     : 0,
             pendingOccurrences: Math.max(0, data.expectedOccurrences - data.offerings.length),
         },
+        results: buildResults(data.resultTypes, currentOfferings, previousOfferings),
         trends: createTrend(currentOfferings, currentStart, periodDays),
         categoryDistribution: buildCategoryDistribution(currentOfferings),
         districtPerformance: [...districtTotals]
