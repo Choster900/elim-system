@@ -13,6 +13,7 @@ import {
     // HandCoins,
     Handshake,
     Heart,
+    Home,
     MapPin,
     Minus,
     RefreshCw,
@@ -118,6 +119,13 @@ const tourSteps: TourStep[] = [
     //     description:
     //         'Revisa ofrendas, asistencia, reuniones y miembros. Los cambios comparan con el período anterior.',
     // },
+    {
+        id: 'cells',
+        target: '[data-tour="dashboard-cells"]',
+        title: 'Células activas',
+        description:
+            'Cuántas células tenemos funcionando hoy y en cuántos sectores. No cambia con el período.',
+    },
     {
         id: 'results',
         target: '[data-tour="dashboard-results"]',
@@ -259,6 +267,12 @@ const offeringTrend = computed(() =>
         ],
     })),
 )
+const cellsDescription = computed(() => {
+    const sectors = summary.value?.metrics.cellSectors ?? 0
+    const where =
+        sectors > 0 ? `En ${formatNumber(sectors)} ${sectors === 1 ? 'sector' : 'sectores'}. ` : ''
+    return `${where}Total actual, no depende del período.`
+})
 const hasExpectedAttendance = computed(
     () => (summary.value?.metrics.attendanceGoal.expected ?? 0) > 0,
 )
@@ -741,7 +755,7 @@ const quickActionClass =
             -->
 
             <section
-                v-if="!isGeneralView && resultCards.length"
+                v-if="!isGeneralView"
                 data-tour="dashboard-results"
                 aria-labelledby="dashboard-results-title"
                 class="mt-6"
@@ -760,7 +774,33 @@ const quickActionClass =
                         Se registran junto con la asistencia de cada fecha y no se suman al total de
                         personas.
                     </p>
-                    <dl class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <dl class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                        <div
+                            data-tour="dashboard-cells"
+                            class="rounded-lg border border-primary/40 bg-primary/5 p-5"
+                        >
+                            <div class="flex items-start justify-between gap-3">
+                                <dt
+                                    class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
+                                >
+                                    Células activas
+                                </dt>
+                                <span
+                                    class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+                                    aria-hidden="true"
+                                >
+                                    <Home class="size-4 text-primary" />
+                                </span>
+                            </div>
+                            <dd
+                                class="mt-2 font-sans text-3xl font-semibold tabular-nums text-on-surface"
+                            >
+                                {{ formatNumber(summary.metrics.activeCells) }}
+                            </dd>
+                            <dd class="mt-2 text-xs leading-5 text-on-surface-variant">
+                                {{ cellsDescription }}
+                            </dd>
+                        </div>
                         <div
                             v-for="card in resultCards"
                             :key="card.id"

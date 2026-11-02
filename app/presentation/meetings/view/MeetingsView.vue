@@ -3,6 +3,7 @@ import {
     AlertTriangle,
     CalendarDays,
     CheckCircle2,
+    Church,
     Clock,
     Compass,
     Eye,
@@ -95,7 +96,34 @@ const updateMeetingMutation = useUpdateMeetingMutation()
 const deleteMeetingMutation = useDeleteMeetingMutation()
 const importMeetingsMutation = useImportMeetingsMutation()
 
-const meetings = computed(() => meetingsQuery.data.value ?? [])
+const route = useRoute()
+const router = useRouter()
+const isGeneralView = computed(() => route.query.tipo === 'generales')
+const allMeetings = computed(() => meetingsQuery.data.value ?? [])
+const meetings = computed(() =>
+    allMeetings.value.filter((meeting) => meeting.isGeneral === isGeneralView.value),
+)
+const kindTabs = computed(() => [
+    {
+        value: 'reuniones' as const,
+        label: 'Reuniones',
+        icon: Users,
+        count: allMeetings.value.filter((meeting) => !meeting.isGeneral).length,
+    },
+    {
+        value: 'generales' as const,
+        label: 'Cultos generales',
+        icon: Church,
+        count: allMeetings.value.filter((meeting) => meeting.isGeneral).length,
+    },
+])
+
+function selectKind(kind: 'reuniones' | 'generales') {
+    router.replace({
+        query: { ...route.query, tipo: kind === 'generales' ? 'generales' : undefined },
+    })
+}
+
 const meetingTypes = computed(() => meetingTypesQuery.data.value ?? [])
 const sectors = computed(() => sectorsQuery.data.value ?? [])
 const leaders = computed(() => leadersQuery.data.value ?? [])
@@ -177,7 +205,13 @@ function activeTone(isActive: boolean) {
         : 'border-outline-variant bg-surface-container-high text-on-surface-variant'
 }
 
-const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
+const columns = computed<DataTableColumn<MeetingRecord>[]>(() =>
+    allColumns.value.filter(
+        (column) => !isGeneralView.value || !['sector', 'people'].includes(column.key),
+    ),
+)
+
+const allColumns = computed<DataTableColumn<MeetingRecord>[]>(() => [
     {
         key: 'date',
         label: 'Fecha',
@@ -198,7 +232,7 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
     },
     {
         key: 'title',
-        label: 'Reunión',
+        label: isGeneralView.value ? 'Culto' : 'Reunión',
         sortable: true,
         filterable: true,
         filterType: 'text',
@@ -211,7 +245,9 @@ const columns = computed<DataTableColumn<MeetingRecord>[]>(() => [
         sortable: true,
         filterable: true,
         filterType: 'select',
-        filterOptions: meetingTypes.value.map((t) => ({ value: t.id, label: t.name })),
+        filterOptions: meetingTypes.value
+            .filter((t) => t.isGeneral === isGeneralView.value)
+            .map((t) => ({ value: t.id, label: t.name })),
         accessor: (row) => row.typeId,
         width: '120px',
     },
@@ -336,7 +372,7 @@ async function processImportFile(file: File) {
         importPreview.value = await parseMeetingsWorkbook(
             file,
             importCatalogs.value,
-            meetings.value,
+            allMeetings.value,
         )
     } catch {
         resetImportPreview()
@@ -499,7 +535,41 @@ async function toggleActive(m: MeetingRecord) {
             </div>
         </section>
 
-        <section class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <nav
+            class="mt-8 flex gap-6 overflow-x-auto border-b border-outline-variant"
+            aria-label="Tipo de reunión"
+        >
+            <button
+                v-for="tab in kindTabs"
+                :key="tab.value"
+                type="button"
+                class="inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                :class="
+                    (tab.value === 'generales') === isGeneralView
+                        ? 'border-primary text-on-surface'
+                        : 'border-transparent text-on-surface-variant hover:text-on-surface'
+                "
+                :aria-pressed="(tab.value === 'generales') === isGeneralView"
+                @click="selectKind(tab.value)"
+            >
+                <component :is="tab.icon" class="size-4" aria-hidden="true" />
+                {{ tab.label }}
+                <span
+                    class="rounded-full bg-surface-container-high px-2 py-0.5 text-[11px] font-bold tabular-nums text-on-surface-variant"
+                >
+                    {{ tab.count }}
+                </span>
+            </button>
+        </nav>
+        <p class="mt-3 text-xs text-on-surface-variant">
+            {{
+                isGeneralView
+                    ? 'Cultos generales de toda la iglesia. No tienen sector, líder ni anfitrión.'
+                    : 'Reuniones de los sectores, con su líder, anfitrión y supervisor.'
+            }}
+        </p>
+
+        <section class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <UiCard class="p-6">
                 <CalendarDays class="mb-4 size-6 text-primary" />
                 <p
@@ -552,13 +622,18 @@ async function toggleActive(m: MeetingRecord) {
 
         <section class="mt-10">
             <DataTable
+                :key="isGeneralView ? 'generales' : 'reuniones'"
                 :rows="meetings"
                 :columns="columns"
                 row-key="id"
                 :page-size="10"
                 :loading="isLoading"
-                empty-title="Sin reuniones"
-                empty-message="No hay reuniones que coincidan con los filtros aplicados."
+                :empty-title="isGeneralView ? 'Sin cultos generales' : 'Sin reuniones'"
+                :empty-message="
+                    isGeneralView
+                        ? 'No hay cultos generales que coincidan con los filtros aplicados.'
+                        : 'No hay reuniones que coincidan con los filtros aplicados.'
+                "
             >
                 <template #cell-date="{ row }">
                     <div class="flex items-center gap-3">

@@ -92,6 +92,8 @@ export interface DashboardSummary {
         attendanceGoal: { attended: number; expected: number; records: number }
         attendanceGoalRate: number
         offeringPerAttendee: number
+        activeCells: number
+        cellSectors: number
     }
     results: DashboardResult[]
     trends: DashboardTrendPoint[]

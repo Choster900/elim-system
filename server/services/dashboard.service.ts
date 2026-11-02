@@ -12,6 +12,7 @@ import { findDashboardData } from '../repositories/dashboard.repository'
 const DAY_MS = 24 * 60 * 60 * 1000
 const GENERAL_SCOPE = { id: 0, name: 'Toda la iglesia' }
 const TREND_BUCKETS = 6
+const CELL_MEETING_TYPE_CODE = 'C'
 
 function startOfUtcDay(value: Date) {
     return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
@@ -264,6 +265,9 @@ export async function getDashboardSummary(
     const previousAttendance = sumAttendance(previousOfferings)
     const currentAmount = sumOfferings(currentOfferings)
     const previousAmount = sumOfferings(previousOfferings)
+    const activeCells = data.meetings.filter(
+        (meeting) => meeting.type.codeSegment === CELL_MEETING_TYPE_CODE,
+    )
     const goalOfferings = currentOfferings.filter(
         (offering) => offering.meeting.expectedAttendees > 0,
     )
@@ -332,6 +336,8 @@ export async function getDashboardSummary(
                     ? round2((data.offerings.length / data.expectedOccurrences) * 100)
                     : 0,
             pendingOccurrences: Math.max(0, data.expectedOccurrences - data.offerings.length),
+            activeCells: activeCells.length,
+            cellSectors: new Set(activeCells.map((meeting) => meeting.sectorId)).size,
         },
         results: buildResults(data.resultTypes, currentOfferings, previousOfferings),
         trends: createTrend(currentOfferings, currentStart, periodDays),

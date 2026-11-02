@@ -97,6 +97,8 @@ export interface DashboardSummaryDto {
         offeringPerAttendee: number
         recordingCoverage: number
         pendingOccurrences: number
+        activeCells: number
+        cellSectors: number
     }
     results: DashboardResultDto[]
     trends: DashboardTrendPointDto[]
