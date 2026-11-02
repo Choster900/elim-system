@@ -8,6 +8,7 @@ import memberRoutes from '~/presentation/members/router.index'
 import offeringReconciliationRoutes from '~/presentation/offering-reconciliation/router.index'
 import meetingsRoutes from '~/presentation/meetings/router.index'
 import registerRoutes from '~/presentation/register/router.index'
+import reportRoutes from '~/presentation/reports/router.index'
 import settingsRoutes from '~/presentation/settings/router.index'
 import supportCommitteeRoutes from '~/presentation/support-committee/router.index'
 import territoriesRoutes from '~/presentation/territories/router.index'
@@ -25,6 +26,7 @@ export default <RouterConfig>{
         ...financeRoutes,
         ...supportCommitteeRoutes,
         ...offeringReconciliationRoutes,
+        ...reportRoutes,
         ...territoriesRoutes,
         ...userRoutes,
         ...accessControlRoutes,

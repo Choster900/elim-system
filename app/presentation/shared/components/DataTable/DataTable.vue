@@ -25,6 +25,8 @@ export interface DataTableColumn<R> {
     headerClass?: string
     cellClass?: string
     sticky?: 'right'
+    footer?: (rows: R[]) => string | number | null | undefined
+    footerClass?: string
 }
 
 const props = withDefaults(
@@ -151,6 +153,12 @@ const sortedRows = computed<T[]>(() => {
 })
 
 const totalRows = computed(() => sortedRows.value.length)
+const hasFooter = computed(() => props.columns.some((col) => col.footer))
+
+function getFooterValue(col: DataTableColumn<T>): string {
+    return col.footer ? toDisplayString(col.footer(sortedRows.value)) : ''
+}
+
 const totalPages = computed(() => Math.max(1, Math.ceil(totalRows.value / pageSize.value)))
 const pagedRows = computed<T[]>(() => {
     const start = (currentPage.value - 1) * pageSize.value
@@ -436,6 +444,33 @@ const pageSizeSelectOptions = computed(() =>
                         </td>
                     </tr>
                 </tbody>
+
+                <tfoot
+                    v-if="hasFooter && !loading && totalRows > 0"
+                    class="bg-surface-container-high"
+                >
+                    <tr>
+                        <td
+                            v-for="col in columns"
+                            :key="`${col.key}-footer`"
+                            :class="[
+                                cellPadding,
+                                alignClass(col.align),
+                                'border-t-2 border-outline-variant align-middle font-semibold text-on-surface',
+                                col.footerClass,
+                            ]"
+                        >
+                            <slot
+                                :name="`footer-${col.key}`"
+                                :rows="sortedRows"
+                                :column="col"
+                                :value="getFooterValue(col)"
+                            >
+                                {{ getFooterValue(col) }}
+                            </slot>
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
 

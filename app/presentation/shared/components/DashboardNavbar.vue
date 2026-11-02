@@ -129,6 +129,16 @@ const navItems: DashboardMenuItem[] = [
         ],
     },
     {
+        label: 'Reportería',
+        children: [
+            {
+                label: 'Reuniones y ofrendas',
+                href: '/reporteria/reuniones',
+                requiredPermission: routePermissionCodes.reportsView,
+            },
+        ],
+    },
+    {
         label: 'Catálogos',
         children: [
             {

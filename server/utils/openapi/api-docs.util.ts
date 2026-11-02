@@ -16,6 +16,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
             { name: 'Health', description: 'Health check and API documentation' },
             { name: 'Auth', description: 'Authentication and token lifecycle' },
             { name: 'Dashboard', description: 'Aggregated indicators for the main panel' },
+            { name: 'Reports', description: 'Date-range reports with offering totals' },
             { name: 'Members', description: 'Community members and their catalogs' },
             { name: 'Meetings', description: 'Meetings, their types and leaders' },
             {
@@ -1031,6 +1032,36 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         200: { description: 'Summary for the requested period' },
                         400: { description: 'Validation error' },
                         403: { description: 'Requires dashboard.view' },
+                    },
+                },
+            },
+            '/api/reports/meetings': {
+                get: {
+                    tags: ['Reports'],
+                    summary: 'Meetings and offerings report',
+                    description:
+                        'One row per meeting occurrence whose date falls inside the range, scoped by the caller (supervisors only receive their sectors). Recorded occurrences are always included; pending ones only for active meetings. Each row carries its offering amounts per category, the amount not assigned to a category and the support committee reception, so the client can total by meeting, district or category. Read-only: it never generates occurrences.',
+                    security: [{ BearerAuth: [] }],
+                    parameters: [
+                        {
+                            name: 'from',
+                            in: 'query',
+                            required: true,
+                            description: 'Range start (inclusive), by meeting date.',
+                            schema: { type: 'string', format: 'date', example: '2026-10-01' },
+                        },
+                        {
+                            name: 'to',
+                            in: 'query',
+                            required: true,
+                            description: 'Range end (inclusive). Max 366 days after from.',
+                            schema: { type: 'string', format: 'date', example: '2026-10-31' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'Report rows, offering categories and the range' },
+                        400: { description: 'Validation error' },
+                        403: { description: 'Requires reports.view' },
                     },
                 },
             },

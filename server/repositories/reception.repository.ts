@@ -50,7 +50,7 @@ function round2(value: number) {
     return Math.round(value * 100) / 100
 }
 
-function statusFromDb(status: string) {
+export function statusFromDb(status: string) {
     return status === 'VERIFIED' ? ('cuadra' as const) : ('con_diferencia' as const)
 }
 

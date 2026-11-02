@@ -201,6 +201,14 @@ export const PERMISSION_SEEDS = [
             'Comparar lo registrado por los líderes con lo recibido por el comité y cerrar diferencias.',
     },
     {
+        name: 'Consultar reportes',
+        code: 'reports.view',
+        module: 'Reportes',
+        resource: 'reports',
+        action: 'view',
+        description: 'Consultar la reportería de reuniones y ofrendas por rango de fechas.',
+    },
+    {
         name: 'Exportar reportes',
         code: 'reports.export',
         module: 'Reportes',

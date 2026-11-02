@@ -15,9 +15,9 @@ export default defineNuxtConfig({
         head: {
             title: env.NUXT_PUBLIC_APP_NAME,
             link: [
-                { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' },
-                { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
-                { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
+                { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png?v=2' },
+                { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico?v=2' },
+                { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png?v=2' },
             ],
             script: [
                 {

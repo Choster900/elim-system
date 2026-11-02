@@ -51,6 +51,12 @@ const dashboard = {
     ) => ['dashboard', 'summary', kind, periodDays, districtId, startDate, endDate] as const,
 }
 
+const reports = {
+    all: ['reports'] as const,
+    meetings: (from: string | null, to: string | null) =>
+        ['reports', 'meetings', from, to] as const,
+}
+
 const attendanceTypes = {
     all: ['attendance-types'] as const,
     list: ['attendance-types', 'list'] as const,
@@ -136,6 +142,7 @@ export const queryKeys = {
     denominations,
     tithes,
     dashboard,
+    reports,
     users,
     roles,
     permissions,

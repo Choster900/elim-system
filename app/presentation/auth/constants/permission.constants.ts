@@ -14,6 +14,8 @@ export const routePermissionCodes = {
     financeReceive: 'finance.receive',
     financeAudit: 'finance.audit',
     territoriesView: 'territories.view',
+    reportsView: 'reports.view',
+    reportsExport: 'reports.export',
     usersView: 'users.view',
     usersCreate: 'users.create',
     usersUpdate: 'users.update',
