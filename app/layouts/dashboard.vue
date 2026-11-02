@@ -4,6 +4,7 @@ import DashboardNavbar from '~/presentation/shared/components/DashboardNavbar.vu
 
 const route = useRoute()
 const fixedViewport = computed(() => route.meta.fixedViewport === true)
+const currentYear = new Date().getFullYear()
 </script>
 
 <template>
@@ -25,7 +26,7 @@ const fixedViewport = computed(() => route.meta.fixedViewport === true)
             >
                 <span class="font-display text-2xl font-semibold text-primary">Sistema</span>
                 <p class="text-xs font-semibold uppercase text-on-surface-variant">
-                    © 2024 Sistema. Minimalismo Sagrado.
+                    © {{ currentYear }} Elim Sistema Ministerio.
                 </p>
                 <div class="flex gap-6">
                     <NuxtLink
