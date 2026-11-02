@@ -221,7 +221,7 @@ function onPrimaryAction() {
 </script>
 
 <template>
-    <main class="mx-auto w-full max-w-5xl px-4 pb-32 pt-24 sm:px-6">
+    <main class="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 pb-4 pt-24 sm:px-6">
         <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <NuxtLink
                 :to="backPath"
@@ -377,11 +377,9 @@ function onPrimaryAction() {
                 </div>
             </section>
 
-            <div
-                class="fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant bg-surface/95 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur"
-            >
+            <div class="pointer-events-none sticky bottom-0 z-40 mt-auto pb-4 pt-6">
                 <div
-                    class="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6"
+                    class="pointer-events-auto flex w-full items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface/95 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur sm:px-5"
                 >
                     <div class="flex min-w-0 items-center gap-4">
                         <template v-if="isDirectEntry">
