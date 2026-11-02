@@ -34,7 +34,7 @@ const height = 250
 const padding = { top: 28, right: 16, bottom: 40, left: 52 }
 const plotHeight = height - padding.top - padding.bottom
 const baseline = padding.top + plotHeight
-const slotMinWidth = 56
+const slotMinWidth = 76
 const barMaxWidth = 24
 const cornerRadius = 4
 const fullLabelLimit = 12
@@ -157,10 +157,12 @@ function unitOf(value: number) {
 function formatCapValue(value: number) {
     if (props.format !== 'currency') return formatValue(value)
 
+    const fractionDigits = value < 1000 && !Number.isInteger(value) ? 2 : 0
     return new Intl.NumberFormat('es-SV', {
         style: 'currency',
         currency: 'USD',
-        maximumFractionDigits: 0,
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits,
     }).format(value)
 }
 

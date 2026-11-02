@@ -1,14 +1,24 @@
 <script setup lang="ts">
-import { CalendarCheck, ChevronLeft, ChevronRight, Clock, Coins, PartyPopper } from '@lucide/vue'
+import {
+    CalendarCheck,
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    Coins,
+    Inbox,
+    PartyPopper,
+    ShieldCheck,
+} from '@lucide/vue'
+import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import { formatLocalIsoDate, formatTimeRange } from '~/utils/date/date-format.util'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import EnvelopeListSkeleton from '../components/EnvelopeListSkeleton.vue'
 import SupportCommitteeTabs from '../components/SupportCommitteeTabs.vue'
-import { usePendingEnvelopesQuery } from '../composables/useReceptionQueries'
-import type { PendingEnvelopesParams } from '../interfaces/reception.interface'
+import { usePendingEnvelopesQuery, useReceptionsQuery } from '../composables/useReceptionQueries'
+import type { PendingEnvelopesParams, ReceptionFilters } from '../interfaces/reception.interface'
 import { useReceptionDraftStore } from '../stores/reception-draft.store'
-import { countPath } from '../utils/reception-format.util'
-import { localIsoDate } from '../utils/tithe-format.util'
+import { countPath, envelopePath, formatMoney, toCents } from '../utils/reception-format.util'
+import { localIsoDate, timeLabel } from '../utils/tithe-format.util'
 
 defineOptions({ name: 'GeneralServicesView' })
 
@@ -80,6 +90,62 @@ function errorOf(error: unknown) {
 
 const todayError = computed(() => errorOf(todayQuery.error.value))
 const previousError = computed(() => errorOf(previousQuery.error.value))
+
+const historyRef = ref<HTMLElement | null>(null)
+const historyRange = ref<DatePickerRange>({ start: `${today.slice(0, 8)}01`, end: today })
+const historyPage = ref(1)
+
+const historyFilters = computed<ReceptionFilters>(() => ({
+    kind: 'generales',
+    ...(historyRange.value.start ? { from: historyRange.value.start } : {}),
+    ...(historyRange.value.end ? { to: historyRange.value.end } : {}),
+}))
+
+const historyQuery = useReceptionsQuery(historyFilters)
+const historyItems = computed(() => historyQuery.data.value ?? [])
+const historyError = computed(() =>
+    historyQuery.error.value
+        ? resolveHttpErrorMessage(historyQuery.error.value, 'No fue posible cargar el historial')
+        : '',
+)
+const historyTotal = computed(
+    () => historyItems.value.reduce((sum, item) => sum + toCents(item.countedAmount), 0) / 100,
+)
+const historyTotalPages = computed(() => Math.ceil(historyItems.value.length / PAGE_SIZE))
+const historyPageItems = computed(() =>
+    historyItems.value.slice((historyPage.value - 1) * PAGE_SIZE, historyPage.value * PAGE_SIZE),
+)
+const historyRangeText = computed(() => {
+    const first = (historyPage.value - 1) * PAGE_SIZE + 1
+    const last = Math.min(historyPage.value * PAGE_SIZE, historyItems.value.length)
+    return `${first}–${last}`
+})
+const historyPeriodLabel = computed(() => {
+    const { start, end } = historyRange.value
+    const label = (isoDate: string) =>
+        formatLocalIsoDate(isoDate, { day: 'numeric', month: 'short', year: 'numeric' })
+    if (start && end)
+        return start === end ? `el ${label(start)}` : `del ${label(start)} al ${label(end)}`
+    if (start) return `desde el ${label(start)}`
+    if (end) return `hasta el ${label(end)}`
+    return 'en cualquier fecha'
+})
+
+watch(historyFilters, () => {
+    historyPage.value = 1
+})
+
+watch(historyTotalPages, (total) => {
+    if (total > 0 && historyPage.value > total) historyPage.value = total
+})
+
+function goToHistoryPage(next: number) {
+    historyPage.value = next
+    nextTick(() => {
+        const top = historyRef.value?.getBoundingClientRect().top ?? 0
+        if (top < 0) historyRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+}
 
 function capitalizeFirst(text: string) {
     return text.charAt(0).toUpperCase() + text.slice(1)
@@ -344,6 +410,175 @@ onMounted(() => draftStore.ensureLoaded())
                             :class="pageButtonClass"
                             :disabled="!pagination.hasNextPage"
                             @click="goToPage(pagination.page + 1)"
+                        >
+                            Siguiente
+                            <ChevronRight class="size-4" />
+                        </button>
+                    </div>
+                </nav>
+            </div>
+        </section>
+
+        <section
+            ref="historyRef"
+            class="mt-10 scroll-mt-24"
+            aria-labelledby="general-history-title"
+        >
+            <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <div class="flex items-baseline gap-3">
+                        <h2
+                            id="general-history-title"
+                            class="font-display text-xl font-semibold text-on-surface"
+                        >
+                            Historial de ingresos
+                        </h2>
+                        <span
+                            v-if="historyItems.length > 0"
+                            class="rounded-full bg-surface-container-high px-2 py-0.5 text-xs font-semibold tabular-nums text-on-surface-variant"
+                        >
+                            {{ historyItems.length }}
+                        </span>
+                    </div>
+                    <p class="mt-1 text-xs text-on-surface-variant">
+                        Cultos generales ya contados por el comité, por fecha en que se recibió la
+                        ofrenda.
+                    </p>
+                </div>
+                <div class="w-full sm:w-72">
+                    <UiDatePicker
+                        v-model="historyRange"
+                        mode="range"
+                        placeholder="Cualquier fecha de recepción"
+                    />
+                </div>
+            </div>
+
+            <EnvelopeListSkeleton v-if="historyQuery.isPending.value" :rows="PAGE_SIZE" />
+
+            <div
+                v-else-if="historyError"
+                class="rounded-xl border border-destructive/40 bg-destructive/10 px-6 py-6 text-center text-sm text-destructive"
+            >
+                {{ historyError }}
+            </div>
+
+            <div
+                v-else-if="historyItems.length === 0"
+                class="flex items-center gap-3 rounded-xl border border-dashed border-outline-variant bg-surface-container-low px-5 py-6"
+            >
+                <Inbox class="size-6 shrink-0 text-on-surface-variant" />
+                <p class="text-sm text-on-surface-variant">
+                    Sin ingresos de cultos generales {{ historyPeriodLabel }}.
+                </p>
+            </div>
+
+            <div
+                v-else
+                class="transition-opacity duration-200"
+                :class="{ 'opacity-50': historyQuery.isPlaceholderData.value }"
+                :aria-busy="historyQuery.isPlaceholderData.value"
+            >
+                <p
+                    class="mb-3 rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant"
+                >
+                    Ingresaron
+                    <strong class="tabular-nums text-on-surface">
+                        {{ formatMoney(historyTotal) }}
+                    </strong>
+                    en
+                    <strong class="tabular-nums text-on-surface">
+                        {{ historyItems.length }}
+                        {{ historyItems.length === 1 ? 'culto' : 'cultos' }}
+                    </strong>
+                    {{ historyPeriodLabel }}.
+                </p>
+
+                <ul class="flex flex-col gap-2">
+                    <li v-for="reception in historyPageItems" :key="reception.id">
+                        <NuxtLink
+                            :to="envelopePath(reception.occurrenceId)"
+                            class="group flex items-center gap-4 rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3 transition-colors hover:border-primary hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                            <span
+                                class="flex size-11 shrink-0 flex-col items-center justify-center rounded-lg border border-outline-variant bg-surface"
+                            >
+                                <strong
+                                    class="font-display text-base leading-none tabular-nums text-on-surface"
+                                >
+                                    {{ dayOf(reception.envelope.date) }}
+                                </strong>
+                                <span
+                                    class="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-on-surface-variant"
+                                >
+                                    {{ monthOf(reception.envelope.date) }}
+                                </span>
+                            </span>
+                            <span
+                                class="h-10 w-1 shrink-0 rounded-full"
+                                :style="{ backgroundColor: reception.envelope.meetingColor }"
+                            />
+                            <div class="min-w-0 flex-1">
+                                <h3
+                                    class="truncate text-sm font-semibold text-on-surface group-hover:text-primary"
+                                >
+                                    {{ reception.envelope.meetingTitle }}
+                                </h3>
+                                <p class="mt-0.5 truncate text-xs text-on-surface-variant">
+                                    {{ weekdayOf(reception.envelope.date) }} · Recibió
+                                    {{ reception.receivedByName ?? 'sin usuario' }} ·
+                                    {{ timeLabel(reception.receivedAt) }}
+                                </p>
+                                <p
+                                    v-if="reception.closedAt"
+                                    class="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300"
+                                >
+                                    <ShieldCheck class="size-3" />
+                                    Revisado por {{ reception.closedByName ?? 'Finanzas' }}
+                                </p>
+                            </div>
+                            <strong
+                                class="shrink-0 text-sm font-semibold tabular-nums text-on-surface"
+                            >
+                                {{ formatMoney(reception.countedAmount) }}
+                            </strong>
+                            <ChevronRight
+                                class="size-4 shrink-0 text-on-surface-variant transition-colors group-hover:text-primary"
+                            />
+                        </NuxtLink>
+                    </li>
+                </ul>
+
+                <nav
+                    v-if="historyTotalPages > 1"
+                    class="mt-4 flex flex-col items-center justify-between gap-3 border-t border-outline-variant pt-4 sm:flex-row"
+                    aria-label="Paginación del historial de cultos generales"
+                >
+                    <p class="text-xs text-on-surface-variant">
+                        Mostrando
+                        <strong class="text-on-surface">{{ historyRangeText }}</strong>
+                        de
+                        <strong class="text-on-surface">{{ historyItems.length }}</strong>
+                        ingresos
+                    </p>
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            :class="pageButtonClass"
+                            :disabled="historyPage <= 1"
+                            @click="goToHistoryPage(historyPage - 1)"
+                        >
+                            <ChevronLeft class="size-4" />
+                            Anterior
+                        </button>
+                        <span class="px-2 text-xs tabular-nums text-on-surface-variant">
+                            Página {{ historyPage }} de {{ historyTotalPages }}
+                        </span>
+                        <button
+                            type="button"
+                            :class="pageButtonClass"
+                            :disabled="historyPage >= historyTotalPages"
+                            @click="goToHistoryPage(historyPage + 1)"
                         >
                             Siguiente
                             <ChevronRight class="size-4" />

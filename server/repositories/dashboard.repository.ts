@@ -5,13 +5,22 @@ export interface DashboardRepositoryFilters {
     rangeStart: Date
     currentStart: Date
     endExclusive: Date
-    sectorIds?: number[]
+    scope?: { sectorIds: number[]; meetingIds: number[] }
     districtId?: number
 }
 
 export async function findDashboardData(filters: DashboardRepositoryFilters) {
+    const scope = filters.scope
     const meetingWhere: Prisma.MeetingWhereInput = {
-        ...(filters.sectorIds ? { sectorId: { in: filters.sectorIds } } : {}),
+        ...(scope
+            ? {
+                  OR: [
+                      { type: { isGeneral: true } },
+                      { sectorId: { in: scope.sectorIds } },
+                      { id: { in: scope.meetingIds } },
+                  ],
+              }
+            : {}),
         ...(filters.districtId ? { sector: { zone: { districtId: filters.districtId } } } : {}),
     }
     const memberWhere: Prisma.MemberWhereInput = {
@@ -19,11 +28,18 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
     }
     const districtWhere: Prisma.DistrictWhereInput = {
         isActive: true,
-        ...(filters.sectorIds
+        ...(scope
             ? {
                   zones: {
                       some: {
-                          sectors: { some: { id: { in: filters.sectorIds } } },
+                          sectors: {
+                              some: {
+                                  OR: [
+                                      { id: { in: scope.sectorIds } },
+                                      { meetings: { some: { id: { in: scope.meetingIds } } } },
+                                  ],
+                              },
+                          },
                       },
                   },
               }
@@ -66,9 +82,13 @@ export async function findDashboardData(filters: DashboardRepositoryFilters) {
         }),
         prisma.meeting.findMany({
             where: {
-                ...meetingWhere,
-                isActive: true,
-                OR: [{ sectorId: { not: null } }, { type: { isGeneral: true } }],
+                AND: [
+                    meetingWhere,
+                    {
+                        isActive: true,
+                        OR: [{ sectorId: { not: null } }, { type: { isGeneral: true } }],
+                    },
+                ],
             },
             include: {
                 type: true,

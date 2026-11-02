@@ -41,6 +41,7 @@ export const pendingEnvelopesFiltersSchema = Joi.object<PendingEnvelopesFiltersD
 }).unknown(true)
 
 export const receptionFiltersSchema = Joi.object<ReceptionFiltersDto>({
+    kind: Joi.string().valid('lideres', 'generales'),
     status: Joi.string().valid('cuadra', 'con_diferencia'),
     from: Joi.string().isoDate(),
     to: Joi.string().isoDate(),

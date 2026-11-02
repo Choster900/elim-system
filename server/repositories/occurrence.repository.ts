@@ -139,11 +139,12 @@ export type OccurrenceRecord = ReturnType<typeof toOccurrenceRecord>
 export function scopeWhere(scope: OccurrenceScopeFilter): Prisma.MeetingOccurrenceWhereInput {
     if (scope.seesAll) return {}
 
-    const clauses: Prisma.MeetingOccurrenceWhereInput[] = []
+    const clauses: Prisma.MeetingOccurrenceWhereInput[] = [
+        { meeting: { type: { isGeneral: true } } },
+    ]
     if (scope.sectorIds.length > 0) clauses.push({ sectorId: { in: scope.sectorIds } })
     if (scope.meetingIds.length > 0) clauses.push({ meetingId: { in: scope.meetingIds } })
 
-    if (clauses.length === 0) return { id: { in: [] } }
     return { OR: clauses }
 }
 

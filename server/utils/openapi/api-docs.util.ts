@@ -557,9 +557,15 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 get: {
                     tags: ['Offering receptions'],
                     summary: 'Received envelopes',
-                    description: 'Requires finance.receive. Dates filter the reception date.',
+                    description:
+                        'Requires finance.receive. Dates filter the reception date. General services are visible to every user regardless of territorial scope.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
+                        {
+                            name: 'kind',
+                            in: 'query',
+                            schema: { type: 'string', enum: ['lideres', 'generales'] },
+                        },
                         {
                             name: 'status',
                             in: 'query',

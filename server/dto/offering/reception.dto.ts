@@ -36,6 +36,7 @@ export interface PendingEnvelopesFiltersDto {
 }
 
 export interface ReceptionFiltersDto {
+    kind?: PendingEnvelopesKind
     status?: ReceptionStatus
     from?: string
     to?: string

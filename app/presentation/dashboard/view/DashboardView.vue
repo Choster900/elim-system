@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {
-    Activity,
+    // Activity,
     ArrowRight,
     CalendarCheck,
     CalendarDays,
@@ -9,7 +9,7 @@ import {
     Clock3,
     Compass,
     Droplets,
-    HandCoins,
+    // HandCoins,
     Handshake,
     Heart,
     MapPin,
@@ -19,10 +19,10 @@ import {
     TrendingDown,
     TrendingUp,
     UserPlus,
-    UsersRound,
+    // UsersRound,
 } from '@lucide/vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
-import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
+import ColumnChart from '~/presentation/shared/components/charts/ColumnChart.vue'
 import { useDashboardQuery } from '~/presentation/dashboard/composables/useDashboardQuery'
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import type {
@@ -90,13 +90,13 @@ const tourSteps: TourStep[] = [
         description:
             'Si tienes varios distritos, selecciona uno para ver sus reuniones y ofrendas.',
     },
-    {
-        id: 'metrics',
-        target: '[data-tour="dashboard-metrics"]',
-        title: 'Indicadores principales',
-        description:
-            'Revisa ofrendas, asistencia, reuniones y miembros. Los cambios comparan con el período anterior.',
-    },
+    // {
+    //     id: 'metrics',
+    //     target: '[data-tour="dashboard-metrics"]',
+    //     title: 'Indicadores principales',
+    //     description:
+    //         'Revisa ofrendas, asistencia, reuniones y miembros. Los cambios comparan con el período anterior.',
+    // },
     {
         id: 'results',
         target: '[data-tour="dashboard-results"]',
@@ -194,19 +194,50 @@ const districtOptions = computed(
             label: district.name,
         })) ?? [],
 )
-const attendanceTrend = computed(
-    () =>
-        summary.value?.trends.map((point) => ({
-            label: point.label,
-            value: point.attendance,
-        })) ?? [],
+const trendBuckets = computed(() => {
+    const current = summary.value
+    if (!current || current.trends.every((point) => point.meetingCount === 0)) return []
+    const monthsOnly = current.period.days > 120
+    return current.trends.map((point, index) => {
+        const next = current.trends[index + 1]
+        const endDate = next ? shiftIsoDate(next.key, -1) : current.period.endDate
+        return {
+            ...point,
+            axisLabel: bucketAxisLabel(point.key, endDate, monthsOnly),
+            rangeText: bucketRangeText(point.key, endDate),
+        }
+    })
+})
+const attendanceTrend = computed(() =>
+    trendBuckets.value.map((bucket) => ({
+        key: bucket.key,
+        label: bucket.axisLabel,
+        value: bucket.attendance,
+        detail: [
+            bucket.rangeText,
+            meetingCountLabel(bucket.meetingCount),
+            ...(bucket.meetingCount > 0
+                ? [`Promedio: ${formatNumber(bucket.attendance / bucket.meetingCount)} por reunión`]
+                : []),
+        ],
+    })),
 )
-const offeringTrend = computed(
-    () =>
-        summary.value?.trends.map((point) => ({
-            label: point.label,
-            value: point.offerings,
-        })) ?? [],
+const offeringTrend = computed(() =>
+    trendBuckets.value.map((bucket) => ({
+        key: bucket.key,
+        label: bucket.axisLabel,
+        value: bucket.offerings,
+        detail: [
+            bucket.rangeText,
+            meetingCountLabel(bucket.meetingCount),
+            ...(bucket.meetingCount > 0
+                ? [`Promedio: ${formatMoney(bucket.offerings / bucket.meetingCount)} por reunión`]
+                : []),
+        ],
+    })),
+)
+const hasExpectedAttendance = computed(
+    () => (summary.value?.metrics.attendanceGoal.expected ?? 0) > 0,
 )
 const maximumDistrictOffering = computed(() =>
     Math.max(
@@ -291,6 +322,43 @@ function formatDate(value: string, options: Intl.DateTimeFormatOptions = {}) {
         .replace('.', '')
 }
 
+function shiftIsoDate(value: string, days: number) {
+    const date = new Date(`${value}T00:00:00.000Z`)
+    date.setUTCDate(date.getUTCDate() + days)
+    return date.toISOString().slice(0, 10)
+}
+
+function bucketAxisLabel(startDate: string, endDate: string, monthsOnly: boolean) {
+    const start = new Date(`${startDate}T00:00:00.000Z`)
+    const end = new Date(`${endDate}T00:00:00.000Z`)
+    const startMonth = formatDate(startDate, { day: undefined })
+    const endMonth = formatDate(endDate, { day: undefined })
+    const sameMonth = startDate.slice(0, 7) === endDate.slice(0, 7)
+
+    if (monthsOnly) return sameMonth ? startMonth : `${startMonth}–${endMonth}`
+    if (startDate === endDate) return `${start.getUTCDate()} ${startMonth}`
+    if (sameMonth) return `${start.getUTCDate()}–${end.getUTCDate()} ${endMonth}`
+    return `${start.getUTCDate()} ${startMonth}–${end.getUTCDate()} ${endMonth}`
+}
+
+function bucketRangeText(startDate: string, endDate: string) {
+    const dayMonth = (value: string) =>
+        `${Number(value.slice(8, 10))} ${formatDate(value, { day: undefined })}`
+    const endYear = endDate.slice(0, 4)
+    const end = `${dayMonth(endDate)} ${endYear}`
+    if (startDate === endDate) return end
+    if (startDate.slice(0, 7) === endDate.slice(0, 7)) {
+        return `Del ${Number(startDate.slice(8, 10))} al ${end}`
+    }
+    const startYear = startDate.slice(0, 4) === endYear ? '' : ` ${startDate.slice(0, 4)}`
+    return `Del ${dayMonth(startDate)}${startYear} al ${end}`
+}
+
+function meetingCountLabel(count: number) {
+    if (count === 0) return 'Sin reuniones registradas'
+    return `${formatNumber(count)} ${count === 1 ? 'reunión registrada' : 'reuniones registradas'}`
+}
+
 function changeDirection(metric: DashboardMetric) {
     if (metric.changePercentage === null || metric.changePercentage === 0) return 'flat'
     return metric.changePercentage > 0 ? 'up' : 'down'
@@ -303,39 +371,39 @@ function changeLabel(metric: DashboardMetric) {
     return `${formatNumber(Math.abs(metric.changePercentage))}% ${direction} que el período anterior`
 }
 
-const metricCards = computed(() => {
-    if (!summary.value) return []
-    return [
-        {
-            label: 'Ofrendas recolectadas',
-            value: formatCompactMoney(summary.value.metrics.offerings.value),
-            meta: changeLabel(summary.value.metrics.offerings),
-            direction: changeDirection(summary.value.metrics.offerings),
-            icon: HandCoins,
-        },
-        {
-            label: 'Asistencia registrada',
-            value: formatNumber(summary.value.metrics.attendance.value),
-            meta: changeLabel(summary.value.metrics.attendance),
-            direction: changeDirection(summary.value.metrics.attendance),
-            icon: UsersRound,
-        },
-        {
-            label: 'Reuniones documentadas',
-            value: formatNumber(summary.value.metrics.registeredMeetings.value),
-            meta: changeLabel(summary.value.metrics.registeredMeetings),
-            direction: changeDirection(summary.value.metrics.registeredMeetings),
-            icon: CalendarDays,
-        },
-        {
-            label: 'Miembros activos',
-            value: formatNumber(summary.value.metrics.activeMembers),
-            meta: `${formatNumber(summary.value.metrics.newMembers.value)} incorporados en el período`,
-            direction: null,
-            icon: Activity,
-        },
-    ]
-})
+// const metricCards = computed(() => {
+//     if (!summary.value) return []
+//     return [
+//         {
+//             label: 'Ofrendas recolectadas',
+//             value: formatCompactMoney(summary.value.metrics.offerings.value),
+//             meta: changeLabel(summary.value.metrics.offerings),
+//             direction: changeDirection(summary.value.metrics.offerings),
+//             icon: HandCoins,
+//         },
+//         {
+//             label: 'Asistencia registrada',
+//             value: formatNumber(summary.value.metrics.attendance.value),
+//             meta: changeLabel(summary.value.metrics.attendance),
+//             direction: changeDirection(summary.value.metrics.attendance),
+//             icon: UsersRound,
+//         },
+//         {
+//             label: 'Reuniones documentadas',
+//             value: formatNumber(summary.value.metrics.registeredMeetings.value),
+//             meta: changeLabel(summary.value.metrics.registeredMeetings),
+//             direction: changeDirection(summary.value.metrics.registeredMeetings),
+//             icon: CalendarDays,
+//         },
+//         {
+//             label: 'Miembros activos',
+//             value: formatNumber(summary.value.metrics.activeMembers),
+//             meta: `${formatNumber(summary.value.metrics.newMembers.value)} incorporados en el período`,
+//             direction: null,
+//             icon: Activity,
+//         },
+//     ]
+// })
 
 const RESULT_ICONS: Record<string, Component> = {
     CONVERSIONES: Heart,
@@ -555,6 +623,7 @@ const quickActionClass =
         </section>
 
         <template v-else>
+            <!--
             <section
                 data-tour="dashboard-metrics"
                 aria-labelledby="dashboard-metrics-title"
@@ -610,6 +679,7 @@ const quickActionClass =
                     </UiCard>
                 </dl>
             </section>
+            -->
 
             <section
                 v-if="resultCards.length"
@@ -694,28 +764,40 @@ const quickActionClass =
                                 Tendencia de asistencia
                             </h2>
                             <p class="mt-1 text-xs text-on-surface-variant">
-                                Personas registradas en cada fecha de reunión.
+                                Personas registradas por rango de fechas. Cada barra suma la
+                                asistencia de las reuniones de ese rango.
                             </p>
                         </div>
-                        <dl class="flex gap-6 sm:text-right">
+                        <dl class="flex shrink-0 gap-6 sm:text-right">
                             <div>
-                                <dt class="text-xs text-on-surface-variant">
-                                    Promedio por reunión
+                                <dt class="whitespace-nowrap text-xs text-on-surface-variant">
+                                    Personas por reunión
                                 </dt>
                                 <dd class="text-xl font-semibold text-on-surface">
                                     {{ formatNumber(summary.metrics.averageAttendance) }}
                                 </dd>
                             </div>
                             <div>
-                                <dt class="text-xs text-on-surface-variant">Cumplimiento</dt>
+                                <dt class="whitespace-nowrap text-xs text-on-surface-variant">
+                                    Cumplimiento
+                                </dt>
                                 <dd class="text-xl font-semibold text-on-surface">
-                                    {{ formatNumber(summary.metrics.attendanceGoalRate) }}%
+                                    <template v-if="hasExpectedAttendance">
+                                        {{ formatNumber(summary.metrics.attendanceGoalRate) }}%
+                                    </template>
+                                    <span
+                                        v-else
+                                        class="text-sm font-medium text-on-surface-variant"
+                                    >
+                                        Sin meta
+                                    </span>
                                 </dd>
                             </div>
                         </dl>
                     </div>
                     <div class="mt-4">
                         <div
+                            v-if="hasExpectedAttendance"
                             class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest"
                             role="meter"
                             aria-label="Asistencia frente a la esperada"
@@ -730,15 +812,32 @@ const quickActionClass =
                             />
                         </div>
                         <p class="mt-1 text-xs text-on-surface-variant">
-                            Asistencia frente a la esperada en las reuniones
+                            <template v-if="hasExpectedAttendance">
+                                {{ formatNumber(summary.metrics.attendanceGoal.attended) }} de
+                                {{ formatNumber(summary.metrics.attendanceGoal.expected) }}
+                                personas esperadas. Solo cuenta las
+                                {{ formatNumber(summary.metrics.attendanceGoal.records) }} de
+                                {{ formatNumber(summary.metrics.registeredMeetings.value) }}
+                                reuniones registradas que tienen asistencia esperada configurada.
+                            </template>
+                            <template v-else>
+                                Las reuniones del período no tienen asistencia esperada configurada,
+                                por eso no se calcula el cumplimiento.
+                            </template>
                         </p>
                     </div>
-                    <TrendChart
+                    <ColumnChart
                         class="mt-5"
                         :values="attendanceTrend"
-                        label="Asistencia por período"
+                        :unit="{ one: 'persona', other: 'personas' }"
+                        label="Asistencia total por rango de fechas"
                         color="var(--chart-1)"
+                        empty-message="Sin reuniones registradas en el período."
                     />
+                    <p v-if="attendanceTrend.length" class="mt-2 text-xs text-on-surface-variant">
+                        Pasa el cursor sobre una barra para ver las fechas, las reuniones y el
+                        promedio.
+                    </p>
                 </UiCard>
 
                 <UiCard data-tour="dashboard-offerings" class="rounded-xl p-6 md:p-8">
@@ -753,33 +852,41 @@ const quickActionClass =
                                 Tendencia de ofrendas
                             </h2>
                             <p class="mt-1 text-xs text-on-surface-variant">
-                                Recaudación consolidada por fecha de reunión.
+                                Dólares recaudados por rango de fechas. Cada barra suma las ofrendas
+                                de las reuniones de ese rango.
                             </p>
                         </div>
-                        <dl class="flex gap-6 sm:text-right">
+                        <dl class="flex shrink-0 gap-6 sm:text-right">
                             <div>
-                                <dt class="text-xs text-on-surface-variant">
-                                    Promedio por reunión
+                                <dt class="whitespace-nowrap text-xs text-on-surface-variant">
+                                    Ofrenda por reunión
                                 </dt>
                                 <dd class="text-xl font-semibold text-on-surface">
                                     {{ formatCompactMoney(summary.metrics.averageOffering) }}
                                 </dd>
                             </div>
                             <div>
-                                <dt class="text-xs text-on-surface-variant">Por asistente</dt>
+                                <dt class="whitespace-nowrap text-xs text-on-surface-variant">
+                                    Ofrenda por asistente
+                                </dt>
                                 <dd class="text-xl font-semibold text-on-surface">
                                     {{ formatMoney(summary.metrics.offeringPerAttendee) }}
                                 </dd>
                             </div>
                         </dl>
                     </div>
-                    <TrendChart
+                    <ColumnChart
                         class="mt-6"
                         :values="offeringTrend"
-                        label="Ofrendas por período"
+                        label="Ofrenda total por rango de fechas"
                         color="var(--chart-2)"
                         format="currency"
+                        empty-message="Sin ofrendas registradas en el período."
                     />
+                    <p v-if="offeringTrend.length" class="mt-2 text-xs text-on-surface-variant">
+                        Pasa el cursor sobre una barra para ver las fechas, las reuniones y el
+                        promedio.
+                    </p>
                 </UiCard>
             </section>
 

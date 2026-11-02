@@ -89,6 +89,7 @@ export interface DashboardSummaryDto {
         registeredMeetings: DashboardMetricDto
         averageAttendance: number
         averageOffering: number
+        attendanceGoal: { attended: number; expected: number; records: number }
         attendanceGoalRate: number
         offeringPerAttendee: number
         recordingCoverage: number

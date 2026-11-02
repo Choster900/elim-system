@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
         const auth = requirePermission(event, 'dashboard.view')
         const query = validateDto(dashboardQuerySchema, getQuery(event))
         const scope = await resolveOccurrenceScope(auth)
-        const data = await getDashboardSummary(query, scope.seesAll ? undefined : scope.sectorIds)
+        const data = await getDashboardSummary(query, scope.seesAll ? undefined : scope)
 
         return ApiResponseFactory.success(data, 'Resumen del dashboard obtenido correctamente')
     } catch (error) {

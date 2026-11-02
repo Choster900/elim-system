@@ -59,7 +59,7 @@ function createTrend(
 ) {
     const bucketCount = Math.min(TREND_BUCKETS, periodDays)
     const buckets: DashboardTrendPointDto[] = Array.from({ length: bucketCount }, (_, index) => {
-        const offset = Math.floor((index * periodDays) / bucketCount)
+        const offset = Math.ceil((index * periodDays) / bucketCount)
         const bucketDate = addUtcDays(currentStart, offset)
         return {
             key: toIsoDate(bucketDate),
@@ -232,7 +232,7 @@ function buildUpcomingMeetings(
 
 export async function getDashboardSummary(
     query: DashboardQueryDto,
-    sectorIds?: number[],
+    scope?: { sectorIds: number[]; meetingIds: number[] },
     now = new Date(),
 ): Promise<DashboardSummaryDto> {
     const today = startOfUtcDay(now)
@@ -249,7 +249,7 @@ export async function getDashboardSummary(
         rangeStart: previousStart,
         currentStart,
         endExclusive,
-        sectorIds,
+        scope,
         districtId: query.districtId,
     })
 
@@ -263,7 +263,11 @@ export async function getDashboardSummary(
     const previousAttendance = sumAttendance(previousOfferings)
     const currentAmount = sumOfferings(currentOfferings)
     const previousAmount = sumOfferings(previousOfferings)
-    const expectedAttendance = currentOfferings.reduce(
+    const goalOfferings = currentOfferings.filter(
+        (offering) => offering.meeting.expectedAttendees > 0,
+    )
+    const goalAttendance = sumAttendance(goalOfferings)
+    const expectedAttendance = goalOfferings.reduce(
         (sum, offering) => sum + offering.meeting.expectedAttendees,
         0,
     )
@@ -312,8 +316,13 @@ export async function getDashboardSummary(
                     : 0,
             averageOffering:
                 currentOfferings.length > 0 ? round2(currentAmount / currentOfferings.length) : 0,
+            attendanceGoal: {
+                attended: goalAttendance,
+                expected: expectedAttendance,
+                records: goalOfferings.length,
+            },
             attendanceGoalRate:
-                expectedAttendance > 0 ? round2((currentAttendance / expectedAttendance) * 100) : 0,
+                expectedAttendance > 0 ? round2((goalAttendance / expectedAttendance) * 100) : 0,
             offeringPerAttendee:
                 currentAttendance > 0 ? round2(currentAmount / currentAttendance) : 0,
             recordingCoverage:

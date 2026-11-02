@@ -108,6 +108,9 @@ export type ReceptionRecord = ReturnType<typeof toReceptionRecord>
 
 function receptionFiltersWhere(filters: ReceptionFiltersDto): Prisma.OfferingReceptionWhereInput {
     return {
+        ...(filters.kind
+            ? { occurrence: { meeting: { type: { isGeneral: filters.kind === 'generales' } } } }
+            : {}),
         ...(filters.status ? { status: statusToDb(filters.status) } : {}),
         ...(filters.from || filters.to
             ? {

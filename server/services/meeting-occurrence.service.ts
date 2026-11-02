@@ -173,6 +173,7 @@ async function getScopedOccurrence(id: number, scope: OccurrenceScopeFilter) {
 
     const allowed =
         scope.seesAll ||
+        occurrence.isGeneralMeeting ||
         (occurrence.sectorId !== null && scope.sectorIds.includes(occurrence.sectorId)) ||
         scope.meetingIds.includes(occurrence.meetingId)
 

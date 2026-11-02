@@ -136,6 +136,7 @@ export interface PendingEnvelopesPage {
 }
 
 export interface ReceptionFilters {
+    kind?: PendingKind
     status?: ReceptionStatus
     from?: string
     to?: string
