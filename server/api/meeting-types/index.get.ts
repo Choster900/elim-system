@@ -5,7 +5,7 @@ import { handleApiError } from '../../utils/http/error-handler.util'
 
 export default defineEventHandler(async (event) => {
     try {
-        requirePermission(event, 'meeting-types.view')
+        requirePermission(event, ['meeting-types.view', 'meetings.view', 'meetings.manage'])
         const data = await getMeetingTypes()
         return ApiResponseFactory.success(data, 'Tipos de reunión obtenidos correctamente')
     } catch (error) {

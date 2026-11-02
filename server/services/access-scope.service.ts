@@ -1,5 +1,6 @@
-import { OFFERING_SEES_ALL_ROLE_CODES, SUPERVISOR_ROLE_CODE } from '../constants/auth.constants'
+import { OFFERING_SEES_ALL_ROLE_CODES } from '../constants/auth.constants'
 import {
+    findCoordinatedZoneSectorIdsByUserId,
     findMeetingIdsByLeaderUserId,
     findSupervisedSectorIdsByUserId,
 } from '../repositories/auth.repository'
@@ -14,12 +15,12 @@ export async function resolveOccurrenceScope(
         return { seesAll: true, sectorIds: [], meetingIds: [] }
     }
 
-    const [sectorIds, meetingIds] = await Promise.all([
-        auth.roles.includes(SUPERVISOR_ROLE_CODE)
-            ? findSupervisedSectorIdsByUserId(auth.userId)
-            : Promise.resolve<number[]>([]),
+    const [supervisedSectorIds, zoneSectorIds, meetingIds] = await Promise.all([
+        findSupervisedSectorIdsByUserId(auth.userId),
+        findCoordinatedZoneSectorIdsByUserId(auth.userId),
         findMeetingIdsByLeaderUserId(auth.userId),
     ])
+    const sectorIds = [...new Set([...supervisedSectorIds, ...zoneSectorIds])]
 
     return { seesAll: false, sectorIds, meetingIds }
 }

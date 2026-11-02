@@ -1268,7 +1268,10 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     security: [{ BearerAuth: [] }],
                     responses: {
                         200: { description: 'Active meeting types' },
-                        403: { description: 'Requires meetings.view' },
+                        403: {
+                            description:
+                                'Requires meeting-types.view, meetings.view or meetings.manage',
+                        },
                     },
                 },
             },

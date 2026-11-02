@@ -4,16 +4,17 @@ import { requireAuth } from './require-auth.util'
 
 const SYSTEM_PERMISSION_CODE = 'system.manage'
 
-export function requirePermission(event: H3Event, permissionCode: string) {
+export function requirePermission(event: H3Event, permissionCode: string | string[]) {
     const auth = requireAuth(event)
+    const acceptedCodes = Array.isArray(permissionCode) ? permissionCode : [permissionCode]
     const isAllowed =
         auth.permissions.includes(SYSTEM_PERMISSION_CODE) ||
-        auth.permissions.includes(permissionCode)
+        acceptedCodes.some((code) => auth.permissions.includes(code))
 
     if (!isAllowed) {
         throw createError({
             statusCode: 403,
-            message: `Permiso requerido: ${permissionCode}`,
+            message: `Permiso requerido: ${acceptedCodes.join(' o ')}`,
             data: { code: ApiErrorCode.FORBIDDEN },
         })
     }

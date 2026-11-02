@@ -61,6 +61,15 @@ export function findSupervisedSectorIdsByUserId(userId: number) {
         .then((sectors) => sectors.map((sector) => sector.id))
 }
 
+export function findCoordinatedZoneSectorIdsByUserId(userId: number) {
+    return prisma.territorySector
+        .findMany({
+            where: { zone: { leader: { user: { id: userId } } } },
+            select: { id: true },
+        })
+        .then((sectors) => sectors.map((sector) => sector.id))
+}
+
 export function findMeetingIdsByLeaderUserId(userId: number) {
     return prisma.meeting
         .findMany({
