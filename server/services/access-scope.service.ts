@@ -1,7 +1,7 @@
 import { OFFERING_SEES_ALL_ROLE_CODES } from '../constants/auth.constants'
 import {
+    findAssignedMeetingIdsByUserId,
     findCoordinatedZoneSectorIdsByUserId,
-    findMeetingIdsByLeaderUserId,
     findSupervisedSectorIdsByUserId,
 } from '../repositories/auth.repository'
 import type { OccurrenceScopeFilter } from '../dto/offering/occurrence.dto'
@@ -18,7 +18,7 @@ export async function resolveOccurrenceScope(
     const [supervisedSectorIds, zoneSectorIds, meetingIds] = await Promise.all([
         findSupervisedSectorIdsByUserId(auth.userId),
         findCoordinatedZoneSectorIdsByUserId(auth.userId),
-        findMeetingIdsByLeaderUserId(auth.userId),
+        findAssignedMeetingIdsByUserId(auth.userId),
     ])
     const sectorIds = [...new Set([...supervisedSectorIds, ...zoneSectorIds])]
 

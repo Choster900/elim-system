@@ -70,12 +70,14 @@ export function findCoordinatedZoneSectorIdsByUserId(userId: number) {
         .then((sectors) => sectors.map((sector) => sector.id))
 }
 
-export function findMeetingIdsByLeaderUserId(userId: number) {
+export function findAssignedMeetingIdsByUserId(userId: number) {
     return prisma.meeting
         .findMany({
             where: {
                 OR: [
                     { leader: { user: { id: userId } } },
+                    { supervisor: { user: { id: userId } } },
+                    { host: { user: { id: userId } } },
                     { coSupervisors: { some: { member: { user: { id: userId } } } } },
                 ],
             },
