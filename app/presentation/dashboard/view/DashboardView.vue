@@ -234,9 +234,12 @@ const trendBuckets = computed(() => {
     }))
 })
 const isMonthlyTrend = computed(() => (summary.value?.period.days ?? 0) > 120)
-const trendGroupingText = computed(() =>
-    isMonthlyTrend.value ? 'Cada barra es un mes' : 'Cada barra es una semana de sábado a viernes',
-)
+const trendGroupingText = computed(() => {
+    if (isMonthlyTrend.value) return 'Cada barra es un mes'
+    return isGeneralView.value
+        ? 'Cada barra es el día en que se hizo el culto'
+        : 'Cada barra es el día en que se hicieron las reuniones'
+})
 const attendanceTrend = computed(() =>
     trendBuckets.value.map((bucket) => ({
         key: bucket.key,
@@ -359,6 +362,12 @@ function formatDate(value: string, options: Intl.DateTimeFormatOptions = {}) {
         .replace('.', '')
 }
 
+function weekdayOf(isoDate: string, width: 'short' | 'long') {
+    return new Intl.DateTimeFormat('es-SV', { weekday: width, timeZone: 'UTC' })
+        .format(new Date(`${isoDate}T00:00:00.000Z`))
+        .replace('.', '')
+}
+
 function bucketAxisLabel(startDate: string, endDate: string, monthsOnly: boolean) {
     const start = new Date(`${startDate}T00:00:00.000Z`)
     const end = new Date(`${endDate}T00:00:00.000Z`)
@@ -367,8 +376,9 @@ function bucketAxisLabel(startDate: string, endDate: string, monthsOnly: boolean
     const sameMonth = startDate.slice(0, 7) === endDate.slice(0, 7)
 
     if (monthsOnly) return sameMonth ? startMonth : `${startMonth}–${endMonth}`
-    if (start.getUTCDay() === 6) return `sáb ${start.getUTCDate()} ${startMonth}`
-    if (startDate === endDate) return `${start.getUTCDate()} ${startMonth}`
+    if (startDate === endDate) {
+        return `${weekdayOf(startDate, 'short')} ${start.getUTCDate()} ${startMonth}`
+    }
     if (sameMonth) return `${start.getUTCDate()}–${end.getUTCDate()} ${endMonth}`
     return `${start.getUTCDate()} ${startMonth}–${end.getUTCDate()} ${endMonth}`
 }
@@ -378,7 +388,10 @@ function bucketRangeText(startDate: string, endDate: string) {
         `${Number(value.slice(8, 10))} ${formatDate(value, { day: undefined })}`
     const endYear = endDate.slice(0, 4)
     const end = `${dayMonth(endDate)} ${endYear}`
-    if (startDate === endDate) return end
+    if (startDate === endDate) {
+        const weekday = weekdayOf(startDate, 'long')
+        return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${end}`
+    }
     if (startDate.slice(0, 7) === endDate.slice(0, 7)) {
         return `Del ${Number(startDate.slice(8, 10))} al ${end}`
     }
