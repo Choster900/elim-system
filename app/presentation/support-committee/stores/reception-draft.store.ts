@@ -141,6 +141,21 @@ export const useReceptionDraftStore = defineStore('support-committee-reception-d
             category.amount = amount
             this.touch(occurrenceId)
         },
+        moveCounts(occurrenceId: number, fromIndex: number, toIndex: number) {
+            const draft = this.drafts[String(occurrenceId)]
+            const from = draft?.categories[fromIndex]
+            const to = draft?.categories[toIndex]
+            if (!draft || !from || !to || fromIndex === toIndex) return
+            for (const [denominationId, quantity] of Object.entries(from.quantities)) {
+                if (!quantity) continue
+                to.quantities[denominationId] = (to.quantities[denominationId] ?? 0) + quantity
+            }
+            from.quantities = {}
+            from.amount = null
+            to.amount = null
+            draft.currentIndex = toIndex
+            this.touch(occurrenceId)
+        },
         setCurrentIndex(occurrenceId: number, index: number) {
             const draft = this.drafts[String(occurrenceId)]
             if (!draft) return

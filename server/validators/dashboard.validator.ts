@@ -18,6 +18,7 @@ const isoDay = Joi.string()
 
 export const dashboardQuerySchema = Joi.object<DashboardQueryDto>({
     periodDays: Joi.number().integer().valid(30, 90, 365).default(30),
+    kind: Joi.string().valid('reuniones', 'generales').default('reuniones'),
     districtId: Joi.number().integer().positive(),
     startDate: isoDay,
     endDate: isoDay,

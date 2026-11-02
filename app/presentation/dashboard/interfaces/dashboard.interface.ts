@@ -1,4 +1,5 @@
 export type DashboardPeriodDays = 30 | 90 | 365
+export type DashboardKind = 'reuniones' | 'generales'
 
 export interface DashboardDateRange {
     startDate: string
@@ -76,6 +77,7 @@ export interface DashboardSummary {
         previousEndDate: string
     }
     filters: {
+        kind: DashboardKind
         selectedDistrictId: number | null
         districts: Array<{ id: number; name: string }>
     }

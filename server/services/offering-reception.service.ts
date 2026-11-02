@@ -23,6 +23,8 @@ import { ApiErrorCode } from '../types/api-response.types'
 import { businessIsoDate } from '../utils/date/business-time.util'
 import { getOccurrenceById, syncOccurrences } from './meeting-occurrence.service'
 
+const GENERAL_OFFERING_CODE = 'COF-OFRENDA'
+
 interface RegisteredCategory {
     categoryId: number | null
     categoryName: string | null
@@ -341,6 +343,11 @@ export async function getEnvelope(occurrenceId: number, scope: OccurrenceScopeFi
         reception: reception ? toReceptionSummary(reception) : null,
         availableCategories: categories
             .filter((category) => category.isActive)
+            .sort(
+                (left, right) =>
+                    Number(right.code === GENERAL_OFFERING_CODE) -
+                    Number(left.code === GENERAL_OFFERING_CODE),
+            )
             .map((category) => ({ categoryId: category.id, categoryName: category.name })),
     }
 }

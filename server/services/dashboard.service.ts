@@ -249,6 +249,7 @@ export async function getDashboardSummary(
         rangeStart: previousStart,
         currentStart,
         endExclusive,
+        kind: query.kind,
         scope,
         districtId: query.districtId,
     })
@@ -301,7 +302,8 @@ export async function getDashboardSummary(
             previousEndDate: toIsoDate(addUtcDays(currentStart, -1)),
         },
         filters: {
-            selectedDistrictId: query.districtId ?? null,
+            kind: query.kind,
+            selectedDistrictId: query.kind === 'generales' ? null : (query.districtId ?? null),
             districts: data.districts,
         },
         metrics: {

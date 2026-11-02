@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import { AlertTriangle, ArrowLeft, ArrowRight, EyeOff, Plus, Trash2 } from '@lucide/vue'
+import {
+    AlertTriangle,
+    ArrowLeft,
+    ArrowRight,
+    ArrowRightLeft,
+    Coins,
+    EyeOff,
+    Plus,
+    Trash2,
+} from '@lucide/vue'
+import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
-import CategoryStepper, { type CategoryStep } from '../components/CategoryStepper.vue'
+import CategoryTabs, { type CategoryStep } from '../components/CategoryTabs.vue'
 import DenominationCountGrid from '../components/DenominationCountGrid.vue'
 import EnvelopeAmountForm from '../components/EnvelopeAmountForm.vue'
 import EnvelopeHeader from '../components/EnvelopeHeader.vue'
@@ -23,7 +33,16 @@ import {
 
 defineOptions({ name: 'EnvelopeCountView' })
 
+interface MoveTarget {
+    key: string
+    label: string
+    index: number | null
+    category: EnvelopeCategory | null
+    total: number
+}
+
 const route = useRoute()
+const toast = useAppToast()
 const draftStore = useReceptionDraftStore()
 
 const occurrenceId = computed(() => {
@@ -39,6 +58,7 @@ const isClientReady = ref(false)
 const gridRef = ref<InstanceType<typeof DenominationCountGrid> | null>(null)
 const countSectionRef = ref<HTMLElement | null>(null)
 const isAddingCategory = ref(false)
+const isMovingCounts = ref(false)
 
 const detail = computed(() => envelopeQuery.data.value ?? null)
 const envelope = computed(() => detail.value?.envelope ?? null)
@@ -158,6 +178,55 @@ const remainingCategories = computed(() =>
 const envelopeTotal = computed(() =>
     categories.value.reduce((sum, _category, index) => sum + categoryTotal(index), 0),
 )
+
+const currentHasCounts = computed(() => !!steps.value[currentIndex.value]?.hasCounts)
+
+const moveTargets = computed<MoveTarget[]>(() => [
+    ...categories.value.flatMap((category, index) =>
+        index === currentIndex.value
+            ? []
+            : [
+                  {
+                      key: `draft-${category.categoryId ?? 'sin-tipo'}`,
+                      label: categoryLabel(category.categoryName),
+                      index,
+                      category: null,
+                      total: categoryTotal(index),
+                  },
+              ],
+    ),
+    ...remainingCategories.value.map((category) => ({
+        key: `new-${category.categoryId ?? 'sin-tipo'}`,
+        label: categoryLabel(category.categoryName),
+        index: null,
+        category,
+        total: 0,
+    })),
+])
+
+watch(currentIndex, () => {
+    isMovingCounts.value = false
+})
+
+function moveCurrentTo(target: MoveTarget) {
+    const id = occurrenceId.value
+    const source = currentCategory.value
+    if (!id || !source) return
+    const fromIndex = currentIndex.value
+    const movedAmount = categoryTotal(fromIndex)
+    let toIndex = target.index
+    if (toIndex === null && target.category) {
+        draftStore.addCategory(id, target.category)
+        toIndex = draftStore.draftFor(id)?.currentIndex ?? null
+    }
+    if (toIndex === null) return
+    draftStore.moveCounts(id, fromIndex, toIndex)
+    isMovingCounts.value = false
+    toast.success(
+        `Se movieron ${formatMoney(movedAmount)} de ${categoryLabel(source.categoryName)} a ${target.label}`,
+    )
+    goToCategory(toIndex)
+}
 
 const countHint = computed(() =>
     isCorrection.value ? 'Corrigiendo un conteo guardado' : 'Lo del líder lo verás al revisar',
@@ -291,14 +360,18 @@ function onPrimaryAction() {
                 ref="countSectionRef"
                 class="mt-4 scroll-mt-24 overflow-hidden rounded-xl border border-outline-variant bg-surface"
             >
-                <div
-                    class="border-b border-outline-variant bg-surface-container-low px-3 pb-2 pt-4"
-                >
-                    <CategoryStepper
+                <div class="border-b border-outline-variant bg-surface-container-low px-3 py-3">
+                    <p
+                        class="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-on-surface-variant"
+                    >
+                        Elige el tipo de ofrenda que vas a contar
+                    </p>
+                    <CategoryTabs
                         :steps="steps"
                         :current="currentIndex"
                         :can-add="remainingCategories.length > 0"
                         :is-adding="isAddingCategory"
+                        panel-id="category-count-panel"
                         @select="goToCategory"
                         @add="toggleAddCategory"
                         @review="goToReview"
@@ -333,16 +406,109 @@ function onPrimaryAction() {
                     </button>
                 </div>
 
-                <div class="p-4 sm:p-5">
-                    <div class="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-                        <div>
-                            <h1 class="font-display text-2xl font-semibold text-on-surface">
-                                {{ categoryLabel(currentCategory.categoryName) }}
-                            </h1>
-                            <p class="text-sm text-on-surface-variant">
-                                ¿Cuántos billetes y monedas vienen? Deja vacío lo que no venga.
-                            </p>
+                <div
+                    id="category-count-panel"
+                    role="tabpanel"
+                    :aria-labelledby="`category-tab-${currentCategory.categoryId ?? 'sin-tipo'}`"
+                    class="p-4 sm:p-5"
+                >
+                    <div
+                        class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-primary bg-primary/10 px-4 py-3"
+                    >
+                        <div class="flex min-w-0 items-center gap-3">
+                            <span
+                                class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+                                aria-hidden="true"
+                            >
+                                <Coins class="size-5" />
+                            </span>
+                            <div class="min-w-0">
+                                <p
+                                    class="text-[11px] font-bold uppercase tracking-[0.16em] text-primary"
+                                >
+                                    Estás contando en
+                                </p>
+                                <h1
+                                    class="truncate font-display text-2xl font-semibold text-on-surface"
+                                >
+                                    {{ categoryLabel(currentCategory.categoryName) }}
+                                </h1>
+                            </div>
                         </div>
+                        <div class="flex items-center gap-4">
+                            <div class="text-right">
+                                <p
+                                    class="text-[11px] font-bold uppercase tracking-[0.16em] text-on-surface-variant"
+                                >
+                                    Llevas
+                                </p>
+                                <p class="text-xl font-semibold tabular-nums text-on-surface">
+                                    {{ formatMoney(categoryTotal(currentIndex)) }}
+                                </p>
+                            </div>
+                            <button
+                                v-if="currentHasCounts && moveTargets.length > 0"
+                                type="button"
+                                class="inline-flex items-center gap-1.5 rounded-lg border border-primary/60 bg-surface px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                :aria-expanded="isMovingCounts"
+                                @click="isMovingCounts = !isMovingCounts"
+                            >
+                                <ArrowRightLeft class="size-4" aria-hidden="true" />
+                                Mover a otra categoría
+                            </button>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="isMovingCounts"
+                        class="mb-4 rounded-xl border border-outline-variant bg-surface-container-low p-4"
+                    >
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                                <p class="text-sm font-semibold text-on-surface">
+                                    ¿A qué categoría pasas los
+                                    {{ formatMoney(categoryTotal(currentIndex)) }} de
+                                    {{ categoryLabel(currentCategory.categoryName) }}?
+                                </p>
+                                <p class="mt-0.5 text-xs text-on-surface-variant">
+                                    Se mueven todos los billetes y monedas de una vez. Si la otra
+                                    categoría ya tiene dinero, se suma.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                class="text-xs font-semibold text-on-surface-variant hover:text-on-surface"
+                                @click="isMovingCounts = false"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button
+                                v-for="target in moveTargets"
+                                :key="target.key"
+                                type="button"
+                                class="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-surface px-3 py-1.5 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                @click="moveCurrentTo(target)"
+                            >
+                                <ArrowRight class="size-3.5" aria-hidden="true" />
+                                {{ target.label }}
+                                <span v-if="target.total > 0" class="text-xs font-normal">
+                                    (ya tiene {{ formatMoney(target.total) }})
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+                        <p class="text-sm text-on-surface-variant">
+                            Escribe cuántos billetes y monedas de
+                            <strong class="text-on-surface">
+                                {{ categoryLabel(currentCategory.categoryName) }}
+                            </strong>
+                            vienen. Deja vacío lo que no venga. Si el dinero es de otro tipo,
+                            cámbialo arriba antes de escribir.
+                        </p>
                         <div class="flex flex-col items-start gap-1 sm:items-end">
                             <p
                                 class="inline-flex items-center gap-1.5 text-xs text-on-surface-variant"
@@ -387,7 +553,10 @@ function onPrimaryAction() {
                                 <p
                                     class="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface-variant"
                                 >
-                                    {{ categoryLabel(currentCategory.categoryName) }}
+                                    <span class="hidden sm:mr-1 sm:inline">Contando en</span>
+                                    <span class="text-primary">
+                                        {{ categoryLabel(currentCategory.categoryName) }}
+                                    </span>
                                 </p>
                                 <p class="text-lg font-semibold tabular-nums text-on-surface">
                                     {{ formatMoney(categoryTotal(currentIndex)) }}

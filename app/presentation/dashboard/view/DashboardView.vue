@@ -5,6 +5,7 @@ import {
     CalendarCheck,
     CalendarDays,
     CalendarPlus,
+    Church,
     CircleDollarSign,
     Clock3,
     Compass,
@@ -19,7 +20,7 @@ import {
     TrendingDown,
     TrendingUp,
     UserPlus,
-    // UsersRound,
+    UsersRound,
 } from '@lucide/vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
 import ColumnChart from '~/presentation/shared/components/charts/ColumnChart.vue'
@@ -27,6 +28,7 @@ import { useDashboardQuery } from '~/presentation/dashboard/composables/useDashb
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import type {
     DashboardDateRange,
+    DashboardKind,
     DashboardMetric,
     DashboardPeriodDays,
 } from '~/presentation/dashboard/interfaces/dashboard.interface'
@@ -61,7 +63,19 @@ const appliedRange = computed<DashboardDateRange | null>(() => {
     if (!start || !end || isRangeTooLong.value) return null
     return { startDate: start, endDate: end }
 })
-const dashboardQuery = useDashboardQuery(selectedPeriod, selectedDistrictId, appliedRange)
+const selectedKind = ref<DashboardKind>('reuniones')
+const isGeneralView = computed(() => selectedKind.value === 'generales')
+const kindTabs: Array<{ value: DashboardKind; label: string; icon: Component }> = [
+    { value: 'reuniones', label: 'Reuniones', icon: UsersRound },
+    { value: 'generales', label: 'Cultos generales', icon: Church },
+]
+const queryDistrictId = computed(() => (isGeneralView.value ? null : selectedDistrictId.value))
+const dashboardQuery = useDashboardQuery(
+    selectedPeriod,
+    queryDistrictId,
+    appliedRange,
+    selectedKind,
+)
 const summary = computed(() => dashboardQuery.data.value ?? null)
 const isLoading = computed(() => dashboardQuery.isPending.value)
 const isRefreshing = computed(() => dashboardQuery.isFetching.value && !isLoading.value)
@@ -75,6 +89,13 @@ const tourSteps: TourStep[] = [
         target: '[data-tour="dashboard-heading"]',
         title: 'Tu panel de control',
         description: 'Aquí tienes una vista general de la actividad reciente de la comunidad.',
+    },
+    {
+        id: 'kind',
+        target: '[data-tour="dashboard-kind"]',
+        title: 'Reuniones o cultos generales',
+        description:
+            'Cambia entre las reuniones de los sectores y los cultos generales. Sus números nunca se mezclan.',
     },
     {
         id: 'period',
@@ -231,7 +252,9 @@ const offeringTrend = computed(() =>
             bucket.rangeText,
             meetingCountLabel(bucket.meetingCount),
             ...(bucket.meetingCount > 0
-                ? [`Promedio: ${formatMoney(bucket.offerings / bucket.meetingCount)} por reunión`]
+                ? [
+                      `Promedio: ${formatMoney(bucket.offerings / bucket.meetingCount)} por ${isGeneralView.value ? 'culto' : 'reunión'}`,
+                  ]
                 : []),
         ],
     })),
@@ -355,6 +378,10 @@ function bucketRangeText(startDate: string, endDate: string) {
 }
 
 function meetingCountLabel(count: number) {
+    if (isGeneralView.value) {
+        if (count === 0) return 'Sin cultos registrados'
+        return `${formatNumber(count)} ${count === 1 ? 'culto registrado' : 'cultos registrados'}`
+    }
     if (count === 0) return 'Sin reuniones registradas'
     return `${formatNumber(count)} ${count === 1 ? 'reunión registrada' : 'reuniones registradas'}`
 }
@@ -498,8 +525,40 @@ const quickActionClass =
             </div>
         </header>
 
+        <nav
+            data-tour="dashboard-kind"
+            class="mt-6 flex gap-4 overflow-x-auto border-b border-outline-variant sm:gap-6"
+            aria-label="Tipo de información del dashboard"
+        >
+            <button
+                v-for="tab in kindTabs"
+                :key="tab.value"
+                type="button"
+                :class="[
+                    'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                    selectedKind === tab.value
+                        ? 'border-primary text-on-surface'
+                        : 'border-transparent text-on-surface-variant hover:text-on-surface',
+                ]"
+                :aria-pressed="selectedKind === tab.value"
+                @click="selectedKind = tab.value"
+            >
+                <component :is="tab.icon" class="size-4" aria-hidden="true" />
+                {{ tab.label }}
+            </button>
+        </nav>
+        <p class="mt-3 text-xs text-on-surface-variant">
+            <template v-if="isGeneralView">
+                Solo los cultos generales de toda la iglesia. No pertenecen a ningún distrito ni
+                sector, y su ofrenda la cuenta el comité de apoyo.
+            </template>
+            <template v-else>
+                Solo las reuniones de los sectores. Los cultos generales están en su propia pestaña.
+            </template>
+        </p>
+
         <section
-            class="mt-6 flex flex-col gap-4 rounded-xl border border-outline-variant bg-surface-container-low p-4 sm:p-5 lg:flex-row lg:items-end"
+            class="mt-4 flex flex-col gap-4 rounded-xl border border-outline-variant bg-surface-container-low p-4 sm:p-5 lg:flex-row lg:items-end"
             aria-label="Filtros del dashboard"
         >
             <div
@@ -547,7 +606,7 @@ const quickActionClass =
                 </div>
             </div>
             <div
-                v-if="districtOptions.length > 1"
+                v-if="!isGeneralView && districtOptions.length > 1"
                 data-tour="dashboard-district-filter"
                 class="min-w-0 lg:w-72 lg:flex-none"
             >
@@ -682,7 +741,7 @@ const quickActionClass =
             -->
 
             <section
-                v-if="resultCards.length"
+                v-if="!isGeneralView && resultCards.length"
                 data-tour="dashboard-results"
                 aria-labelledby="dashboard-results-title"
                 class="mt-6"
@@ -751,8 +810,12 @@ const quickActionClass =
                 </UiCard>
             </section>
 
-            <section class="mt-6 grid gap-6 xl:grid-cols-2">
-                <UiCard data-tour="dashboard-attendance" class="rounded-xl p-6 md:p-8">
+            <section class="mt-6 grid gap-6" :class="{ 'xl:grid-cols-2': !isGeneralView }">
+                <UiCard
+                    v-if="!isGeneralView"
+                    data-tour="dashboard-attendance"
+                    class="rounded-xl p-6 md:p-8"
+                >
                     <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                         <div>
                             <p
@@ -849,23 +912,43 @@ const quickActionClass =
                                 Finanzas
                             </p>
                             <h2 class="mt-2 font-display text-2xl font-semibold text-on-surface">
-                                Tendencia de ofrendas
+                                {{
+                                    isGeneralView
+                                        ? 'Ofrendas de cultos generales'
+                                        : 'Tendencia de ofrendas'
+                                }}
                             </h2>
                             <p class="mt-1 text-xs text-on-surface-variant">
-                                Dólares recaudados por rango de fechas. Cada barra suma las ofrendas
-                                de las reuniones de ese rango.
+                                <template v-if="isGeneralView">
+                                    Dólares contados por el comité por rango de fechas. Cada barra
+                                    suma los cultos generales de ese rango.
+                                </template>
+                                <template v-else>
+                                    Dólares recaudados por rango de fechas. Cada barra suma las
+                                    ofrendas de las reuniones de ese rango.
+                                </template>
                             </p>
                         </div>
                         <dl class="flex shrink-0 gap-6 sm:text-right">
+                            <div v-if="isGeneralView">
+                                <dt class="whitespace-nowrap text-xs text-on-surface-variant">
+                                    Total del período
+                                </dt>
+                                <dd class="text-xl font-semibold text-on-surface">
+                                    {{ formatCompactMoney(summary.metrics.offerings.value) }}
+                                </dd>
+                            </div>
                             <div>
                                 <dt class="whitespace-nowrap text-xs text-on-surface-variant">
-                                    Ofrenda por reunión
+                                    {{
+                                        isGeneralView ? 'Ofrenda por culto' : 'Ofrenda por reunión'
+                                    }}
                                 </dt>
                                 <dd class="text-xl font-semibold text-on-surface">
                                     {{ formatCompactMoney(summary.metrics.averageOffering) }}
                                 </dd>
                             </div>
-                            <div>
+                            <div v-if="!isGeneralView">
                                 <dt class="whitespace-nowrap text-xs text-on-surface-variant">
                                     Ofrenda por asistente
                                 </dt>
@@ -873,24 +956,40 @@ const quickActionClass =
                                     {{ formatMoney(summary.metrics.offeringPerAttendee) }}
                                 </dd>
                             </div>
+                            <div v-else>
+                                <dt class="whitespace-nowrap text-xs text-on-surface-variant">
+                                    Cultos registrados
+                                </dt>
+                                <dd class="text-xl font-semibold text-on-surface">
+                                    {{ formatNumber(summary.metrics.registeredMeetings.value) }}
+                                </dd>
+                            </div>
                         </dl>
                     </div>
                     <ColumnChart
                         class="mt-6"
                         :values="offeringTrend"
-                        label="Ofrenda total por rango de fechas"
+                        :label="
+                            isGeneralView
+                                ? 'Ofrenda de cultos generales por rango de fechas'
+                                : 'Ofrenda total por rango de fechas'
+                        "
                         color="var(--chart-2)"
                         format="currency"
-                        empty-message="Sin ofrendas registradas en el período."
+                        :empty-message="
+                            isGeneralView
+                                ? 'Sin cultos generales registrados en el período.'
+                                : 'Sin ofrendas registradas en el período.'
+                        "
                     />
                     <p v-if="offeringTrend.length" class="mt-2 text-xs text-on-surface-variant">
-                        Pasa el cursor sobre una barra para ver las fechas, las reuniones y el
-                        promedio.
+                        Pasa el cursor sobre una barra para ver las fechas,
+                        {{ isGeneralView ? 'los cultos' : 'las reuniones' }} y el promedio.
                     </p>
                 </UiCard>
             </section>
 
-            <section class="mt-6 grid gap-6 xl:grid-cols-2">
+            <section class="mt-6 grid gap-6" :class="{ 'xl:grid-cols-2': !isGeneralView }">
                 <UiCard data-tour="dashboard-categories" class="rounded-xl p-6 md:p-8">
                     <div class="mb-6">
                         <p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
@@ -912,7 +1011,11 @@ const quickActionClass =
                     />
                 </UiCard>
 
-                <UiCard data-tour="dashboard-districts" class="rounded-xl p-6 md:p-8">
+                <UiCard
+                    v-if="!isGeneralView"
+                    data-tour="dashboard-districts"
+                    class="rounded-xl p-6 md:p-8"
+                >
                     <div class="mb-6">
                         <p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
                             Territorio
@@ -979,7 +1082,7 @@ const quickActionClass =
                                 Últimos registros
                             </p>
                             <h2 class="mt-2 font-display text-2xl font-semibold text-on-surface">
-                                Asistencia y ofrendas
+                                {{ isGeneralView ? 'Cultos generales' : 'Asistencia y ofrendas' }}
                             </h2>
                         </div>
                         <NuxtLink
@@ -1000,7 +1103,10 @@ const quickActionClass =
                                 :is="canViewFinance ? NuxtLinkComponent : 'div'"
                                 v-bind="recentOfferingLink(offering.meetingId)"
                                 :class="[
-                                    'grid w-full grid-cols-[1fr_auto] gap-4 px-6 py-4 text-left transition-colors md:grid-cols-[minmax(0,1fr)_120px_130px] md:px-8',
+                                    'grid w-full grid-cols-[1fr_auto] gap-4 px-6 py-4 text-left transition-colors md:px-8',
+                                    isGeneralView
+                                        ? 'md:grid-cols-[minmax(0,1fr)_130px]'
+                                        : 'md:grid-cols-[minmax(0,1fr)_120px_130px]',
                                     canViewFinance
                                         ? 'hover:bg-surface-container-low focus-visible:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary'
                                         : '',
@@ -1015,7 +1121,10 @@ const quickActionClass =
                                         {{ formatDate(offering.date) }}
                                     </p>
                                 </div>
-                                <div class="hidden self-center text-right md:block">
+                                <div
+                                    v-if="!isGeneralView"
+                                    class="hidden self-center text-right md:block"
+                                >
                                     <p class="text-sm font-semibold text-on-surface">
                                         {{ offering.attendance }}
                                     </p>
@@ -1031,7 +1140,11 @@ const quickActionClass =
                         </li>
                     </ul>
                     <p v-else class="px-8 py-14 text-center text-sm text-on-surface-variant">
-                        Aún no hay ofrendas registradas en este período.
+                        {{
+                            isGeneralView
+                                ? 'Aún no hay cultos generales registrados en este período.'
+                                : 'Aún no hay ofrendas registradas en este período.'
+                        }}
                     </p>
                 </UiCard>
 
@@ -1044,7 +1157,11 @@ const quickActionClass =
                                 Agenda
                             </p>
                             <h2 class="mt-2 font-display text-2xl font-semibold text-on-surface">
-                                Próximas reuniones
+                                {{
+                                    isGeneralView
+                                        ? 'Próximos cultos generales'
+                                        : 'Próximas reuniones'
+                                }}
                             </h2>
                         </div>
                         <CalendarDays class="size-5 text-primary" aria-hidden="true" />
@@ -1098,7 +1215,11 @@ const quickActionClass =
                         </li>
                     </ul>
                     <p v-else class="py-14 text-center text-sm text-on-surface-variant">
-                        No hay reuniones próximas configuradas.
+                        {{
+                            isGeneralView
+                                ? 'No hay cultos generales próximos configurados.'
+                                : 'No hay reuniones próximas configuradas.'
+                        }}
                     </p>
                 </UiCard>
             </section>

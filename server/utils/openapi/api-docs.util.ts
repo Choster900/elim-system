@@ -982,6 +982,17 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
+                            name: 'kind',
+                            in: 'query',
+                            description:
+                                'reuniones: sector meetings only, scoped by the caller. generales: general services only, visible to every caller and never filtered by district.',
+                            schema: {
+                                type: 'string',
+                                enum: ['reuniones', 'generales'],
+                                default: 'reuniones',
+                            },
+                        },
+                        {
                             name: 'periodDays',
                             in: 'query',
                             schema: { type: 'integer', enum: [30, 90, 365], default: 30 },

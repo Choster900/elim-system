@@ -1,27 +1,27 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../database/prisma'
+import type { DashboardKind } from '../dto/dashboard/dashboard.dto'
 
 export interface DashboardRepositoryFilters {
     rangeStart: Date
     currentStart: Date
     endExclusive: Date
+    kind: DashboardKind
     scope?: { sectorIds: number[]; meetingIds: number[] }
     districtId?: number
 }
 
 export async function findDashboardData(filters: DashboardRepositoryFilters) {
     const scope = filters.scope
+    const isGeneral = filters.kind === 'generales'
     const meetingWhere: Prisma.MeetingWhereInput = {
-        ...(scope
-            ? {
-                  OR: [
-                      { type: { isGeneral: true } },
-                      { sectorId: { in: scope.sectorIds } },
-                      { id: { in: scope.meetingIds } },
-                  ],
-              }
+        type: { isGeneral },
+        ...(scope && !isGeneral
+            ? { OR: [{ sectorId: { in: scope.sectorIds } }, { id: { in: scope.meetingIds } }] }
             : {}),
-        ...(filters.districtId ? { sector: { zone: { districtId: filters.districtId } } } : {}),
+        ...(filters.districtId && !isGeneral
+            ? { sector: { zone: { districtId: filters.districtId } } }
+            : {}),
     }
     const memberWhere: Prisma.MemberWhereInput = {
         status: 'ACTIVE',
