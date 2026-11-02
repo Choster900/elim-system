@@ -18,7 +18,10 @@ import ReconciliationTableSkeleton from '../components/ReconciliationTableSkelet
 import ReconciliationTabs from '../components/ReconciliationTabs.vue'
 import { useReconciliationFilters } from '../composables/useReconciliationFilters'
 import { useReconciliationQuery } from '../composables/useReconciliationQueries'
-import type { ReconciliationEnvelope } from '../interfaces/reconciliation.interface'
+import type {
+    ReconciliationEnvelope,
+    ReconciliationFilters,
+} from '../interfaces/reconciliation.interface'
 import {
     RECONCILIATION_STATUSES,
     downloadCsv,
@@ -30,19 +33,40 @@ import {
 
 defineOptions({ name: 'ReconciliationEnvelopesView' })
 
-useHead({ title: 'Sobres · Conciliación · Sistema' })
+const props = withDefaults(defineProps<{ kind?: 'reuniones' | 'generales' }>(), {
+    kind: 'reuniones',
+})
+
+const isGeneralView = computed(() => props.kind === 'generales')
+
+useHead({
+    title: computed(() =>
+        isGeneralView.value
+            ? 'Cultos generales · Conciliación · Sistema'
+            : 'Sobres de reuniones · Conciliación · Sistema',
+    ),
+})
 
 const route = useRoute()
 const { filters, linkTo, updateQuery } = useReconciliationFilters()
-const reconciliationQuery = useReconciliationQuery(filters)
+const queryFilters = computed<ReconciliationFilters>(() =>
+    isGeneralView.value
+        ? { from: filters.value.from, to: filters.value.to, kind: 'generales' }
+        : filters.value,
+)
+const reconciliationQuery = useReconciliationQuery(queryFilters)
 
 const summary = computed(() => reconciliationQuery.data.value ?? null)
+
+const kindEnvelopes = computed(() => summary.value?.envelopes ?? [])
 
 const selectedStatus = computed(() =>
     isReconciliationStatus(route.query.estado) ? route.query.estado : null,
 )
 const selectedLeader = computed(() =>
-    typeof route.query.lider === 'string' && route.query.lider ? route.query.lider : null,
+    !isGeneralView.value && typeof route.query.lider === 'string' && route.query.lider
+        ? route.query.lider
+        : null,
 )
 const selectedLeaderName = computed(() => {
     if (!selectedLeader.value) return null
@@ -55,7 +79,7 @@ function leaderKey(envelope: ReconciliationEnvelope) {
 }
 
 const envelopes = computed(() =>
-    (summary.value?.envelopes ?? []).filter(
+    kindEnvelopes.value.filter(
         (envelope) =>
             (!selectedStatus.value || envelope.status === selectedStatus.value) &&
             (!selectedLeader.value || leaderKey(envelope) === selectedLeader.value),
@@ -63,7 +87,7 @@ const envelopes = computed(() =>
 )
 
 const statusCounts = computed(() => {
-    const base = (summary.value?.envelopes ?? []).filter(
+    const base = kindEnvelopes.value.filter(
         (envelope) => !selectedLeader.value || leaderKey(envelope) === selectedLeader.value,
     )
     return Object.fromEntries(
@@ -87,7 +111,48 @@ const statusChips = computed(() => [
     })),
 ])
 
-const columns: DataTableColumn<ReconciliationEnvelope>[] = [
+const generalColumns: DataTableColumn<ReconciliationEnvelope>[] = [
+    {
+        key: 'received',
+        label: 'Recibido',
+        sortable: true,
+        accessor: (row) => row.receivedAt ?? '',
+        width: '150px',
+    },
+    {
+        key: 'meeting',
+        label: 'Culto',
+        sortable: true,
+        accessor: (row) => `${row.date} ${row.meetingTitle} ${row.meetingCode}`,
+    },
+    {
+        key: 'counted',
+        label: 'Contado por el comité',
+        sortable: true,
+        align: 'right',
+        accessor: (row) => row.countedAmount ?? -1,
+    },
+    {
+        key: 'status',
+        label: 'Estado',
+        sortable: true,
+        accessor: (row) => statusMeta(row.status).label,
+    },
+    {
+        key: 'receivedBy',
+        label: 'Recibió',
+        sortable: true,
+        accessor: (row) => row.receivedByName ?? '—',
+    },
+    {
+        key: 'closedBy',
+        label: 'Revisó',
+        sortable: true,
+        accessor: (row) => row.closedByName ?? '—',
+    },
+]
+
+const meetingColumns: DataTableColumn<ReconciliationEnvelope>[] = [
     {
         key: 'received',
         label: 'Recibido',
@@ -144,6 +209,8 @@ const columns: DataTableColumn<ReconciliationEnvelope>[] = [
     },
 ]
 
+const columns = computed(() => (isGeneralView.value ? generalColumns : meetingColumns))
+
 const loadError = computed(() =>
     reconciliationQuery.error.value
         ? resolveHttpErrorMessage(
@@ -169,6 +236,32 @@ function differenceClass(value: number) {
 
 function exportCsv() {
     const period = summary.value?.period
+    if (isGeneralView.value) {
+        downloadCsv(
+            `conciliacion-cultos-generales-${period?.from ?? ''}-${period?.to ?? ''}.csv`,
+            [
+                'Recibido por el comité',
+                'Fecha del culto',
+                'Culto',
+                'Código',
+                'Contado comité',
+                'Estado',
+                'Recibió',
+                'Revisó',
+            ],
+            envelopes.value.map((envelope) => [
+                envelope.receivedAt ? formatDateTime(envelope.receivedAt) : 'Sin entregar',
+                envelope.date,
+                envelope.meetingTitle,
+                envelope.meetingCode,
+                envelope.countedAmount?.toFixed(2) ?? '',
+                statusMeta(envelope.status).label,
+                envelope.receivedByName,
+                envelope.closedByName,
+            ]),
+        )
+        return
+    }
     downloadCsv(
         `conciliacion-${period?.from ?? ''}-${period?.to ?? ''}.csv`,
         [
@@ -214,14 +307,24 @@ function exportCsv() {
                 Finanzas · Conciliación
             </p>
             <h1 class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl">
-                Sobres del periodo
+                {{ isGeneralView ? 'Cultos generales del periodo' : 'Sobres de reuniones' }}
             </h1>
+            <p class="mt-3 text-sm text-on-surface-variant">
+                <template v-if="isGeneralView">
+                    Ofrendas de los cultos generales contadas por el comité. No tienen líder ni
+                    sector, por eso no se comparan contra un registro previo.
+                </template>
+                <template v-else>
+                    Sobres de las reuniones de los sectores: lo que registró el líder frente a lo
+                    que contó el comité. Los cultos generales están en su propia pestaña.
+                </template>
+            </p>
         </header>
 
-        <ReconciliationTabs active="envelopes" />
+        <ReconciliationTabs :active="isGeneralView ? 'generals' : 'envelopes'" />
 
         <div class="mt-6">
-            <ReconciliationFiltersBar :zones="summary?.zones ?? []" />
+            <ReconciliationFiltersBar :zones="summary?.zones ?? []" :hide-zone="isGeneralView" />
         </div>
 
         <section class="mt-5 flex flex-wrap items-center gap-2">
@@ -267,7 +370,7 @@ function exportCsv() {
         <ReconciliationTableSkeleton
             v-else-if="reconciliationQuery.isPending.value"
             class="mt-5"
-            :columns="8"
+            :columns="columns.length"
         />
 
         <div
@@ -283,9 +386,17 @@ function exportCsv() {
                 :page-size="25"
                 dense
                 show-search
-                search-placeholder="Buscar reunión, código, líder o sector…"
-                empty-title="Sin sobres"
-                empty-message="No hay sobres con estos filtros en el periodo."
+                :search-placeholder="
+                    isGeneralView
+                        ? 'Buscar culto o código…'
+                        : 'Buscar reunión, código, líder o sector…'
+                "
+                :empty-title="isGeneralView ? 'Sin cultos generales' : 'Sin sobres'"
+                :empty-message="
+                    isGeneralView
+                        ? 'No hay cultos generales recibidos con estos filtros en el periodo.'
+                        : 'No hay sobres con estos filtros en el periodo.'
+                "
             >
                 <template #toolbar-end>
                     <button
@@ -327,7 +438,7 @@ function exportCsv() {
                                 {{ row.meetingTitle }}
                             </span>
                             <span class="block text-[11px] text-on-surface-variant">
-                                Reunión del
+                                {{ isGeneralView ? 'Culto del' : 'Reunión del' }}
                                 <span class="capitalize">{{ shortDateLabel(row.date) }}</span>
                                 ·
                                 <span class="font-mono uppercase">{{ row.meetingCode }}</span>

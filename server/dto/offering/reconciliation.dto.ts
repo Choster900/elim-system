@@ -2,6 +2,7 @@ export type ReconciliationStatus =
     'cuadra' | 'diferencia_abierta' | 'diferencia_cerrada' | 'sin_entregar'
 
 export interface ReconciliationFiltersDto {
+    kind: 'reuniones' | 'generales'
     from?: string
     to?: string
     zoneId?: number

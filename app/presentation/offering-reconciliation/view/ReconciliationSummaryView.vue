@@ -1,13 +1,26 @@
 <script setup lang="ts">
-import { ArrowRight, Clock, HandCoins, HandHeart, Inbox, PackageX, Scale } from '@lucide/vue'
+import {
+    ArrowRight,
+    Church,
+    Clock,
+    HandCoins,
+    HandHeart,
+    Inbox,
+    PackageX,
+    Scale,
+} from '@lucide/vue'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+import ColumnChart from '~/presentation/shared/components/charts/ColumnChart.vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
+import { localIsoDate } from '~/presentation/support-committee/utils/tithe-format.util'
+import { formatLocalIsoDate } from '~/utils/date/date-format.util'
 import {
     categoryLabel,
     differenceLabel,
     formatMoney,
     shortDateLabel,
+    TITHES_PATH,
     toCents,
 } from '~/presentation/support-committee/utils/reception-format.util'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
@@ -17,10 +30,13 @@ import ReconciliationStatusBadge from '../components/ReconciliationStatusBadge.v
 import ReconciliationTabs from '../components/ReconciliationTabs.vue'
 import { useReconciliationFilters } from '../composables/useReconciliationFilters'
 import { useReconciliationQuery } from '../composables/useReconciliationQueries'
-import type { ReconciliationEnvelope } from '../interfaces/reconciliation.interface'
-import { TITHES_PATH } from '~/presentation/support-committee/utils/reception-format.util'
+import type {
+    ReconciliationEnvelope,
+    ReconciliationFilters,
+} from '../interfaces/reconciliation.interface'
 import {
     RECONCILIATION_ENVELOPES,
+    RECONCILIATION_GENERALS,
     RECONCILIATION_LEADERS,
     RECONCILIATION_STATUSES,
     pendingLabel,
@@ -31,8 +47,23 @@ defineOptions({ name: 'ReconciliationSummaryView' })
 
 useHead({ title: 'Conciliación de ofrendas · Sistema' })
 
-const { filters, linkTo } = useReconciliationFilters()
-const reconciliationQuery = useReconciliationQuery(filters)
+const route = useRoute()
+const { filters, linkTo, updateQuery } = useReconciliationFilters()
+const isGeneralView = computed(() => route.query.tipo === 'generales')
+const kindOptions = [
+    { value: 'reuniones', label: 'Reuniones' },
+    { value: 'generales', label: 'Cultos generales' },
+] as const
+const queryFilters = computed<ReconciliationFilters>(() =>
+    isGeneralView.value
+        ? { from: filters.value.from, to: filters.value.to, kind: 'generales' }
+        : filters.value,
+)
+const reconciliationQuery = useReconciliationQuery(queryFilters)
+
+function selectKind(kind: 'reuniones' | 'generales') {
+    updateQuery({ tipo: kind === 'generales' ? 'generales' : undefined })
+}
 
 const summary = computed(() => reconciliationQuery.data.value ?? null)
 const totals = computed(() => summary.value?.totals ?? null)
@@ -94,6 +125,112 @@ const shortageByLeader = computed(() =>
         })),
 )
 
+const averagePerService = computed(() =>
+    totals.value && receivedCount.value > 0
+        ? Math.round(toCents(totals.value.receivedAmount) / receivedCount.value) / 100
+        : 0,
+)
+
+function shiftIsoDate(isoDate: string, days: number) {
+    const date = new Date(`${isoDate}T00:00:00.000Z`)
+    date.setUTCDate(date.getUTCDate() + days)
+    return date.toISOString().slice(0, 10)
+}
+
+function weekStartOf(isoDate: string) {
+    const weekday = new Date(`${isoDate}T00:00:00.000Z`).getUTCDay()
+    return shiftIsoDate(isoDate, -((weekday + 6) % 7))
+}
+
+function dayMonth(isoDate: string) {
+    return formatLocalIsoDate(isoDate, { day: 'numeric', month: 'short' }).replace('.', '')
+}
+
+function countLabel(count: number) {
+    if (isGeneralView.value)
+        return `${count} ${count === 1 ? 'culto recibido' : 'cultos recibidos'}`
+    return `${count} ${count === 1 ? 'sobre recibido' : 'sobres recibidos'}`
+}
+
+const receivedEnvelopes = computed(() =>
+    (summary.value?.envelopes ?? []).filter(
+        (envelope) => envelope.receivedAt && envelope.countedAmount !== null,
+    ),
+)
+
+const weeklyReceived = computed(() => {
+    const period = summary.value?.period
+    if (!period || receivedEnvelopes.value.length === 0) return []
+    const weeks = new Map<string, { counted: number; registered: number; count: number }>()
+    for (let week = weekStartOf(period.from); week <= period.to; week = shiftIsoDate(week, 7)) {
+        weeks.set(week, { counted: 0, registered: 0, count: 0 })
+    }
+    for (const envelope of receivedEnvelopes.value) {
+        const entry = weeks.get(weekStartOf(localIsoDate(new Date(envelope.receivedAt!))))
+        if (!entry) continue
+        entry.counted += toCents(envelope.countedAmount ?? 0)
+        entry.registered += toCents(envelope.registeredAmount)
+        entry.count += 1
+    }
+    return [...weeks].map(([week, entry]) => ({
+        key: week,
+        label: dayMonth(week),
+        value: entry.counted / 100,
+        detail: [
+            `Semana del ${dayMonth(week)} al ${dayMonth(shiftIsoDate(week, 6))}`,
+            entry.count > 0
+                ? countLabel(entry.count)
+                : isGeneralView.value
+                  ? 'Sin cultos recibidos'
+                  : 'Sin sobres recibidos',
+            ...(!isGeneralView.value && entry.count > 0
+                ? [
+                      `Líderes anotaron ${formatMoney(entry.registered / 100)}`,
+                      `Diferencia: ${differenceLabel((entry.counted - entry.registered) / 100)}`,
+                  ]
+                : []),
+        ],
+    }))
+})
+
+function groupReceived(keyOf: (envelope: ReconciliationEnvelope) => string | null) {
+    const groups = new Map<string, { counted: number; registered: number; count: number }>()
+    for (const envelope of receivedEnvelopes.value) {
+        const key = keyOf(envelope) ?? 'Sin asignar'
+        const entry = groups.get(key) ?? { counted: 0, registered: 0, count: 0 }
+        entry.counted += toCents(envelope.countedAmount ?? 0)
+        entry.registered += toCents(envelope.registeredAmount)
+        entry.count += 1
+        groups.set(key, entry)
+    }
+    return groups
+}
+
+const receivedByZone = computed(() =>
+    [...groupReceived((envelope) => envelope.zoneName)].map(([zone, entry]) => ({
+        id: zone,
+        label: zone,
+        value: entry.counted / 100,
+        meta: `${countLabel(entry.count)} · ${differenceLabel((entry.counted - entry.registered) / 100)}`,
+    })),
+)
+
+const receivedByService = computed(() =>
+    [...groupReceived((envelope) => envelope.meetingTitle)].map(([title, entry]) => ({
+        id: title,
+        label: title,
+        value: entry.counted / 100,
+        meta: countLabel(entry.count),
+    })),
+)
+
+const recentGeneralServices = computed(() =>
+    (summary.value?.envelopes ?? [])
+        .filter((envelope) => envelope.receivedAt)
+        .sort((left, right) => (right.receivedAt ?? '').localeCompare(left.receivedAt ?? ''))
+        .slice(0, 6),
+)
+
 function differenceClass(value: number) {
     if (toCents(value) === 0) return 'text-emerald-700 dark:text-emerald-300'
     return 'text-amber-700 dark:text-amber-300'
@@ -117,8 +254,45 @@ function differenceClass(value: number) {
 
         <ReconciliationTabs active="summary" />
 
-        <div class="mt-6">
-            <ReconciliationFiltersBar :zones="summary?.zones ?? []" />
+        <div class="mt-6 flex flex-wrap items-center gap-3">
+            <span
+                id="reconciliation-kind-label"
+                class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant"
+            >
+                Ver resumen de
+            </span>
+            <div
+                role="group"
+                aria-labelledby="reconciliation-kind-label"
+                class="flex h-10 items-center gap-1 rounded-lg border border-outline-variant bg-surface p-1"
+            >
+                <button
+                    v-for="option in kindOptions"
+                    :key="option.value"
+                    type="button"
+                    class="h-full whitespace-nowrap rounded-md px-3.5 text-xs font-semibold uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    :class="
+                        (option.value === 'generales') === isGeneralView
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-on-surface-variant hover:bg-surface-container'
+                    "
+                    :aria-pressed="(option.value === 'generales') === isGeneralView"
+                    @click="selectKind(option.value)"
+                >
+                    {{ option.label }}
+                </button>
+            </div>
+            <p class="text-xs text-on-surface-variant">
+                {{
+                    isGeneralView
+                        ? 'Solo los cultos generales, contados directamente por el comité.'
+                        : 'Solo las reuniones de los sectores. Los cultos generales no se mezclan.'
+                }}
+            </p>
+        </div>
+
+        <div class="mt-4">
+            <ReconciliationFiltersBar :zones="summary?.zones ?? []" :hide-zone="isGeneralView" />
         </div>
 
         <div
@@ -131,14 +305,197 @@ function differenceClass(value: number) {
         <ReconciliationSummarySkeleton v-else-if="!summary || !totals" />
 
         <div
-            v-else-if="totals.envelopes === 0 && tithes.count === 0"
+            v-else-if="totals.envelopes === 0 && (isGeneralView || tithes.count === 0)"
             class="mt-8 flex flex-col items-center gap-3 rounded-xl border border-outline-variant bg-surface-container-low px-6 py-14 text-center"
         >
             <Inbox class="size-9 text-on-surface-variant" />
             <p class="max-w-md text-sm text-on-surface-variant">
-                El comité no recibió sobres en este periodo y no hay sobres pendientes de entregar.
+                {{
+                    isGeneralView
+                        ? 'El comité no recibió cultos generales en este periodo.'
+                        : 'El comité no recibió sobres en este periodo y no hay sobres pendientes de entregar.'
+                }}
                 Cambia las fechas para ver otro rango.
             </p>
+        </div>
+
+        <div
+            v-else-if="isGeneralView"
+            class="transition-opacity duration-200"
+            :class="{ 'opacity-50': reconciliationQuery.isPlaceholderData.value }"
+            :aria-busy="reconciliationQuery.isPlaceholderData.value"
+        >
+            <section class="mt-8 grid gap-4 sm:grid-cols-3">
+                <UiCard class="p-5">
+                    <Inbox class="mb-3 size-5 text-primary" />
+                    <p
+                        class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                    >
+                        Recibido por el comité
+                    </p>
+                    <p
+                        class="mt-1 font-display text-3xl font-semibold tabular-nums text-on-surface"
+                    >
+                        {{ formatMoney(totals.receivedAmount) }}
+                    </p>
+                    <p class="mt-1 text-xs text-on-surface-variant">
+                        Ofrenda de los cultos generales del periodo
+                    </p>
+                </UiCard>
+                <UiCard class="p-5">
+                    <Church class="mb-3 size-5 text-primary" />
+                    <p
+                        class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                    >
+                        Cultos recibidos
+                    </p>
+                    <p
+                        class="mt-1 font-display text-3xl font-semibold tabular-nums text-on-surface"
+                    >
+                        {{ receivedCount }}
+                    </p>
+                    <p class="mt-1 text-xs text-on-surface-variant">
+                        Contados por el comité en el periodo
+                    </p>
+                </UiCard>
+                <UiCard class="p-5">
+                    <HandCoins class="mb-3 size-5 text-primary" />
+                    <p
+                        class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                    >
+                        Promedio por culto
+                    </p>
+                    <p
+                        class="mt-1 font-display text-3xl font-semibold tabular-nums text-on-surface"
+                    >
+                        {{ formatMoney(averagePerService) }}
+                    </p>
+                    <p class="mt-1 text-xs text-on-surface-variant">
+                        Lo recibido entre los cultos contados
+                    </p>
+                </UiCard>
+            </section>
+
+            <section class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+                <UiCard class="p-5">
+                    <h2 class="font-display text-lg font-semibold text-on-surface">
+                        Recibido por semana
+                    </h2>
+                    <p class="mb-4 mt-1 text-xs text-on-surface-variant">
+                        Cada barra suma la ofrenda de los cultos generales que el comité contó en
+                        una semana (lunes a domingo). Pasa el cursor sobre una barra para ver el
+                        detalle.
+                    </p>
+                    <ColumnChart
+                        :values="weeklyReceived"
+                        format="currency"
+                        color="var(--chart-2)"
+                        label="Ofrenda de cultos generales por semana"
+                        empty-message="El comité todavía no recibe cultos generales en este periodo."
+                    />
+                </UiCard>
+                <UiCard class="p-5">
+                    <h2 class="font-display text-lg font-semibold text-on-surface">
+                        Ofrenda por culto
+                    </h2>
+                    <p class="mb-4 mt-1 text-xs text-on-surface-variant">
+                        Lo que dejó cada culto general en el periodo.
+                    </p>
+                    <RankedBarList
+                        :items="receivedByService"
+                        label="Ofrenda por culto"
+                        format="currency"
+                        empty-message="Todavía no hay cultos contados en este periodo."
+                        :limit="6"
+                    />
+                </UiCard>
+            </section>
+
+            <section class="mt-6 grid gap-6 lg:grid-cols-2">
+                <UiCard class="p-5">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h2 class="font-display text-lg font-semibold text-on-surface">
+                            Últimos cultos recibidos
+                        </h2>
+                        <NuxtLink
+                            :to="linkTo(RECONCILIATION_GENERALS)"
+                            class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                        >
+                            Ver todos
+                            <ArrowRight class="size-3.5" />
+                        </NuxtLink>
+                    </div>
+                    <ul class="flex flex-col divide-y divide-outline-variant">
+                        <li v-for="envelope in recentGeneralServices" :key="envelope.occurrenceId">
+                            <NuxtLink
+                                :to="linkTo(reconciliationEnvelopePath(envelope.occurrenceId))"
+                                class="flex items-center gap-3 py-2.5 hover:text-primary"
+                            >
+                                <span
+                                    class="h-8 w-1 shrink-0 rounded-full"
+                                    :style="{ backgroundColor: envelope.meetingColor }"
+                                />
+                                <span class="min-w-0 flex-1">
+                                    <span
+                                        class="block truncate text-sm font-semibold text-on-surface"
+                                    >
+                                        {{ envelope.meetingTitle }}
+                                    </span>
+                                    <span class="block truncate text-xs text-on-surface-variant">
+                                        <span class="capitalize">
+                                            {{ shortDateLabel(envelope.date) }}
+                                        </span>
+                                        <template v-if="envelope.receivedByName">
+                                            · Recibió {{ envelope.receivedByName }}
+                                        </template>
+                                    </span>
+                                </span>
+                                <span class="text-sm font-semibold tabular-nums text-on-surface">
+                                    {{ formatMoney(envelope.countedAmount ?? 0) }}
+                                </span>
+                            </NuxtLink>
+                        </li>
+                    </ul>
+                </UiCard>
+
+                <UiCard class="p-5">
+                    <h2 class="mb-3 font-display text-lg font-semibold text-on-surface">
+                        Por tipo de ofrenda
+                    </h2>
+                    <p
+                        v-if="summary.byType.length === 0"
+                        class="py-6 text-center text-sm text-on-surface-variant"
+                    >
+                        Todavía no hay cultos contados en este periodo.
+                    </p>
+                    <table v-else class="w-full text-sm">
+                        <thead>
+                            <tr
+                                class="border-b border-outline-variant text-[10px] uppercase tracking-wider text-on-surface-variant"
+                            >
+                                <th class="py-2 text-left font-semibold">Tipo</th>
+                                <th class="py-2 text-right font-semibold">Contado por el comité</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in summary.byType"
+                                :key="row.categoryId ?? 'sin-tipo'"
+                                class="border-b border-outline-variant last:border-b-0"
+                            >
+                                <td class="py-2.5 text-on-surface">
+                                    {{ categoryLabel(row.categoryName) }}
+                                </td>
+                                <td
+                                    class="py-2.5 text-right font-semibold tabular-nums text-on-surface"
+                                >
+                                    {{ formatMoney(row.countedAmount) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </UiCard>
+            </section>
         </div>
 
         <div
@@ -320,6 +677,41 @@ function differenceClass(value: number) {
                         {{ totals.counts[status.value] }}
                     </span>
                 </NuxtLink>
+            </section>
+
+            <section class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+                <UiCard class="p-5">
+                    <h2 class="font-display text-lg font-semibold text-on-surface">
+                        Recibido por el comité por semana
+                    </h2>
+                    <p class="mb-4 mt-1 text-xs text-on-surface-variant">
+                        Cada barra suma lo que el comité contó en una semana (lunes a domingo),
+                        según el día en que recibió los sobres. Pasa el cursor sobre una barra para
+                        ver lo que anotaron los líderes y la diferencia.
+                    </p>
+                    <ColumnChart
+                        :values="weeklyReceived"
+                        format="currency"
+                        label="Recibido por el comité por semana"
+                        empty-message="El comité todavía no recibe sobres en este periodo."
+                    />
+                </UiCard>
+                <UiCard class="p-5">
+                    <h2 class="font-display text-lg font-semibold text-on-surface">
+                        Recibido por zona
+                    </h2>
+                    <p class="mb-4 mt-1 text-xs text-on-surface-variant">
+                        Lo contado por el comité en cada zona, con cuántos sobres y la diferencia
+                        frente a lo anotado por los líderes.
+                    </p>
+                    <RankedBarList
+                        :items="receivedByZone"
+                        label="Recibido por zona"
+                        format="currency"
+                        empty-message="Todavía no hay sobres contados en este periodo."
+                        :limit="6"
+                    />
+                </UiCard>
             </section>
 
             <section class="mt-8 grid gap-6 lg:grid-cols-2">

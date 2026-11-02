@@ -5,6 +5,7 @@ import type {
 } from '../dto/offering/reconciliation.dto'
 
 export const reconciliationFiltersSchema = Joi.object<ReconciliationFiltersDto>({
+    kind: Joi.string().valid('reuniones', 'generales').default('reuniones'),
     from: Joi.string().isoDate(),
     to: Joi.string().isoDate(),
     zoneId: Joi.number().integer().positive(),

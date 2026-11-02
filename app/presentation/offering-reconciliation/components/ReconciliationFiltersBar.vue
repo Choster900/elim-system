@@ -6,6 +6,7 @@ import { periodOptions } from '../utils/period-presets.util'
 
 const props = defineProps<{
     zones: { id: number; name: string }[]
+    hideZone?: boolean
 }>()
 
 const { filters, selectedPeriod, dateRange, selectedZone } = useReconciliationFilters()
@@ -52,7 +53,10 @@ const labelClass =
                     placeholder="Elige las fechas"
                 />
             </div>
-            <div v-if="zoneOptions.length > 1 || selectedZone" class="w-full sm:w-56">
+            <div
+                v-if="!hideZone && (zoneOptions.length > 1 || selectedZone)"
+                class="w-full sm:w-56"
+            >
                 <label :class="labelClass">Zona</label>
                 <UiSearchSelect
                     v-model="selectedZone"

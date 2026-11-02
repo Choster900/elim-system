@@ -432,6 +432,17 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         'Requires finance.audit. from/to filter the date the committee received each envelope (business time zone, defaults to the current month). Envelopes not delivered yet have no reception date and are always included. Returns totals, per offering type, per leader and every envelope with its status: cuadra, diferencia_abierta, diferencia_cerrada or sin_entregar.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
+                        {
+                            name: 'kind',
+                            in: 'query',
+                            description:
+                                'reuniones: sector meetings only. generales: general services only, never filtered by zone or sector.',
+                            schema: {
+                                type: 'string',
+                                enum: ['reuniones', 'generales'],
+                                default: 'reuniones',
+                            },
+                        },
                         { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
                         { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
                         { name: 'zoneId', in: 'query', schema: { type: 'integer' } },

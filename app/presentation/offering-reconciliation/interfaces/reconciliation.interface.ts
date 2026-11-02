@@ -10,6 +10,7 @@ export interface ReconciliationFilters {
     from: string
     to: string
     zoneId?: number
+    kind?: 'reuniones' | 'generales'
 }
 
 export interface ReconciliationEnvelope {
@@ -35,6 +36,7 @@ export interface ReconciliationEnvelope {
     closedAt: string | null
     closedByName: string | null
     directEntry: boolean
+    isGeneral: boolean
     pendingDays: number | null
 }
 

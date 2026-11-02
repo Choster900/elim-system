@@ -3,6 +3,7 @@ import type { ReconciliationStatus } from '../interfaces/reconciliation.interfac
 export const RECONCILIATION_HOME = '/finanzas/conciliacion'
 export const RECONCILIATION_ENVELOPES = `${RECONCILIATION_HOME}/sobres`
 export const RECONCILIATION_LEADERS = `${RECONCILIATION_HOME}/lideres`
+export const RECONCILIATION_GENERALS = `${RECONCILIATION_HOME}/cultos-generales`
 
 export function reconciliationEnvelopePath(occurrenceId: number) {
     return `${RECONCILIATION_ENVELOPES}/${occurrenceId}`

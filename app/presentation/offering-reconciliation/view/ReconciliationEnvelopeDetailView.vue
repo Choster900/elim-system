@@ -25,7 +25,11 @@ import {
     useCloseDiscrepancyMutation,
     useEnvelopeReviewQuery,
 } from '../composables/useReconciliationQueries'
-import { RECONCILIATION_ENVELOPES, pendingLabel } from '../utils/reconciliation-format.util'
+import {
+    RECONCILIATION_ENVELOPES,
+    RECONCILIATION_GENERALS,
+    pendingLabel,
+} from '../utils/reconciliation-format.util'
 
 defineOptions({ name: 'ReconciliationEnvelopeDetailView' })
 
@@ -45,7 +49,11 @@ const reception = computed(() => review.value?.reception ?? null)
 const closingNotes = ref('')
 const formError = ref<string | null>(null)
 
-const backLink = computed(() => ({ path: RECONCILIATION_ENVELOPES, query: route.query }))
+const isGeneralEnvelope = computed(() => !!review.value?.envelope.isGeneral)
+const backLink = computed(() => ({
+    path: isGeneralEnvelope.value ? RECONCILIATION_GENERALS : RECONCILIATION_ENVELOPES,
+    query: route.query,
+}))
 
 useHead({
     title: computed(() =>
@@ -86,7 +94,7 @@ async function onClose() {
             class="mb-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
         >
             <ArrowLeft class="size-4" />
-            Volver a los sobres
+            {{ isGeneralEnvelope ? 'Volver a los cultos generales' : 'Volver a los sobres' }}
         </NuxtLink>
 
         <div

@@ -51,11 +51,12 @@ function resolvePeriod(
     now = new Date(),
 ): ReconciliationPeriodDto {
     const today = businessIsoDate(now)
+    const isGeneral = filters.kind === 'generales'
     return {
         from: filters.from?.slice(0, 10) ?? `${today.slice(0, 8)}01`,
         to: filters.to?.slice(0, 10) ?? today,
-        zoneId: filters.zoneId,
-        sectorId: filters.sectorId,
+        zoneId: isGeneral ? undefined : filters.zoneId,
+        sectorId: isGeneral ? undefined : filters.sectorId,
     }
 }
 
@@ -120,6 +121,7 @@ function toEnvelopeRow(row: ReconciliationRow, today: string) {
         closedAt: reception?.closedAt ?? null,
         closedByName: reception?.closedByName ?? null,
         directEntry: reception?.directEntry ?? false,
+        isGeneral: occurrence.isGeneralMeeting,
         pendingDays: pendingDaysOf(status, occurrence, reception, today),
     }
 }
@@ -218,6 +220,7 @@ function buildByLeader(envelopes: EnvelopeRow[]) {
     >()
 
     for (const envelope of envelopes) {
+        if (envelope.isGeneral) continue
         const key = String(envelope.leaderId ?? 'sin-lider')
         const entry = byLeader.get(key) ?? {
             leaderId: envelope.leaderId,
@@ -285,7 +288,8 @@ export async function getReconciliation(
 ) {
     const period = resolvePeriod(filters, now)
     const today = businessIsoDate(now)
-    const [periodRows, tithes] = await Promise.all([
+    const isGeneral = filters.kind === 'generales'
+    const [allRows, tithes] = await Promise.all([
         findReconciliationRows(scope, period),
         summarizeTithes({
             from: period.from,
@@ -294,6 +298,7 @@ export async function getReconciliation(
             sectorIds: scope.seesAll ? undefined : scope.sectorIds,
         }),
     ])
+    const periodRows = allRows.filter((row) => row.occurrence.isGeneralMeeting === isGeneral)
     const zones = [
         ...new Map(
             periodRows

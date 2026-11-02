@@ -22,6 +22,14 @@ export default [
         meta,
     },
     {
+        name: 'offering-reconciliation-generals',
+        path: '/finanzas/conciliacion/cultos-generales',
+        component: () =>
+            import('~/presentation/offering-reconciliation/view/ReconciliationEnvelopesView.vue'),
+        props: { kind: 'generales' },
+        meta,
+    },
+    {
         name: 'offering-reconciliation-leaders',
         path: '/finanzas/conciliacion/lideres',
         component: () =>
