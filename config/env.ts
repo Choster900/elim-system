@@ -14,6 +14,7 @@ export interface AppEnv {
     NUXT_PUBLIC_MAP_API_KEY: string
     NODE_ENV: 'development' | 'production' | 'test'
     APP_BASE_URL: string
+    CORS_ALLOWED_ORIGINS: string
     SMTP_HOST: string
     SMTP_PORT: number
     SMTP_SECURE: boolean
@@ -21,6 +22,13 @@ export interface AppEnv {
     SMTP_PASSWORD: string
     MAIL_FROM: string
     PASSWORD_RESET_TTL_HOURS: number
+}
+
+export function parseCorsOrigins(value: string) {
+    return value
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/+$/, ''))
+        .filter(Boolean)
 }
 
 const envSchema = Joi.object<AppEnv>({
@@ -41,6 +49,19 @@ const envSchema = Joi.object<AppEnv>({
     NUXT_PUBLIC_MAP_API_KEY: Joi.string().allow('').default(''),
     NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
     APP_BASE_URL: Joi.string().uri().default('http://127.0.0.1:3000'),
+    CORS_ALLOWED_ORIGINS: Joi.string()
+        .allow('')
+        .default('')
+        .custom((value: string, helpers) => {
+            const invalid = parseCorsOrigins(value).find(
+                (origin) => !/^https?:\/\/[^/\s]+$/.test(origin),
+            )
+            return invalid ? helpers.error('string.corsOrigin', { origin: invalid }) : value
+        })
+        .messages({
+            'string.corsOrigin':
+                'CORS_ALLOWED_ORIGINS has an invalid origin "{{#origin}}"; use scheme://host[:port] entries separated by commas',
+        }),
     SMTP_HOST: Joi.string().min(1).default('127.0.0.1'),
     SMTP_PORT: Joi.number().integer().min(1).max(65535).default(1025),
     SMTP_SECURE: Joi.boolean().truthy('true').falsy('false').default(false),
