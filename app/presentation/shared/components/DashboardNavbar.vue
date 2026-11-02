@@ -97,12 +97,12 @@ const navItems: DashboardMenuItem[] = [
         label: 'Finanzas',
         children: [
             {
-                label: 'Registro de ofrendas',
+                label: 'Registro de desarollo de celula',
                 href: '/finanzas/ofrendas',
                 requiredPermission: routePermissionCodes.financeRecord,
             },
             {
-                label: 'Historial de ofrendas',
+                label: 'Historial de desarollo de celula',
                 href: '/finanzas/ofrendas/historial',
                 requiredPermission: routePermissionCodes.financeView,
             },

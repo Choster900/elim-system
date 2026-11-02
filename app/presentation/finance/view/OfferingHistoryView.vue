@@ -8,16 +8,17 @@ import {
     History,
     MapPin,
     Search,
+    Sprout,
     TrendingUp,
     UserRound,
     Users,
 } from '@lucide/vue'
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
+import ColumnChart from '~/presentation/shared/components/charts/ColumnChart.vue'
 import RankedBarList from '~/presentation/shared/components/charts/RankedBarList.vue'
 import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
-import TrendChart from '~/presentation/shared/components/charts/TrendChart.vue'
 import AppTour from '~/presentation/shared/components/AppTour.vue'
 import { useTourProgress } from '~/presentation/shared/composables/useTourProgress'
 import type { TourStep } from '~/presentation/shared/interfaces/tour.interface'
@@ -27,7 +28,7 @@ import {
     formatShortIsoDate,
     formatTimeRange,
 } from '~/utils/date/date-format.util'
-import { useOccurrencesQuery } from '../composables/useOccurrenceQueries'
+import { useAttendanceTypesQuery, useOccurrencesQuery } from '../composables/useOccurrenceQueries'
 import { GENERAL_MEETING_SCOPE_LABEL } from '~/presentation/meetings/utils/meeting-format.util'
 import { attendanceDetailLabel, sumAttendanceDetails } from '../utils/attendance-format.util'
 import type {
@@ -99,9 +100,9 @@ const tourSteps: TourStep[] = [
     {
         id: 'history-trends',
         target: '[data-tour="offerings-history-trends"]',
-        title: 'Tendencias por fecha',
+        title: 'Tendencias por sábado',
         description:
-            'Compara cómo evolucionan las ofrendas y la asistencia en las últimas fechas visibles.',
+            'Compara la ofrenda y la asistencia total de cada sábado, sumando todas las reuniones de esa semana.',
     },
     {
         id: 'history-breakdowns',
@@ -115,7 +116,7 @@ const tourSteps: TourStep[] = [
         target: '[data-tour="offerings-history-detail"]',
         title: 'Detalle de cada captura',
         description:
-            'La tabla reúne fecha, reunión, territorio, asistencia, ofrenda y quién realizó la captura. Haz clic en una fila para abrir su historial.',
+            'La tabla reúne fecha, reunión, territorio, asistencia, frutos, ofrenda y quién realizó la captura. Haz clic en una fila para abrir su historial.',
     },
 ]
 
@@ -286,6 +287,14 @@ const historyColumns = computed<DataTableColumn<OccurrenceRecord>[]>(() => [
         width: '130px',
     },
     {
+        key: 'fruits',
+        label: 'Frutos',
+        sortable: true,
+        align: 'right',
+        accessor: (row) => fruitCount(row.attendanceDetails),
+        width: '150px',
+    },
+    {
         key: 'offering',
         label: 'Ofrenda',
         sortable: true,
@@ -333,29 +342,67 @@ const stats = computed(() => {
     }
 })
 
-const trendByDate = computed(() => {
-    const byDate = new Map<string, number>()
+function saturdayOf(isoDate: string) {
+    const date = new Date(`${isoDate}T00:00:00Z`)
+    date.setUTCDate(date.getUTCDate() + 6 - date.getUTCDay())
+    return date.toISOString().slice(0, 10)
+}
+
+interface SaturdayWeek {
+    saturday: string
+    total: number
+    attendance: number
+    meetings: number
+}
+
+const weeksBySaturday = computed<SaturdayWeek[]>(() => {
+    const bySaturday = new Map<string, SaturdayWeek>()
     for (const item of visible.value) {
-        byDate.set(item.date, (byDate.get(item.date) ?? 0) + (item.totalAmount ?? 0))
+        const saturday = saturdayOf(item.date)
+        const current = bySaturday.get(saturday) ?? {
+            saturday,
+            total: 0,
+            attendance: 0,
+            meetings: 0,
+        }
+        current.total += item.totalAmount ?? 0
+        current.attendance += item.attendance ?? 0
+        current.meetings += 1
+        bySaturday.set(saturday, current)
     }
 
-    return [...byDate.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .slice(-12)
-        .map(([date, value]) => ({ label: date.slice(5).replace('-', '/'), value }))
+    return [...bySaturday.values()].sort((left, right) =>
+        left.saturday.localeCompare(right.saturday),
+    )
 })
 
-const attendanceByDate = computed(() => {
-    const byDate = new Map<string, number>()
-    for (const item of visible.value) {
-        byDate.set(item.date, (byDate.get(item.date) ?? 0) + (item.attendance ?? 0))
+function saturdayColumn(week: SaturdayWeek, value: number) {
+    return {
+        key: week.saturday,
+        label: formatLocalIsoDate(week.saturday, { day: 'numeric', month: 'short' }).replace(
+            '.',
+            '',
+        ),
+        value,
+        detail: [
+            `Sábado ${formatShortIsoDate(week.saturday)}`,
+            `${week.meetings} ${week.meetings === 1 ? 'reunión' : 'reuniones'}`,
+        ],
     }
+}
 
-    return [...byDate.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .slice(-12)
-        .map(([date, value]) => ({ label: date.slice(5).replace('-', '/'), value }))
-})
+const offeringBySaturday = computed(() =>
+    weeksBySaturday.value.map((week) => saturdayColumn(week, week.total)),
+)
+
+const attendanceBySaturday = computed(() =>
+    weeksBySaturday.value.map((week) => saturdayColumn(week, week.attendance)),
+)
+
+const saturdayCountLabel = computed(
+    () =>
+        `${weeksBySaturday.value.length} ${weeksBySaturday.value.length === 1 ? 'sábado' : 'sábados'}`,
+)
 
 const byMeeting = computed(() => {
     const map = new Map<number, { label: string; value: number; dates: number }>()
@@ -395,8 +442,30 @@ const visibleAttendanceDetails = computed(() =>
 const byAttendanceType = computed(() => sumAttendanceDetails(visibleAttendanceDetails.value, true))
 const byResult = computed(() => sumAttendanceDetails(visibleAttendanceDetails.value, false))
 
+const attendanceTypesQuery = useAttendanceTypesQuery()
+
+const fruitTotals = computed(() => {
+    const recorded = new Map(byResult.value.map((item) => [item.id, item.value]))
+    const catalog = (attendanceTypesQuery.data.value ?? [])
+        .filter((type) => type.isActive && type.group && !type.group.countsTowardAttendance)
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .map((type) => ({ id: type.id, label: type.name, value: recorded.get(type.id) ?? 0 }))
+    const catalogIds = new Set(catalog.map((item) => item.id))
+
+    return [...catalog, ...byResult.value.filter((item) => !catalogIds.has(item.id))]
+})
+const fruitTotal = computed(() => fruitTotals.value.reduce((sum, item) => sum + item.value, 0))
+
 function countedDetails(details: OccurrenceRecord['attendanceDetails']) {
     return details.filter((detail) => detail.countsTowardAttendance)
+}
+
+function fruitDetails(details: OccurrenceRecord['attendanceDetails']) {
+    return details.filter((detail) => !detail.countsTowardAttendance && detail.quantity > 0)
+}
+
+function fruitCount(details: OccurrenceRecord['attendanceDetails']) {
+    return fruitDetails(details).reduce((sum, detail) => sum + detail.quantity, 0)
 }
 
 function formatMoney(value: number) {
@@ -486,7 +555,7 @@ const filterLabelClass =
                 Finanzas · Historial
             </p>
             <h1 class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl">
-                Ofrendas registradas
+                Historil de desarollo de celulas
             </h1>
             <p class="mt-3 max-w-xl text-sm leading-relaxed text-on-surface-variant">
                 Todo lo que ya fue capturado, con su tendencia en el tiempo y de dónde viene.
@@ -681,32 +750,47 @@ const filterLabelClass =
 
             <section data-tour="offerings-history-trends" class="mt-6 grid gap-4 xl:grid-cols-2">
                 <UiCard class="p-6">
-                    <div class="mb-5 flex items-center gap-2">
-                        <TrendingUp class="size-4 text-primary" />
-                        <h2 class="text-sm font-semibold text-on-surface">Ofrenda por fecha</h2>
-                        <span class="ml-auto text-[11px] text-on-surface-variant">
-                            últimas {{ trendByDate.length }}
+                    <div class="mb-5 flex items-start gap-2">
+                        <TrendingUp class="mt-0.5 size-4 shrink-0 text-primary" />
+                        <div class="min-w-0">
+                            <h2 class="text-sm font-semibold text-on-surface">
+                                Ofrenda por sábado
+                            </h2>
+                            <p class="mt-0.5 text-[11px] text-on-surface-variant">
+                                Total de todas las reuniones de cada semana
+                            </p>
+                        </div>
+                        <span class="ml-auto shrink-0 text-[11px] text-on-surface-variant">
+                            {{ saturdayCountLabel }}
                         </span>
                     </div>
-                    <TrendChart
-                        :values="trendByDate"
+                    <ColumnChart
+                        :values="offeringBySaturday"
                         format="currency"
-                        label="Ofrenda recolectada por fecha"
+                        label="Ofrenda total por sábado"
                     />
                 </UiCard>
 
                 <UiCard class="p-6">
-                    <div class="mb-5 flex items-center gap-2">
-                        <Users class="size-4 text-primary" />
-                        <h2 class="text-sm font-semibold text-on-surface">Asistencia por fecha</h2>
-                        <span class="ml-auto text-[11px] text-on-surface-variant">
-                            últimas {{ attendanceByDate.length }}
+                    <div class="mb-5 flex items-start gap-2">
+                        <Users class="mt-0.5 size-4 shrink-0 text-primary" />
+                        <div class="min-w-0">
+                            <h2 class="text-sm font-semibold text-on-surface">
+                                Asistencia por sábado
+                            </h2>
+                            <p class="mt-0.5 text-[11px] text-on-surface-variant">
+                                Total de todas las reuniones de cada semana
+                            </p>
+                        </div>
+                        <span class="ml-auto shrink-0 text-[11px] text-on-surface-variant">
+                            {{ saturdayCountLabel }}
                         </span>
                     </div>
-                    <TrendChart
-                        :values="attendanceByDate"
+                    <ColumnChart
+                        :values="attendanceBySaturday"
                         color="var(--chart-2)"
-                        label="Asistencia por fecha"
+                        :unit="{ one: 'persona', other: 'personas' }"
+                        label="Asistencia total por sábado"
                     />
                 </UiCard>
             </section>
@@ -733,10 +817,52 @@ const filterLabelClass =
                 </UiCard>
             </section>
 
-            <section
-                v-if="byAttendanceType.length > 0 || byResult.length > 0"
-                class="mt-4 grid gap-4 xl:grid-cols-2"
-            >
+            <section class="mt-4 grid gap-4 xl:grid-cols-2">
+                <UiCard data-testid="offering-history-fruits" class="p-6">
+                    <div class="mb-5 flex items-start gap-2">
+                        <Sprout class="mt-0.5 size-4 shrink-0 text-primary" />
+                        <div class="min-w-0">
+                            <h2 class="text-sm font-semibold text-on-surface">Frutos</h2>
+                            <p class="mt-0.5 text-[11px] text-on-surface-variant">
+                                No suman a la asistencia porque esas personas ya se contaron
+                            </p>
+                        </div>
+                        <span class="ml-auto shrink-0 text-[11px] text-on-surface-variant">
+                            {{ fruitTotal }} en total
+                        </span>
+                    </div>
+                    <div
+                        v-if="fruitTotals.length > 0"
+                        class="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4"
+                    >
+                        <div
+                            v-for="fruit in fruitTotals"
+                            :key="fruit.id"
+                            class="rounded-lg border border-outline-variant bg-surface-container-low px-4 py-3"
+                        >
+                            <p
+                                class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                            >
+                                {{ fruit.label }}
+                            </p>
+                            <p class="mt-1 font-display text-2xl font-semibold text-on-surface">
+                                {{ fruit.value }}
+                            </p>
+                        </div>
+                    </div>
+                    <p
+                        v-if="fruitTotals.length > 0 && fruitTotal === 0"
+                        class="mt-4 text-xs text-on-surface-variant"
+                    >
+                        Las fechas visibles todavía no tienen frutos registrados.
+                    </p>
+                    <p
+                        v-if="fruitTotals.length === 0"
+                        class="py-8 text-center text-sm text-on-surface-variant"
+                    >
+                        No hay tipos de frutos configurados.
+                    </p>
+                </UiCard>
                 <UiCard v-if="byAttendanceType.length > 0" class="p-6">
                     <h2 class="mb-5 text-sm font-semibold text-on-surface">
                         Composición de la asistencia
@@ -746,15 +872,6 @@ const filterLabelClass =
                         format="number"
                         label="Asistencia acumulada por tipo"
                         empty-message="Las fechas visibles no tienen desglose de asistencia."
-                    />
-                </UiCard>
-                <UiCard v-if="byResult.length > 0" class="p-6">
-                    <h2 class="mb-5 text-sm font-semibold text-on-surface">Resultados</h2>
-                    <RankedBarList
-                        :items="byResult"
-                        format="number"
-                        label="Resultados acumulados"
-                        empty-message="Las fechas visibles no tienen resultados registrados."
                     />
                 </UiCard>
             </section>
@@ -946,6 +1063,33 @@ const filterLabelClass =
                                 }}
                                 <template v-if="countedDetails(row.attendanceDetails).length > 2">
                                     · +{{ countedDetails(row.attendanceDetails).length - 2 }}
+                                </template>
+                            </p>
+                        </template>
+
+                        <template #cell-fruits="{ row }">
+                            <p
+                                class="font-semibold tabular-nums"
+                                :class="
+                                    fruitCount(row.attendanceDetails) > 0
+                                        ? 'text-on-surface'
+                                        : 'text-on-surface-variant'
+                                "
+                            >
+                                {{ fruitCount(row.attendanceDetails) }}
+                            </p>
+                            <p
+                                v-if="fruitDetails(row.attendanceDetails).length > 0"
+                                class="text-[10px] tabular-nums text-on-surface-variant"
+                            >
+                                {{
+                                    fruitDetails(row.attendanceDetails)
+                                        .slice(0, 2)
+                                        .map((detail) => `${detail.quantity} ${detail.typeName}`)
+                                        .join(' · ')
+                                }}
+                                <template v-if="fruitDetails(row.attendanceDetails).length > 2">
+                                    · +{{ fruitDetails(row.attendanceDetails).length - 2 }}
                                 </template>
                             </p>
                         </template>

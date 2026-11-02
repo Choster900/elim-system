@@ -44,9 +44,9 @@ export const landingMinistries = [
 
 export const landingContact = {
     address: 'Centro de Retiro Iglesia Elim, Lourdes',
-    serviceSchedule: 'Domingos · [HORA]',
-    phone: '[TELÉFONO]',
-    email: '[CORREO]',
+    serviceSchedule: 'Domingos · 8:00 AM y 10:00 AM',
+    phone: '+503 2318 7568',
+    email: 'ielimlourdes@gmail.com',
     mapsUrl: 'https://maps.app.goo.gl/bhFRzfuVBxpoXUTy5',
     coordinates: [13.711409, -89.359812] as [latitude: number, longitude: number],
     socials: {

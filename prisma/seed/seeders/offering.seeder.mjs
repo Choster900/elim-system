@@ -1,5 +1,11 @@
 export const OFFERING_CATEGORY_SEEDS = [
-    { code: 'COF-DIEZMOS', name: 'Diezmos', sortOrder: 1, description: 'Diezmos de los miembros.' },
+    {
+        code: 'COF-DIEZMOS',
+        name: 'Diezmos',
+        sortOrder: 1,
+        description: 'Diezmos de los miembros.',
+        isActive: false,
+    },
     {
         code: 'COF-OFRENDA',
         name: 'Ofrenda general',
@@ -11,12 +17,14 @@ export const OFFERING_CATEGORY_SEEDS = [
         name: 'Misiones',
         sortOrder: 3,
         description: 'Ofrenda destinada a misiones.',
+        isActive: false,
     },
     {
         code: 'COF-PRIMICIAS',
         name: 'Primicias',
         sortOrder: 4,
         description: 'Primicias y ofrendas especiales.',
+        isActive: false,
     },
     { code: 'COF-OTROS', name: 'Otros', sortOrder: 5, description: 'Otros ingresos y donaciones.' },
 ]
@@ -127,7 +135,7 @@ export async function seedOfferingCategories(prisma) {
                 name: seed.name,
                 description: seed.description ?? null,
                 sortOrder: seed.sortOrder ?? 0,
-                isActive: true,
+                isActive: seed.isActive ?? true,
             }
             return prisma.offeringCategory.upsert({
                 where: { code: seed.code },

@@ -237,7 +237,7 @@ watch([() => authStore.user?.id, () => pendingQuery.isPending.value], startFirst
                     Finanzas · Ofrendas
                 </p>
                 <h1 class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl">
-                    {{ personalScope ? 'Mis reuniones' : 'Registro de ofrendas' }}
+                    {{ personalScope ? 'Mis reuniones' : 'Registro de desarollo de celula' }}
                 </h1>
                 <p class="mt-3 max-w-xl text-sm leading-relaxed text-on-surface-variant">
                     {{
