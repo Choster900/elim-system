@@ -132,7 +132,9 @@ const updateMeetingMutation = useUpdateMeetingMutation()
 const districts = computed(() => hierarchyQuery.data.value?.districts ?? [])
 const zones = computed(() => hierarchyQuery.data.value?.zones ?? [])
 const sectors = computed(() => hierarchyQuery.data.value?.sectors ?? [])
-const meetings = computed(() => meetingsQuery.data.value ?? [])
+const meetings = computed(() =>
+    (meetingsQuery.data.value ?? []).filter((meeting) => meeting.isActive),
+)
 const leaders = computed(() => leadersQuery.data.value ?? [])
 const coordinators = computed(() => coordinatorsQuery.data.value ?? [])
 const supervisors = computed(() => supervisorsQuery.data.value ?? [])
