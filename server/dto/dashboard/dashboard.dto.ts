@@ -23,6 +23,7 @@ export interface DashboardResultDto extends DashboardMetricDto {
 
 export interface DashboardTrendPointDto {
     key: string
+    endDate: string
     label: string
     attendance: number
     offerings: number

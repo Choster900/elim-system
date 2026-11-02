@@ -226,17 +226,17 @@ const districtOptions = computed(
 const trendBuckets = computed(() => {
     const current = summary.value
     if (!current || current.trends.every((point) => point.meetingCount === 0)) return []
-    const monthsOnly = current.period.days > 120
-    return current.trends.map((point, index) => {
-        const next = current.trends[index + 1]
-        const endDate = next ? shiftIsoDate(next.key, -1) : current.period.endDate
-        return {
-            ...point,
-            axisLabel: bucketAxisLabel(point.key, endDate, monthsOnly),
-            rangeText: bucketRangeText(point.key, endDate),
-        }
-    })
+    const monthsOnly = isMonthlyTrend.value
+    return current.trends.map((point) => ({
+        ...point,
+        axisLabel: bucketAxisLabel(point.key, point.endDate, monthsOnly),
+        rangeText: bucketRangeText(point.key, point.endDate),
+    }))
 })
+const isMonthlyTrend = computed(() => (summary.value?.period.days ?? 0) > 120)
+const trendGroupingText = computed(() =>
+    isMonthlyTrend.value ? 'Cada barra es un mes' : 'Cada barra es una semana de sábado a viernes',
+)
 const attendanceTrend = computed(() =>
     trendBuckets.value.map((bucket) => ({
         key: bucket.key,
@@ -359,12 +359,6 @@ function formatDate(value: string, options: Intl.DateTimeFormatOptions = {}) {
         .replace('.', '')
 }
 
-function shiftIsoDate(value: string, days: number) {
-    const date = new Date(`${value}T00:00:00.000Z`)
-    date.setUTCDate(date.getUTCDate() + days)
-    return date.toISOString().slice(0, 10)
-}
-
 function bucketAxisLabel(startDate: string, endDate: string, monthsOnly: boolean) {
     const start = new Date(`${startDate}T00:00:00.000Z`)
     const end = new Date(`${endDate}T00:00:00.000Z`)
@@ -373,6 +367,7 @@ function bucketAxisLabel(startDate: string, endDate: string, monthsOnly: boolean
     const sameMonth = startDate.slice(0, 7) === endDate.slice(0, 7)
 
     if (monthsOnly) return sameMonth ? startMonth : `${startMonth}–${endMonth}`
+    if (start.getUTCDay() === 6) return `sáb ${start.getUTCDate()} ${startMonth}`
     if (startDate === endDate) return `${start.getUTCDate()} ${startMonth}`
     if (sameMonth) return `${start.getUTCDate()}–${end.getUTCDate()} ${endMonth}`
     return `${start.getUTCDate()} ${startMonth}–${end.getUTCDate()} ${endMonth}`
@@ -867,8 +862,8 @@ const quickActionClass =
                                 Tendencia de asistencia
                             </h2>
                             <p class="mt-1 text-xs text-on-surface-variant">
-                                Personas registradas por rango de fechas. Cada barra suma la
-                                asistencia de las reuniones de ese rango.
+                                Personas registradas. {{ trendGroupingText }} y suma la asistencia
+                                de las reuniones de esas fechas.
                             </p>
                         </div>
                         <dl class="flex shrink-0 gap-6 sm:text-right">
@@ -960,12 +955,12 @@ const quickActionClass =
                             </h2>
                             <p class="mt-1 text-xs text-on-surface-variant">
                                 <template v-if="isGeneralView">
-                                    Dólares contados por el comité por rango de fechas. Cada barra
-                                    suma los cultos generales de ese rango.
+                                    Dólares contados por el comité. {{ trendGroupingText }} y suma
+                                    los cultos generales de esas fechas.
                                 </template>
                                 <template v-else>
-                                    Dólares recaudados por rango de fechas. Cada barra suma las
-                                    ofrendas de las reuniones de ese rango.
+                                    Dólares recaudados. {{ trendGroupingText }} y suma las ofrendas
+                                    de las reuniones de esas fechas.
                                 </template>
                             </p>
                         </div>

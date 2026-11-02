@@ -11,7 +11,8 @@ import { findDashboardData } from '../repositories/dashboard.repository'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const GENERAL_SCOPE = { id: 0, name: 'Toda la iglesia' }
-const TREND_BUCKETS = 6
+const TREND_WEEK_START_DAY = 6
+const MONTHLY_TREND_MIN_DAYS = 120
 const CELL_MEETING_TYPE_CODE = 'C'
 
 function startOfUtcDay(value: Date) {
@@ -43,9 +44,9 @@ function metric(current: number, previous: number): DashboardMetricDto {
     }
 }
 
-function formatTrendLabel(value: Date, periodDays: number) {
+function formatTrendLabel(value: Date, monthly: boolean) {
     return new Intl.DateTimeFormat('es-SV', {
-        day: periodDays > 300 ? undefined : '2-digit',
+        day: monthly ? undefined : '2-digit',
         month: 'short',
         timeZone: 'UTC',
     })
@@ -53,18 +54,36 @@ function formatTrendLabel(value: Date, periodDays: number) {
         .replace('.', '')
 }
 
+function trendPeriodStarts(currentStart: Date, endExclusive: Date, monthly: boolean) {
+    const starts: Date[] = []
+    let cursor = monthly
+        ? new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth(), 1))
+        : addUtcDays(currentStart, -((currentStart.getUTCDay() - TREND_WEEK_START_DAY + 7) % 7))
+    while (cursor < endExclusive) {
+        starts.push(cursor)
+        cursor = monthly
+            ? new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))
+            : addUtcDays(cursor, 7)
+    }
+    return starts
+}
+
 function createTrend(
     currentOfferings: Array<{ date: Date; attendance: number; totalAmount: unknown }>,
     currentStart: Date,
+    endExclusive: Date,
     periodDays: number,
 ) {
-    const bucketCount = Math.min(TREND_BUCKETS, periodDays)
-    const buckets: DashboardTrendPointDto[] = Array.from({ length: bucketCount }, (_, index) => {
-        const offset = Math.ceil((index * periodDays) / bucketCount)
-        const bucketDate = addUtcDays(currentStart, offset)
+    const monthly = periodDays > MONTHLY_TREND_MIN_DAYS
+    const starts = trendPeriodStarts(currentStart, endExclusive, monthly)
+    const buckets: DashboardTrendPointDto[] = starts.map((start, index) => {
+        const next = starts[index + 1] ?? endExclusive
+        const clippedStart = start < currentStart ? currentStart : start
+        const clippedEnd = addUtcDays(next < endExclusive ? next : endExclusive, -1)
         return {
-            key: toIsoDate(bucketDate),
-            label: formatTrendLabel(bucketDate, periodDays),
+            key: toIsoDate(clippedStart),
+            endDate: toIsoDate(clippedEnd),
+            label: formatTrendLabel(start, monthly),
             attendance: 0,
             offerings: 0,
             meetingCount: 0,
@@ -72,15 +91,8 @@ function createTrend(
     })
 
     for (const offering of currentOfferings) {
-        const dayOffset = Math.max(
-            0,
-            Math.floor((startOfUtcDay(offering.date).getTime() - currentStart.getTime()) / DAY_MS),
-        )
-        const bucketIndex = Math.min(
-            bucketCount - 1,
-            Math.floor((dayOffset * bucketCount) / periodDays),
-        )
-        const bucket = buckets[bucketIndex]
+        const day = toIsoDate(startOfUtcDay(offering.date))
+        const bucket = buckets.find((item) => item.key <= day && day <= item.endDate)
         if (!bucket) continue
         bucket.attendance += offering.attendance
         bucket.offerings = round2(bucket.offerings + Number(offering.totalAmount))
@@ -340,7 +352,7 @@ export async function getDashboardSummary(
             cellSectors: new Set(activeCells.map((meeting) => meeting.sectorId)).size,
         },
         results: buildResults(data.resultTypes, currentOfferings, previousOfferings),
-        trends: createTrend(currentOfferings, currentStart, periodDays),
+        trends: createTrend(currentOfferings, currentStart, endExclusive, periodDays),
         categoryDistribution: buildCategoryDistribution(currentOfferings),
         districtPerformance: [...districtTotals]
             .map(([id, district]) => ({

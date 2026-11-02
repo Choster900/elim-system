@@ -20,6 +20,7 @@ export interface DashboardResult extends DashboardMetric {
 
 export interface DashboardTrendPoint {
     key: string
+    endDate: string
     label: string
     attendance: number
     offerings: number
