@@ -9,6 +9,7 @@ import {
     Plus,
     Trash2,
 } from '@lucide/vue'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import CategoryTabs, { type CategoryStep } from '../components/CategoryTabs.vue'
@@ -30,6 +31,7 @@ import {
     reviewPath,
     toCents,
 } from '../utils/reception-format.util'
+import { resolveSupportCommitteeHome } from '../utils/support-committee-access.util'
 
 defineOptions({ name: 'EnvelopeCountView' })
 
@@ -44,6 +46,8 @@ interface MoveTarget {
 const route = useRoute()
 const toast = useAppToast()
 const draftStore = useReceptionDraftStore()
+const authStore = useAuthStore()
+const committeeHome = computed(() => resolveSupportCommitteeHome(authStore.hasPermission))
 
 const occurrenceId = computed(() => {
     const raw = Number(route.params.occurrenceId)
@@ -309,10 +313,10 @@ function onPrimaryAction() {
             <AlertTriangle class="size-8 text-destructive" />
             <p class="text-sm text-destructive">{{ loadError }}</p>
             <NuxtLink
-                :to="SUPPORT_COMMITTEE_HOME"
+                :to="committeeHome"
                 class="text-sm font-semibold text-primary hover:underline"
             >
-                Volver a la bandeja
+                Volver al comité
             </NuxtLink>
         </div>
 
@@ -327,7 +331,7 @@ function onPrimaryAction() {
                 Podrás registrar su ofrenda después de las {{ envelope.endTime }}.
             </p>
             <NuxtLink
-                :to="SUPPORT_COMMITTEE_HOME"
+                :to="GENERAL_SERVICES_PATH"
                 class="text-sm font-semibold text-primary hover:underline"
             >
                 Volver a la bandeja

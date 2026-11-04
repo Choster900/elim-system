@@ -5,7 +5,7 @@ import { handleApiError } from '../../utils/http/error-handler.util'
 
 export default defineEventHandler(async (event) => {
     try {
-        requirePermission(event, 'finance.receive')
+        requirePermission(event, ['tithes.create', 'tithes.update'])
         const data = await getTithers()
         return ApiResponseFactory.success(data, 'Diezmadores obtenidos correctamente')
     } catch (error) {

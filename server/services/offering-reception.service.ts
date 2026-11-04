@@ -20,6 +20,7 @@ import {
 import type { OccurrenceRecord } from '../repositories/occurrence.repository'
 import * as repo from '../repositories/reception.repository'
 import { ApiErrorCode } from '../types/api-response.types'
+import type { ReceptionAccess } from '../utils/auth/reception-access.util'
 import { businessIsoDate } from '../utils/date/business-time.util'
 import { getOccurrenceById, syncOccurrences } from './meeting-occurrence.service'
 
@@ -45,6 +46,32 @@ function notFound(message: string): never {
         message,
         data: { code: ApiErrorCode.RESOURCE_NOT_FOUND },
     })
+}
+
+function forbidden(message: string): never {
+    throw createError({
+        statusCode: 403,
+        message,
+        data: { code: ApiErrorCode.FORBIDDEN },
+    })
+}
+
+function canHandle(occurrence: OccurrenceRecord, access: ReceptionAccess) {
+    return occurrence.isGeneralMeeting ? access.generalServices : access.pending
+}
+
+function assertCanReceive(occurrence: OccurrenceRecord, access: ReceptionAccess) {
+    if (canHandle(occurrence, access)) return
+    forbidden(
+        occurrence.isGeneralMeeting
+            ? 'No tienes permiso para registrar cultos generales'
+            : 'No tienes permiso para recibir sobres de los líderes',
+    )
+}
+
+function assertCanOpen(occurrence: OccurrenceRecord, access: ReceptionAccess, isReceived: boolean) {
+    if (canHandle(occurrence, access) || (access.received && isReceived)) return
+    forbidden('No tienes permiso para ver este sobre')
 }
 
 function toCents(value: number) {
@@ -109,13 +136,8 @@ function toReceptionSummary(reception: repo.ReceptionRecord) {
     return { ...rest, envelope: toEnvelope(occurrence) }
 }
 
-async function getReceivableOccurrence(
-    occurrenceId: number,
-    scope: OccurrenceScopeFilter,
-    now = new Date(),
-) {
-    const occurrence = await getOccurrenceById(occurrenceId, scope)
-    if (occurrence.status === 'registrada') return occurrence
+function assertReceivable(occurrence: OccurrenceRecord, now = new Date()) {
+    if (occurrence.status === 'registrada') return
     if (!occurrence.isGeneralMeeting) {
         businessRule('El líder todavía no registra la ofrenda de esta fecha')
     }
@@ -124,7 +146,6 @@ async function getReceivableOccurrence(
             `Este culto es el ${occurrence.date}; podrás registrar su ofrenda ese mismo día`,
         )
     }
-    return occurrence
 }
 
 async function resolveDenominations(dto: ReceptionCountDto) {
@@ -332,12 +353,18 @@ export async function getReceptions(scope: OccurrenceScopeFilter, filters: Recep
     return receptions.map(toReceptionSummary)
 }
 
-export async function getEnvelope(occurrenceId: number, scope: OccurrenceScopeFilter) {
-    const occurrence = await getReceivableOccurrence(occurrenceId, scope)
+export async function getEnvelope(
+    occurrenceId: number,
+    scope: OccurrenceScopeFilter,
+    access: ReceptionAccess,
+) {
+    const occurrence = await getOccurrenceById(occurrenceId, scope)
     const [reception, categories] = await Promise.all([
         repo.findReceptionByOccurrenceId(occurrenceId),
         findOfferingCategories(),
     ])
+    assertCanOpen(occurrence, access, reception !== null)
+    assertReceivable(occurrence)
     return {
         envelope: toEnvelope(occurrence),
         reception: reception ? toReceptionSummary(reception) : null,
@@ -356,9 +383,12 @@ export async function compareEnvelope(
     occurrenceId: number,
     dto: ReceptionCountDto,
     scope: OccurrenceScopeFilter,
+    access: ReceptionAccess,
 ) {
-    const occurrence = await getReceivableOccurrence(occurrenceId, scope)
+    const occurrence = await getOccurrenceById(occurrenceId, scope)
     const existing = await repo.findReceptionByOccurrenceId(occurrenceId)
+    assertCanOpen(occurrence, access, existing !== null)
+    assertReceivable(occurrence)
     return buildComparison(occurrence, dto, needsDirectEntry(occurrence) || !!existing?.directEntry)
 }
 
@@ -366,9 +396,12 @@ export async function receiveEnvelope(
     occurrenceId: number,
     dto: ReceiveEnvelopeDto,
     scope: OccurrenceScopeFilter,
+    access: ReceptionAccess,
     userId: number,
 ) {
-    const occurrence = await getReceivableOccurrence(occurrenceId, scope)
+    const occurrence = await getOccurrenceById(occurrenceId, scope)
+    assertCanReceive(occurrence, access)
+    assertReceivable(occurrence)
     if (await repo.findReceptionIdByOccurrenceId(occurrenceId)) {
         businessRule('Este sobre ya fue recibido; ábrelo desde Recibidos si necesitas corregirlo')
     }
@@ -386,10 +419,13 @@ export async function correctReception(
     occurrenceId: number,
     dto: ReceiveEnvelopeDto,
     scope: OccurrenceScopeFilter,
+    access: ReceptionAccess,
     userId: number,
 ) {
-    const occurrence = await getReceivableOccurrence(occurrenceId, scope)
+    const occurrence = await getOccurrenceById(occurrenceId, scope)
     const existing = await repo.findReceptionByOccurrenceId(occurrenceId)
+    assertCanOpen(occurrence, access, existing !== null)
+    assertReceivable(occurrence)
     if (!existing) notFound('Este sobre todavía no ha sido recibido')
     if (existing.closedAt) {
         businessRule('Finanzas ya revisó y cerró este sobre; no se puede corregir')

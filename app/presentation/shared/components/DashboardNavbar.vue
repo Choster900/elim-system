@@ -12,12 +12,18 @@ import { useLogoutMutation } from '~/presentation/auth/composables/useLogoutMuta
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
+import { SUPPORT_COMMITTEE_HOME } from '~/presentation/support-committee/utils/reception-format.util'
+import {
+    SUPPORT_COMMITTEE_SECTION_PERMISSIONS,
+    resolveSupportCommitteeHome,
+} from '~/presentation/support-committee/utils/support-committee-access.util'
 import AppBrand from './AppBrand.vue'
 import TerritoryAssignment from './TerritoryAssignment.vue'
 
 type DashboardMenuItem = {
     label: string
     href?: string
+    matchPath?: string
     children?: DashboardMenuItem[]
     requiredPermission?: string
     requiredAnyPermissions?: string[]
@@ -108,8 +114,9 @@ const navItems: DashboardMenuItem[] = [
             },
             {
                 label: 'Comité de apoyo',
-                href: '/finanzas/comite-de-apoyo',
-                requiredPermission: routePermissionCodes.financeReceive,
+                href: SUPPORT_COMMITTEE_HOME,
+                matchPath: SUPPORT_COMMITTEE_HOME,
+                requiredAnyPermissions: SUPPORT_COMMITTEE_SECTION_PERMISSIONS,
             },
             {
                 label: 'Conciliación de ofrendas',
@@ -187,9 +194,15 @@ function filterMenuItem(item: DashboardMenuItem): DashboardMenuItem | null {
 
     return {
         ...item,
-        href: item.href === '/comunidad/usuarios' ? resolveAccessManagementHref() : item.href,
+        href: resolveMenuHref(item.href),
         children,
     }
+}
+
+function resolveMenuHref(href?: string) {
+    if (href === '/comunidad/usuarios') return resolveAccessManagementHref()
+    if (href === SUPPORT_COMMITTEE_HOME) return resolveSupportCommitteeHome(authStore.hasPermission)
+    return href
 }
 
 const visibleNavItems = computed(() =>
@@ -203,7 +216,7 @@ function routeMatches(href?: string) {
 }
 
 function isActiveModule(item: DashboardMenuItem): boolean {
-    return routeMatches(item.href) || item.children?.some(isActiveModule) === true
+    return routeMatches(item.matchPath ?? item.href) || item.children?.some(isActiveModule) === true
 }
 </script>
 

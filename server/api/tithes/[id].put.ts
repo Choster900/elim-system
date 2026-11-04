@@ -8,7 +8,7 @@ import { saveTitheSchema } from '../../validators/tithe.validator'
 
 export default defineEventHandler(async (event) => {
     try {
-        const auth = requirePermission(event, 'finance.receive')
+        const auth = requirePermission(event, 'tithes.update')
         const id = getPositiveIntegerParam(event, 'id')
         const dto = validateDto(saveTitheSchema, await readBody(event))
         const data = await updateTithe(id, dto, auth.userId)

@@ -192,12 +192,29 @@ const report = computed(() => reportQuery.data.value ?? null)
 const allRows = computed(() => report.value?.rows ?? [])
 const isInitialLoading = computed(() => reportQuery.isPending.value && !report.value)
 const isRefreshing = computed(() => reportQuery.isFetching.value && !!report.value)
+const isManualRefresh = ref(false)
 const isStale = computed(
     () =>
         !!report.value &&
         (report.value.from !== appliedRange.value.from ||
             report.value.to !== appliedRange.value.to),
 )
+const isLoadingReport = computed(
+    () =>
+        isInitialLoading.value ||
+        (reportQuery.isFetching.value && (isStale.value || isManualRefresh.value)),
+)
+const hasLoadError = computed(() => reportQuery.isError.value && (!report.value || isStale.value))
+const SKELETON_BAR_HEIGHTS = [45, 70, 35, 85, 60, 75, 40, 95, 55, 30, 80, 50, 65, 38]
+
+async function refreshReport() {
+    isManualRefresh.value = true
+    try {
+        await reportQuery.refetch()
+    } finally {
+        isManualRefresh.value = false
+    }
+}
 
 const filters = reactive<MeetingReportFilters>(createEmptyFilters())
 const isTithesOnly = computed(() => filters.kind === 'diezmos')
@@ -1129,7 +1146,7 @@ const menuItemClass =
                     type="button"
                     class="h-10 rounded px-4 text-xs uppercase tracking-wider"
                     :disabled="reportQuery.isFetching.value"
-                    @click="reportQuery.refetch()"
+                    @click="refreshReport"
                 >
                     <RefreshCw class="size-4" /> Actualizar
                 </UiButton>
@@ -1348,23 +1365,86 @@ const menuItemClass =
             </div>
         </section>
 
-        <div
-            v-if="isInitialLoading"
-            class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
-            aria-busy="true"
-        >
+        <div v-if="isLoadingReport" class="mt-8" aria-busy="true" aria-live="polite">
+            <p class="mb-4 inline-flex items-center gap-2 text-sm text-on-surface-variant">
+                <Loader2 class="size-4 animate-spin text-primary" />
+                Generando el reporte de {{ rangeLabel }}…
+            </p>
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+                <div
+                    v-for="index in 6"
+                    :key="index"
+                    class="animate-pulse rounded-lg border border-outline-variant bg-surface-container-low p-5"
+                >
+                    <div class="flex items-center justify-between">
+                        <div class="h-2.5 w-24 rounded bg-surface-container-high" />
+                        <div class="size-4 rounded bg-surface-container-high" />
+                    </div>
+                    <div class="mt-4 h-7 w-32 rounded bg-surface-container-high" />
+                    <div class="mt-3 h-2.5 w-40 rounded bg-surface-container-high" />
+                </div>
+            </div>
+            <div class="mt-4 grid gap-4 xl:grid-cols-3">
+                <div
+                    class="animate-pulse rounded-lg border border-outline-variant bg-surface-container-low p-6 xl:col-span-2"
+                >
+                    <div class="h-3 w-40 rounded bg-surface-container-high" />
+                    <div class="mt-2 h-2.5 w-64 rounded bg-surface-container-high" />
+                    <div class="mt-6 flex h-56 items-end gap-2">
+                        <div
+                            v-for="(height, index) in SKELETON_BAR_HEIGHTS"
+                            :key="index"
+                            class="flex-1 rounded-t bg-surface-container-high"
+                            :style="{ height: `${height}%` }"
+                        />
+                    </div>
+                </div>
+                <div
+                    class="animate-pulse rounded-lg border border-outline-variant bg-surface-container-low p-6"
+                >
+                    <div class="h-3 w-28 rounded bg-surface-container-high" />
+                    <div class="mt-2 h-2.5 w-44 rounded bg-surface-container-high" />
+                    <div class="mt-6 flex flex-col gap-5">
+                        <div v-for="index in 5" :key="index">
+                            <div class="flex justify-between">
+                                <div class="h-2.5 w-24 rounded bg-surface-container-high" />
+                                <div class="h-2.5 w-16 rounded bg-surface-container-high" />
+                            </div>
+                            <div
+                                class="mt-2 h-2 rounded-full bg-surface-container-high"
+                                :style="{ width: `${100 - index * 15}%` }"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div
-                v-for="index in 6"
-                :key="index"
-                class="h-32 animate-pulse rounded-lg border border-outline-variant bg-surface-container"
-            />
-            <div
-                class="h-96 animate-pulse rounded-lg border border-outline-variant bg-surface-container sm:col-span-2 lg:col-span-3 2xl:col-span-6"
-            />
+                class="mt-8 animate-pulse overflow-hidden rounded-lg border border-outline-variant bg-surface-container-low"
+            >
+                <div class="flex gap-6 border-b border-outline-variant px-4 py-3">
+                    <div
+                        v-for="index in 7"
+                        :key="index"
+                        class="h-2.5 flex-1 rounded bg-surface-container-high"
+                    />
+                </div>
+                <div
+                    v-for="row in 8"
+                    :key="row"
+                    class="flex gap-6 border-b border-outline-variant px-4 py-4 last:border-b-0"
+                >
+                    <div
+                        v-for="index in 7"
+                        :key="index"
+                        class="h-3 flex-1 rounded bg-surface-container-high"
+                        :class="index === 1 ? 'max-w-[220px]' : ''"
+                    />
+                </div>
+            </div>
         </div>
 
         <div
-            v-else-if="reportQuery.isError.value && !report"
+            v-else-if="hasLoadError"
             class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low px-6 py-16 text-center"
         >
             <AlertTriangle class="mx-auto size-10 text-destructive" />
@@ -1378,7 +1458,7 @@ const menuItemClass =
                 variant="outline"
                 type="button"
                 class="mt-4 h-10 rounded px-5 text-xs uppercase tracking-wider"
-                @click="reportQuery.refetch()"
+                @click="refreshReport"
             >
                 <RefreshCw class="size-4" /> Reintentar
             </UiButton>

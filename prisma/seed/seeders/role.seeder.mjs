@@ -2,6 +2,15 @@ import { PERMISSION_SEEDS } from './permission.seeder.mjs'
 
 const ALL_PERMISSION_CODES = PERMISSION_SEEDS.map((permission) => permission.code)
 const ADMIN_PERMISSION_CODES = ALL_PERMISSION_CODES.filter((code) => code !== 'system.manage')
+const SUPPORT_COMMITTEE_PERMISSION_CODES = [
+    'finance.receive',
+    'support-committee.general_services',
+    'support-committee.received',
+    'tithes.view',
+    'tithes.create',
+    'tithes.update',
+    'tithes.delete',
+]
 
 export const ROLE_SEEDS = [
     {
@@ -61,7 +70,7 @@ export const ROLE_SEEDS = [
             'finance.view',
             'finance.record',
             'finance.manage',
-            'finance.receive',
+            ...SUPPORT_COMMITTEE_PERMISSION_CODES,
             'finance.audit',
             'reports.view',
             'reports.export',
@@ -71,7 +80,7 @@ export const ROLE_SEEDS = [
         name: 'Comité de apoyo',
         code: 'SUPPORT_COMMITTEE',
         description: 'Recibe y cuenta los sobres de ofrenda entregados por los líderes.',
-        permissionCodes: ['dashboard.view', 'finance.receive'],
+        permissionCodes: ['dashboard.view', ...SUPPORT_COMMITTEE_PERMISSION_CODES],
     },
     {
         name: 'Supervisor de sector',

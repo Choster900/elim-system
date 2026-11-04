@@ -7,7 +7,7 @@ import { saveTitheSchema } from '../../validators/tithe.validator'
 
 export default defineEventHandler(async (event) => {
     try {
-        const auth = requirePermission(event, 'finance.receive')
+        const auth = requirePermission(event, 'tithes.create')
         const dto = validateDto(saveTitheSchema, await readBody(event))
         const data = await createTithe(dto, auth.userId)
         return ApiResponseFactory.success(data, 'Diezmo registrado correctamente')

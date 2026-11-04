@@ -516,7 +516,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Offering receptions'],
                     summary: 'Envelopes waiting to be received',
                     description:
-                        'Requires finance.receive. Recorded dates without a reception, oldest first, paginated. Amounts are omitted so the count stays blind. search matches meeting title or code, leader name, sector or zone (case-insensitive).',
+                        'Requires finance.receive for kind=lideres, support-committee.general_services for kind=generales, and both without kind. Recorded dates without a reception, oldest first, paginated. Amounts are omitted so the count stays blind. search matches meeting title or code, leader name, sector or zone (case-insensitive).',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
@@ -561,7 +561,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             description:
                                 'data: { items, zones } with the zones that have pending envelopes; meta.pagination with totals',
                         },
-                        403: { description: 'Requires finance.receive' },
+                        403: { description: 'Missing the permission of the requested kind' },
                     },
                 },
             },
@@ -570,7 +570,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Offering receptions'],
                     summary: 'Received envelopes',
                     description:
-                        'Requires finance.receive. Dates filter the reception date. General services are visible to every user regardless of territorial scope.',
+                        'Requires support-committee.received; kind=generales is also allowed with support-committee.general_services. Dates filter the reception date. General services are visible to every user regardless of territorial scope.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -588,7 +588,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     ],
                     responses: {
                         200: { description: 'Receptions with their comparison' },
-                        403: { description: 'Requires finance.receive' },
+                        403: { description: 'Requires support-committee.received' },
                     },
                 },
             },
@@ -597,7 +597,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Offering receptions'],
                     summary: 'One envelope and its reception, if any',
                     description:
-                        'Requires finance.receive. While the envelope has not been received, no amounts are returned.',
+                        'Requires finance.receive (leader envelopes) or support-committee.general_services (general services); support-committee.received also opens envelopes that were already received. While the envelope has not been received, no amounts are returned.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -616,7 +616,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Offering receptions'],
                     summary: 'Receive an envelope',
                     description:
-                        'Requires finance.receive. Envelopes recorded by a leader are received by amount per offering type; general meetings without a leader are counted by bills and coins and the server computes their amounts. A note is required when the count does not match.',
+                        'Requires finance.receive for leader envelopes or support-committee.general_services for general services. Envelopes recorded by a leader are received by amount per offering type; general meetings without a leader are counted by bills and coins and the server computes their amounts. A note is required when the count does not match.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -645,7 +645,8 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 put: {
                     tags: ['Offering receptions'],
                     summary: 'Correct the count of a received envelope',
-                    description: 'Requires finance.receive. Records who corrected it and when.',
+                    description:
+                        'Requires finance.receive (leader envelopes) or support-committee.general_services (general services); support-committee.received also opens envelopes that were already received. Records who corrected it and when.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -674,7 +675,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Offering receptions'],
                     summary: 'Compare a count without saving it',
                     description:
-                        'Requires finance.receive. Returns, per offering type, what was recorded, what was counted and the difference.',
+                        'Requires finance.receive (leader envelopes) or support-committee.general_services (general services); support-committee.received also opens envelopes that were already received. Returns, per offering type, what was recorded, what was counted and the difference.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -701,7 +702,8 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 get: {
                     tags: ['Offering receptions'],
                     summary: 'Active bills and coins, in counting order',
-                    description: 'Requires finance.receive.',
+                    description:
+                        'Requires finance.receive, support-committee.general_services or support-committee.received.',
                     security: [{ BearerAuth: [] }],
                     responses: {
                         200: { description: 'Denomination catalog' },
@@ -713,7 +715,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Tithes'],
                     summary: 'Tithes received between two dates',
                     description:
-                        'Requires finance.receive. Without dates returns every tithe; from and to (both optional, inclusive) filter the tithe date. Ordered by tithe date then capture time, newest first, plus a summary with the count, distinct members and total.',
+                        'Requires tithes.view. Without dates returns every tithe; from and to (both optional, inclusive) filter the tithe date. Ordered by tithe date then capture time, newest first, plus a summary with the count, distinct members and total.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
@@ -729,14 +731,14 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     ],
                     responses: {
                         200: { description: 'Tithes and summary' },
-                        403: { description: 'Requires finance.receive' },
+                        403: { description: 'Requires tithes.view' },
                     },
                 },
                 post: {
                     tags: ['Tithes'],
                     summary: 'Register a tithe envelope',
                     description:
-                        'Requires finance.receive. Records the user who received it. The date cannot be in the future and the member must have an active TITHER community role.',
+                        'Requires tithes.create. Records the user who received it. The date cannot be in the future and the member must have an active TITHER community role.',
                     security: [{ BearerAuth: [] }],
                     requestBody: {
                         required: true,
@@ -758,7 +760,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Tithes'],
                     summary: 'Correct a tithe',
                     description:
-                        'Requires finance.receive. Records who corrected it. Changing the member requires the new one to be an active tither.',
+                        'Requires tithes.update. Records who corrected it. Changing the member requires the new one to be an active tither.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
@@ -779,7 +781,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                 delete: {
                     tags: ['Tithes'],
                     summary: 'Delete a tithe registered by mistake',
-                    description: 'Requires finance.receive. Returns the deleted tithe.',
+                    description: 'Requires tithes.delete. Returns the deleted tithe.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
@@ -795,7 +797,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Tithes'],
                     summary: 'Members a tithe can be registered to',
                     description:
-                        'Requires finance.receive. Non-deceased members whose TITHER community role is active today, ordered by name, with their sector and zone.',
+                        'Requires tithes.create or tithes.update. Non-deceased members whose TITHER community role is active today, ordered by name, with their sector and zone.',
                     security: [{ BearerAuth: [] }],
                     responses: {
                         200: { description: 'Tithers' },

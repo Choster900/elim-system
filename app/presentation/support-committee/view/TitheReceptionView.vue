@@ -8,6 +8,7 @@ import { formatLocalIsoDate } from '~/utils/date/date-format.util'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import SupportCommitteeTabs from '../components/SupportCommitteeTabs.vue'
 import TitheForm from '../components/TitheForm.vue'
+import { useSupportCommitteeAccess } from '../composables/useSupportCommitteeAccess'
 import { useDeleteTitheMutation } from '../composables/useTitheMutations'
 import { useTithesQuery } from '../composables/useTitheQueries'
 import type { TitheRecord } from '../interfaces/tithe.interface'
@@ -23,6 +24,7 @@ const UNKNOWN_RECEIVER = 'Sin usuario'
 
 const toast = useAppToast()
 const today = localIsoDate()
+const { canCreateTithes, canUpdateTithes, canDeleteTithes } = useSupportCommitteeAccess()
 
 const tithesQuery = useTithesQuery()
 const deleteMutation = useDeleteTitheMutation()
@@ -30,6 +32,10 @@ const deleteMutation = useDeleteTitheMutation()
 const editing = ref<TitheRecord | null>(null)
 const deletingId = ref<number | null>(null)
 const formRef = ref<InstanceType<typeof TitheForm> | null>(null)
+const showForm = computed(
+    () => canCreateTithes.value || (editing.value !== null && canUpdateTithes.value),
+)
+const hasRowActions = computed(() => canUpdateTithes.value || canDeleteTithes.value)
 
 const tithes = computed(() => tithesQuery.data.value?.items ?? [])
 
@@ -85,7 +91,9 @@ const columns = computed<DataTableColumn<TitheRecord>[]>(() => [
         width: '190px',
     },
     { key: 'notes', label: 'Nota', accessor: (row) => row.notes ?? '' },
-    { key: 'actions', label: '', align: 'right', width: '96px' },
+    ...(hasRowActions.value
+        ? [{ key: 'actions', label: '', align: 'right' as const, width: '96px' }]
+        : []),
 ])
 
 const loadError = computed(() =>
@@ -104,6 +112,7 @@ function dateLabel(isoDate: string) {
 }
 
 function startEditing(tithe: TitheRecord) {
+    if (!canUpdateTithes.value) return
     editing.value = tithe
     nextTick(() => {
         const element = formRef.value?.$el as HTMLElement | undefined
@@ -114,6 +123,7 @@ function startEditing(tithe: TitheRecord) {
 }
 
 async function removeTithe(tithe: TitheRecord) {
+    if (!canDeleteTithes.value) return
     const confirmed = window.confirm(
         `¿Eliminar el diezmo de ${tithe.member.fullName} por ${formatMoney(tithe.amount)}? Úsalo solo si se registró por error.`,
     )
@@ -182,6 +192,7 @@ const iconButtonClass =
         <SupportCommitteeTabs active="tithes" />
 
         <TitheForm
+            v-if="showForm"
             ref="formRef"
             class="mt-4 scroll-mt-24"
             :editing="editing"
@@ -209,9 +220,11 @@ const iconButtonClass =
                 :loading="tithesQuery.isPending.value"
                 :empty-title="tithes.length === 0 ? 'Aún no hay diezmos' : 'Sin resultados'"
                 :empty-message="
-                    tithes.length === 0
-                        ? 'Registra el primer sobre con el formulario de arriba.'
-                        : 'Ningún diezmo coincide con los filtros.'
+                    tithes.length > 0
+                        ? 'Ningún diezmo coincide con los filtros.'
+                        : canCreateTithes
+                          ? 'Registra el primer sobre con el formulario de arriba.'
+                          : 'El comité todavía no ha registrado diezmos.'
                 "
             >
                 <template #cell-date="{ row }">
@@ -257,6 +270,7 @@ const iconButtonClass =
                 <template #cell-actions="{ row }">
                     <div class="flex justify-end">
                         <button
+                            v-if="canUpdateTithes"
                             type="button"
                             :class="[
                                 iconButtonClass,
@@ -271,6 +285,7 @@ const iconButtonClass =
                             <Pencil class="size-4" />
                         </button>
                         <button
+                            v-if="canDeleteTithes"
                             type="button"
                             :class="[
                                 iconButtonClass,

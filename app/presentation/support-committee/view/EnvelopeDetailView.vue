@@ -14,7 +14,9 @@ import DirectCountSummary from '../components/DirectCountSummary.vue'
 import ReceptionComparison from '../components/ReceptionComparison.vue'
 import ReceptionStatusBadge from '../components/ReceptionStatusBadge.vue'
 import ReceptionSteps from '../components/ReceptionSteps.vue'
+import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import { useEnvelopeQuery, usePendingEnvelopesQuery } from '../composables/useReceptionQueries'
+import { useSupportCommitteeAccess } from '../composables/useSupportCommitteeAccess'
 import {
     RECEIVED_ENVELOPES_PATH,
     GENERAL_SERVICES_PATH,
@@ -24,10 +26,14 @@ import {
     formatMoney,
     shortDateLabel,
 } from '../utils/reception-format.util'
+import { resolveSupportCommitteeHome } from '../utils/support-committee-access.util'
 
 defineOptions({ name: 'EnvelopeDetailView' })
 
 const route = useRoute()
+const authStore = useAuthStore()
+const { canReceivePending, canHandleGeneralServices, canViewReceived } = useSupportCommitteeAccess()
+const committeeHome = computed(() => resolveSupportCommitteeHome(authStore.hasPermission))
 
 const occurrenceId = computed(() => {
     const raw = Number(route.params.occurrenceId)
@@ -42,6 +48,17 @@ const envelopeQuery = useEnvelopeQuery(occurrenceId)
 const envelope = computed(() => envelopeQuery.data.value?.envelope ?? null)
 const isGeneral = computed(() => envelope.value?.isGeneral ?? false)
 const inboxPath = computed(() => (isGeneral.value ? GENERAL_SERVICES_PATH : SUPPORT_COMMITTEE_HOME))
+const canOpenInbox = computed(() =>
+    isGeneral.value ? canHandleGeneralServices.value : canReceivePending.value,
+)
+const backLink = computed(() => {
+    if (!finishedAs.value && canViewReceived.value) {
+        return { to: RECEIVED_ENVELOPES_PATH, label: 'Volver a recibidos' }
+    }
+    if (canOpenInbox.value) return { to: inboxPath.value, label: 'Volver a la bandeja' }
+    if (canViewReceived.value) return { to: RECEIVED_ENVELOPES_PATH, label: 'Volver a recibidos' }
+    return { to: committeeHome.value, label: 'Volver al comité' }
+})
 
 const pendingQuery = usePendingEnvelopesQuery(
     computed(() => ({
@@ -49,6 +66,7 @@ const pendingQuery = usePendingEnvelopesQuery(
         limit: 2,
         kind: isGeneral.value ? ('generales' as const) : ('lideres' as const),
     })),
+    computed(() => envelope.value !== null && canOpenInbox.value),
 )
 
 const reception = computed(() => envelopeQuery.data.value?.reception ?? null)
@@ -86,11 +104,11 @@ watch(
     <main class="mx-auto w-full max-w-system px-4 pb-24 pt-24 sm:px-6 lg:px-10">
         <div class="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <NuxtLink
-                :to="finishedAs ? inboxPath : RECEIVED_ENVELOPES_PATH"
+                :to="backLink.to"
                 class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface"
             >
                 <ArrowLeft class="size-4" />
-                {{ finishedAs ? 'Volver a la bandeja' : 'Volver a recibidos' }}
+                {{ backLink.label }}
             </NuxtLink>
             <ReceptionSteps v-if="finishedAs" :current="3" />
         </div>
@@ -102,10 +120,10 @@ watch(
             <AlertTriangle class="size-8 text-destructive" />
             <p class="text-sm text-destructive">{{ loadError }}</p>
             <NuxtLink
-                :to="SUPPORT_COMMITTEE_HOME"
+                :to="committeeHome"
                 class="text-sm font-semibold text-primary hover:underline"
             >
-                Volver a la bandeja
+                Volver al comité
             </NuxtLink>
         </div>
 

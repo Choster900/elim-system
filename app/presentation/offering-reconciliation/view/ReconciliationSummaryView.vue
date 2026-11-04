@@ -76,7 +76,7 @@ const receivedCount = computed(() =>
 )
 
 const authStore = useAuthStore()
-const canViewTithes = computed(() => authStore.hasPermission(routePermissionCodes.financeReceive))
+const canViewTithes = computed(() => authStore.hasPermission(routePermissionCodes.tithesView))
 
 const tithes = computed(() => summary.value?.tithes ?? { count: 0, members: 0, amount: 0 })
 const committeeTotal = computed(() =>

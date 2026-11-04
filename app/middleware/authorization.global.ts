@@ -7,13 +7,14 @@ import {
 } from '~/presentation/auth/utils/accessible-home-path.util'
 import type { RouteLocationNormalized } from 'vue-router'
 
-function resolveRequiredPermission(to: RouteLocationNormalized) {
+function resolveRequiredPermissions(to: RouteLocationNormalized) {
     const section = typeof to.query.section === 'string' ? to.query.section : null
     if (section && to.meta.sectionPermissions?.[section]) {
-        return to.meta.sectionPermissions[section]
+        return [to.meta.sectionPermissions[section]]
     }
+    if (to.meta.requiredAnyPermissions?.length) return to.meta.requiredAnyPermissions
 
-    return to.meta.requiredPermission
+    return to.meta.requiredPermission ? [to.meta.requiredPermission] : []
 }
 
 export default defineNuxtRouteMiddleware(async (to) => {
@@ -82,13 +83,16 @@ export default defineNuxtRouteMiddleware(async (to) => {
         return navigateTo(resolveAccessibleHomePath(authStore.permissionCodes))
     }
 
-    const requiredPermission = resolveRequiredPermission(to)
-    if (requiredPermission && !authStore.hasPermission(requiredPermission)) {
+    const requiredPermissions = resolveRequiredPermissions(to)
+    if (
+        requiredPermissions.length > 0 &&
+        !requiredPermissions.some((permission) => authStore.hasPermission(permission))
+    ) {
         return navigateTo({
             path: '/acceso-denegado',
             query: {
                 from: to.fullPath,
-                permission: requiredPermission,
+                permission: requiredPermissions.join(','),
                 destination: resolveAccessibleHomePath(authStore.permissionCodes),
             },
             replace: true,

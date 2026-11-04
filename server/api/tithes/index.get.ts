@@ -7,7 +7,7 @@ import { titheFiltersSchema } from '../../validators/tithe.validator'
 
 export default defineEventHandler(async (event) => {
     try {
-        requirePermission(event, 'finance.receive')
+        requirePermission(event, 'tithes.view')
         const filters = validateDto(titheFiltersSchema, getQuery(event))
         const data = await getTithes(filters)
         return ApiResponseFactory.success(data, 'Diezmos obtenidos correctamente')

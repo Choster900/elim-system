@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/vue-query'
+import { toValue, type MaybeRefOrGetter } from 'vue'
 import { queryKeys } from '~/constants/query-keys'
 import { useApiClient } from '~/presentation/shared/composables/useApiClient'
 import type {
@@ -17,20 +18,25 @@ import {
 
 export function usePendingEnvelopesQuery(
     params: Ref<PendingEnvelopesParams> | ComputedRef<PendingEnvelopesParams>,
+    enabled: MaybeRefOrGetter<boolean> = true,
 ) {
     const apiClient = useApiClient()
 
     return useQuery({
         queryKey: computed(() => queryKeys.offeringReceptions.pendingPage(params.value)),
         queryFn: ({ signal }) => getPendingEnvelopes(apiClient, params.value, signal),
+        enabled: computed(() => toValue(enabled)),
         placeholderData: (previous) => previous,
         refetchInterval: 60_000,
         refetchOnWindowFocus: true,
     })
 }
 
-export function usePendingCountQuery(kind: PendingKind) {
-    const query = usePendingEnvelopesQuery(computed(() => ({ page: 1, limit: 1, kind })))
+export function usePendingCountQuery(kind: PendingKind, enabled: MaybeRefOrGetter<boolean> = true) {
+    const query = usePendingEnvelopesQuery(
+        computed(() => ({ page: 1, limit: 1, kind })),
+        enabled,
+    )
     return computed(() => query.data.value?.pagination.totalItems ?? null)
 }
 

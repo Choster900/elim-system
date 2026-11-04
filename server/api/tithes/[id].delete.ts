@@ -6,7 +6,7 @@ import { getPositiveIntegerParam } from '../../utils/http/route-parameter.util'
 
 export default defineEventHandler(async (event) => {
     try {
-        requirePermission(event, 'finance.receive')
+        requirePermission(event, 'tithes.delete')
         const id = getPositiveIntegerParam(event, 'id')
         const data = await deleteTithe(id)
         return ApiResponseFactory.success(data, 'Diezmo eliminado correctamente')

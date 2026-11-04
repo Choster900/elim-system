@@ -2,6 +2,7 @@
 import { Church, HandCoins, Inbox, ListChecks } from '@lucide/vue'
 import type { Component } from 'vue'
 import { usePendingCountQuery } from '../composables/useReceptionQueries'
+import { useSupportCommitteeAccess } from '../composables/useSupportCommitteeAccess'
 import {
     GENERAL_SERVICES_PATH,
     RECEIVED_ENVELOPES_PATH,
@@ -15,35 +16,52 @@ defineProps<{
     active: SupportCommitteeTab
 }>()
 
-const leaderCount = usePendingCountQuery('lideres')
-const generalCount = usePendingCountQuery('generales')
+const { canReceivePending, canHandleGeneralServices, canViewReceived, canViewTithes } =
+    useSupportCommitteeAccess()
+
+const leaderCount = usePendingCountQuery('lideres', canReceivePending)
+const generalCount = usePendingCountQuery('generales', canHandleGeneralServices)
 
 const tabs = computed<
     { key: SupportCommitteeTab; label: string; to: string; icon: Component; count: number | null }[]
->(() => [
-    {
-        key: 'pending',
-        label: 'Por recibir',
-        to: SUPPORT_COMMITTEE_HOME,
-        icon: Inbox,
-        count: leaderCount.value,
-    },
-    {
-        key: 'generals',
-        label: 'Cultos generales',
-        to: GENERAL_SERVICES_PATH,
-        icon: Church,
-        count: generalCount.value,
-    },
-    {
-        key: 'received',
-        label: 'Recibidos',
-        to: RECEIVED_ENVELOPES_PATH,
-        icon: ListChecks,
-        count: null,
-    },
-    { key: 'tithes', label: 'Diezmos', to: TITHES_PATH, icon: HandCoins, count: null },
-])
+>(() =>
+    [
+        {
+            key: 'pending' as const,
+            label: 'Por recibir',
+            to: SUPPORT_COMMITTEE_HOME,
+            icon: Inbox,
+            count: leaderCount.value,
+            visible: canReceivePending.value,
+        },
+        {
+            key: 'generals' as const,
+            label: 'Cultos generales',
+            to: GENERAL_SERVICES_PATH,
+            icon: Church,
+            count: generalCount.value,
+            visible: canHandleGeneralServices.value,
+        },
+        {
+            key: 'received' as const,
+            label: 'Recibidos',
+            to: RECEIVED_ENVELOPES_PATH,
+            icon: ListChecks,
+            count: null,
+            visible: canViewReceived.value,
+        },
+        {
+            key: 'tithes' as const,
+            label: 'Diezmos',
+            to: TITHES_PATH,
+            icon: HandCoins,
+            count: null,
+            visible: canViewTithes.value,
+        },
+    ]
+        .filter((tab) => tab.visible)
+        .map(({ visible: _visible, ...tab }) => tab),
+)
 
 const tabClass =
     'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition-colors'
