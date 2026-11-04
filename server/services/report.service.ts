@@ -7,9 +7,11 @@ import type {
 import { personName } from '../repositories/occurrence.repository'
 import { statusFromDb as receptionStatusFromDb } from '../repositories/reception.repository'
 import {
-    findMeetingReportOccurrences,
+    findMeetingReportReceptions,
+    findMeetingReportTithes,
     findReportCategories,
-    type MeetingReportOccurrence,
+    type MeetingReportReception,
+    type MeetingReportTithe,
 } from '../repositories/report.repository'
 import { meetingFullCode } from '../utils/code/entity-code.util'
 
@@ -28,14 +30,35 @@ function fullName(person: { firstName: string; lastName: string } | null) {
     return [person.firstName, person.lastName].filter(Boolean).join(' ') || null
 }
 
-function toReportRow(occurrence: MeetingReportOccurrence): MeetingReportRowDto {
-    const { meeting, sector, offeringReception: reception } = occurrence
-    const isRecorded = occurrence.status === 'RECORDED'
-    const totalCents = occurrence.totalAmount === null ? null : toCents(occurrence.totalAmount)
-    const detailCents = occurrence.details.reduce((sum, detail) => sum + toCents(detail.amount), 0)
+function memberFullName(member: MeetingReportTithe['member']) {
+    return [member.firstName, member.middleName, member.lastName, member.secondLastName]
+        .filter(Boolean)
+        .join(' ')
+}
+
+function categorizedOfferings(details: MeetingReportReception['details']) {
+    const cents = new Map<number, number>()
+    for (const detail of details) {
+        if (detail.categoryId === null) continue
+        cents.set(detail.categoryId, (cents.get(detail.categoryId) ?? 0) + toCents(detail.amount))
+    }
+    return [...cents]
+        .filter(([, amount]) => amount !== 0)
+        .map(([categoryId, amount]) => ({ categoryId, cents: amount }))
+}
+
+function toReportRow(reception: MeetingReportReception): MeetingReportRowDto {
+    const { occurrence } = reception
+    const { meeting, sector } = occurrence
+    const receivedCents = toCents(reception.receivedAmount)
+    const offerings = categorizedOfferings(reception.details)
+    const categorizedCents = offerings.reduce((sum, offering) => sum + offering.cents, 0)
 
     return {
-        id: occurrence.id,
+        key: `r-${reception.id}`,
+        source: 'reunion',
+        id: reception.id,
+        occurrenceId: reception.occurrenceId,
         meetingId: occurrence.meetingId,
         meetingCode: meetingFullCode(meeting.code, meeting.sector),
         meetingTitle: meeting.title,
@@ -47,7 +70,6 @@ function toReportRow(occurrence: MeetingReportOccurrence): MeetingReportRowDto {
         date: occurrence.date.toISOString().slice(0, 10),
         startTime: meeting.startTime.toISOString().slice(11, 16),
         endTime: meeting.endTime.toISOString().slice(11, 16),
-        status: isRecorded ? 'registrada' : 'pendiente',
         districtId: sector?.zone.district.id ?? null,
         districtName: sector?.zone.district.name ?? null,
         zoneId: sector?.zone.id ?? null,
@@ -55,29 +77,63 @@ function toReportRow(occurrence: MeetingReportOccurrence): MeetingReportRowDto {
         sectorId: sector?.id ?? null,
         sectorName: sector?.name ?? null,
         leaderName: fullName(occurrence.leader),
-        attendance: isRecorded ? occurrence.attendance : null,
-        totalAmount: isRecorded ? fromCents(totalCents ?? detailCents) : null,
-        uncategorizedAmount: isRecorded
-            ? fromCents(Math.max(0, (totalCents ?? 0) - detailCents))
-            : 0,
-        offerings: occurrence.details
-            .filter((detail) => toCents(detail.amount) !== 0)
-            .map((detail) => ({
-                categoryId: detail.categoryId,
-                amount: fromCents(toCents(detail.amount)),
-            })),
-        reception: reception
-            ? {
-                  status: receptionStatusFromDb(reception.status),
-                  receivedAmount: fromCents(toCents(reception.receivedAmount)),
-                  difference: fromCents(toCents(reception.amountDifference)),
-                  directEntry: reception.directEntry,
-                  isClosed: reception.closedAt !== null,
-                  receivedAt: reception.receivedAt.toISOString(),
-              }
-            : null,
-        recordedByName: personName(occurrence.recordedBy),
-        recordedAt: occurrence.recordedAt?.toISOString() ?? null,
+        titherId: null,
+        titherCode: null,
+        titherName: null,
+        notes: null,
+        receivedAmount: fromCents(receivedCents),
+        uncategorizedAmount: fromCents(Math.max(0, receivedCents - categorizedCents)),
+        offerings: offerings.map((offering) => ({
+            categoryId: offering.categoryId,
+            amount: fromCents(offering.cents),
+        })),
+        status: receptionStatusFromDb(reception.status),
+        isClosed: reception.closedAt !== null,
+        directEntry: reception.directEntry,
+        receivedByName: personName(reception.receivedBy),
+        receivedAt: reception.receivedAt.toISOString(),
+    }
+}
+
+function toTitheRow(tithe: MeetingReportTithe): MeetingReportRowDto {
+    const { member } = tithe
+    const sector = member.territorySector
+
+    return {
+        key: `d-${tithe.id}`,
+        source: 'diezmo',
+        id: tithe.id,
+        occurrenceId: null,
+        meetingId: null,
+        meetingCode: null,
+        meetingTitle: null,
+        meetingColor: null,
+        meetingTypeId: null,
+        meetingTypeName: null,
+        isGeneral: false,
+        isMeetingActive: true,
+        date: tithe.date.toISOString().slice(0, 10),
+        startTime: null,
+        endTime: null,
+        districtId: sector?.zone.district.id ?? null,
+        districtName: sector?.zone.district.name ?? null,
+        zoneId: sector?.zone.id ?? null,
+        zoneName: sector?.zone.name ?? null,
+        sectorId: sector?.id ?? null,
+        sectorName: sector?.name ?? null,
+        leaderName: null,
+        titherId: member.id,
+        titherCode: member.code,
+        titherName: memberFullName(member),
+        notes: tithe.notes,
+        receivedAmount: fromCents(toCents(tithe.amount)),
+        uncategorizedAmount: 0,
+        offerings: [],
+        status: null,
+        isClosed: false,
+        directEntry: false,
+        receivedByName: personName(tithe.receivedBy),
+        receivedAt: tithe.receivedAt.toISOString(),
     }
 }
 
@@ -85,11 +141,12 @@ export async function getMeetingReport(
     scope: OccurrenceScopeFilter,
     query: MeetingReportQueryDto,
 ): Promise<MeetingReportDto> {
-    const [occurrences, categories] = await Promise.all([
-        findMeetingReportOccurrences(scope, query.from, query.to),
+    const [receptions, tithes, categories] = await Promise.all([
+        findMeetingReportReceptions(scope, query.from, query.to),
+        findMeetingReportTithes(scope, query.from, query.to),
         findReportCategories(),
     ])
-    const rows = occurrences.map(toReportRow)
+    const rows = [...receptions.map(toReportRow), ...tithes.map(toTitheRow)]
     const usedCategoryIds = new Set(
         rows.flatMap((row) => row.offerings.map((offering) => offering.categoryId)),
     )

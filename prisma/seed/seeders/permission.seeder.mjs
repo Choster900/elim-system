@@ -8,6 +8,14 @@ export const PERMISSION_SEEDS = [
         description: 'Consultar indicadores y accesos del panel principal.',
     },
     {
+        name: 'Ver cultos generales en el panel',
+        code: 'dashboard.general_services',
+        module: 'General',
+        resource: 'dashboard',
+        action: 'general_services',
+        description: 'Consultar la pestaña de cultos generales del panel principal.',
+    },
+    {
         name: 'Gestión total del sistema',
         code: 'system.manage',
         module: 'Seguridad',

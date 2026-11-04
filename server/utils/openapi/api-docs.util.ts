@@ -997,7 +997,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                             name: 'kind',
                             in: 'query',
                             description:
-                                'reuniones: sector meetings only, scoped by the caller. generales: general services only, visible to every caller and never filtered by district.',
+                                'reuniones: sector meetings only, scoped by the caller. generales: general services only, requires dashboard.general_services and is never filtered by district.',
                             schema: {
                                 type: 'string',
                                 enum: ['reuniones', 'generales'],
@@ -1031,23 +1031,26 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     responses: {
                         200: { description: 'Summary for the requested period' },
                         400: { description: 'Validation error' },
-                        403: { description: 'Requires dashboard.view' },
+                        403: {
+                            description:
+                                'Requires dashboard.view; kind=generales also requires dashboard.general_services',
+                        },
                     },
                 },
             },
             '/api/reports/meetings': {
                 get: {
                     tags: ['Reports'],
-                    summary: 'Meetings and offerings report',
+                    summary: 'Received offerings and tithes report',
                     description:
-                        'One row per meeting occurrence whose date falls inside the range, scoped by the caller (supervisors only receive their sectors). Recorded occurrences are always included; pending ones only for active meetings. Each row carries its offering amounts per category, the amount not assigned to a category and the support committee reception, so the client can total by meeting, district or category. Read-only: it never generates occurrences.',
+                        'One row per offering envelope received by the support committee (source: reunion, cancelled receptions excluded) whose meeting date falls inside the range, plus one row per tithe (source: diezmo) whose tithe date falls inside the range. Rows are scoped by the caller: supervisors only receive meetings of their sectors and tithes of members assigned to their sectors. Amounts are the counted amounts, never what the leader recorded: each meeting row carries the received total, the received amount per category and the part not assigned to a category; tithe rows carry the tither and no meeting, category or reconciliation status.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
                             name: 'from',
                             in: 'query',
                             required: true,
-                            description: 'Range start (inclusive), by meeting date.',
+                            description: 'Range start (inclusive), by meeting or tithe date.',
                             schema: { type: 'string', format: 'date', example: '2026-10-01' },
                         },
                         {
@@ -1059,7 +1062,10 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                         },
                     ],
                     responses: {
-                        200: { description: 'Report rows, offering categories and the range' },
+                        200: {
+                            description:
+                                'Received envelopes and tithes, offering categories and the range',
+                        },
                         400: { description: 'Validation error' },
                         403: { description: 'Requires reports.view' },
                     },

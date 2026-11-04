@@ -4,12 +4,17 @@ import {
 } from '~/presentation/meetings/utils/meeting-format.util'
 import { formatLocalIsoDate } from '~/utils/date/date-format.util'
 import type {
+    MeetingReportAggregate,
     MeetingReportRow,
-    ReportOccurrenceStatus,
-    ReportReception,
+    ReportReceptionState,
 } from '../interfaces/meeting-report.interface'
 
 const REPORT_LOCALE = 'es-SV'
+
+export const TITHE_LABEL = 'Diezmo'
+export const TITHES_LABEL = 'Diezmos individuales'
+export const TITHE_COLOR = '#C9A227'
+export const TITHES_TERRITORY_LABEL = 'Según cada diezmador'
 
 const moneyFormatter = new Intl.NumberFormat(REPORT_LOCALE, {
     style: 'currency',
@@ -18,25 +23,10 @@ const moneyFormatter = new Intl.NumberFormat(REPORT_LOCALE, {
     maximumFractionDigits: 2,
 })
 
-const plainMoneyFormatter = new Intl.NumberFormat(REPORT_LOCALE, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-})
-
 const numberFormatter = new Intl.NumberFormat(REPORT_LOCALE, { maximumFractionDigits: 1 })
 
 export function formatReportMoney(value: number | null | undefined) {
     return moneyFormatter.format(value ?? 0)
-}
-
-export function formatReportAmount(value: number | null | undefined) {
-    return plainMoneyFormatter.format(value ?? 0)
-}
-
-export function formatReportSignedMoney(value: number | null | undefined) {
-    const amount = value ?? 0
-    if (amount === 0) return formatReportMoney(0)
-    return `${amount > 0 ? '+' : '-'}${formatReportMoney(Math.abs(amount))}`
 }
 
 export function formatReportNumber(value: number | null | undefined) {
@@ -93,15 +83,45 @@ export function reportDistrictLabel(row: Pick<MeetingReportRow, 'isGeneral' | 'd
     return row.isGeneral ? GENERAL_MEETING_SCOPE_LABEL : UNASSIGNED_MEETING_SCOPE_LABEL
 }
 
-export function reportStatusLabel(status: ReportOccurrenceStatus) {
-    return status === 'registrada' ? 'Registrada' : 'Pendiente'
+type AggregateTerritory = Pick<
+    MeetingReportAggregate,
+    'source' | 'isGeneral' | 'sectorName' | 'zoneName' | 'districtName'
+>
+
+export function reportAggregateTerritoryLabel(item: AggregateTerritory) {
+    return item.source === 'diezmo' ? TITHES_TERRITORY_LABEL : reportTerritoryLabel(item)
 }
 
-export function reportReceptionLabel(
-    reception: ReportReception | null,
-    status: ReportOccurrenceStatus,
+export function reportAggregateDistrictLabel(item: AggregateTerritory) {
+    return item.source === 'diezmo' ? TITHES_TERRITORY_LABEL : reportDistrictLabel(item)
+}
+
+export function reportRowTitle(
+    row: Pick<MeetingReportRow, 'source' | 'meetingTitle' | 'titherName'>,
 ) {
-    if (!reception) return status === 'registrada' ? 'Sin entregar' : '—'
-    if (reception.status === 'cuadra') return 'Cuadra'
-    return reception.isClosed ? 'Diferencia cerrada' : 'Con diferencia'
+    return row.source === 'diezmo' ? (row.titherName ?? TITHE_LABEL) : (row.meetingTitle ?? '')
+}
+
+export function reportRowCode(
+    row: Pick<MeetingReportRow, 'source' | 'meetingCode' | 'titherCode'>,
+) {
+    return (row.source === 'diezmo' ? row.titherCode : row.meetingCode) ?? ''
+}
+
+export function reportRowType(row: Pick<MeetingReportRow, 'source' | 'meetingTypeName'>) {
+    return row.source === 'diezmo' ? TITHE_LABEL : (row.meetingTypeName ?? '')
+}
+
+export function reportRowColor(row: Pick<MeetingReportRow, 'source' | 'meetingColor'>) {
+    return row.source === 'diezmo' ? TITHE_COLOR : (row.meetingColor ?? TITHE_COLOR)
+}
+
+export const receptionStateLabels: Record<ReportReceptionState, string> = {
+    cuadra: 'Cuadra',
+    diferencia_abierta: 'Con diferencia',
+    diferencia_cerrada: 'Diferencia cerrada',
+}
+
+export function reportStateLabel(state: ReportReceptionState | null) {
+    return state ? receptionStateLabels[state] : TITHE_LABEL
 }

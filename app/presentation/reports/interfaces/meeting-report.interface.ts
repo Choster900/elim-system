@@ -1,35 +1,30 @@
-export type ReportOccurrenceStatus = 'registrada' | 'pendiente'
-
 export type ReportReceptionStatus = 'cuadra' | 'con_diferencia'
+
+export type ReportReceptionState = 'cuadra' | 'diferencia_abierta' | 'diferencia_cerrada'
+
+export type ReportRowSource = 'reunion' | 'diezmo'
 
 export interface ReportOffering {
     categoryId: number
     amount: number
 }
 
-export interface ReportReception {
-    status: ReportReceptionStatus
-    receivedAmount: number
-    difference: number
-    directEntry: boolean
-    isClosed: boolean
-    receivedAt: string
-}
-
 export interface MeetingReportRow {
+    key: string
+    source: ReportRowSource
     id: number
-    meetingId: number
-    meetingCode: string
-    meetingTitle: string
-    meetingColor: string
-    meetingTypeId: number
-    meetingTypeName: string
+    occurrenceId: number | null
+    meetingId: number | null
+    meetingCode: string | null
+    meetingTitle: string | null
+    meetingColor: string | null
+    meetingTypeId: number | null
+    meetingTypeName: string | null
     isGeneral: boolean
     isMeetingActive: boolean
     date: string
-    startTime: string
-    endTime: string
-    status: ReportOccurrenceStatus
+    startTime: string | null
+    endTime: string | null
     districtId: number | null
     districtName: string | null
     zoneId: number | null
@@ -37,13 +32,18 @@ export interface MeetingReportRow {
     sectorId: number | null
     sectorName: string | null
     leaderName: string | null
-    attendance: number | null
-    totalAmount: number | null
+    titherId: number | null
+    titherCode: string | null
+    titherName: string | null
+    notes: string | null
+    receivedAmount: number
     uncategorizedAmount: number
     offerings: ReportOffering[]
-    reception: ReportReception | null
-    recordedByName: string | null
-    recordedAt: string | null
+    status: ReportReceptionStatus | null
+    isClosed: boolean
+    directEntry: boolean
+    receivedByName: string | null
+    receivedAt: string
 }
 
 export interface ReportCategory {
@@ -68,13 +68,13 @@ export interface ReportDateRange {
     to: string
 }
 
-export type ReportMeetingKind = 'todas' | 'celulas' | 'generales'
+export type ReportMeetingKind = 'todas' | 'celulas' | 'generales' | 'diezmos'
 
-export type ReportStatusFilter = 'todas' | ReportOccurrenceStatus
+export type ReportStateFilter = 'todas' | ReportReceptionState
 
 export interface MeetingReportFilters {
     kind: ReportMeetingKind
-    status: ReportStatusFilter
+    state: ReportStateFilter
     meetingTypeIds: number[]
     districtId: number | null
     zoneId: number | null
@@ -83,25 +83,29 @@ export interface MeetingReportFilters {
 
 export interface ReportSummary {
     meetingCount: number
-    occurrenceCount: number
-    recordedCount: number
-    pendingCount: number
-    complianceRate: number | null
-    totalOfferings: number
-    averagePerOccurrence: number
+    envelopeCount: number
+    meetingEnvelopeCount: number
+    totalReceived: number
+    meetingTotal: number
+    averagePerEnvelope: number
     averagePerMeeting: number
-    totalAttendance: number
-    averageAttendance: number
-    offeringPerAttendee: number
-    receivedCount: number
-    receivedAmount: number
-    receivedDifference: number
-    discrepancyCount: number
-    unreceivedCount: number
+    balancedCount: number
+    openDiscrepancyCount: number
+    closedDiscrepancyCount: number
+    directEntryCount: number
+    balancedRate: number | null
+    titheCount: number
+    titherCount: number
+    titheTotal: number
+    averagePerTither: number
+    averagePerTithe: number
+    largestTithe: number
 }
 
 export interface MeetingReportAggregate {
-    meetingId: number
+    key: string
+    source: ReportRowSource
+    meetingId: number | null
     meetingCode: string
     meetingTitle: string
     meetingColor: string
@@ -112,41 +116,49 @@ export interface MeetingReportAggregate {
     zoneName: string | null
     sectorName: string | null
     leaderName: string | null
-    occurrenceCount: number
-    recordedCount: number
-    pendingCount: number
-    attendance: number
-    averageAttendance: number
+    envelopeCount: number
+    openDiscrepancyCount: number
     categoryAmounts: Record<number, number>
     uncategorizedAmount: number
-    totalOfferings: number
-    averageOffering: number
+    titheAmount: number
+    totalReceived: number
+    averagePerEnvelope: number
     share: number
-    receivedAmount: number
-    receivedDifference: number
     firstDate: string
     lastDate: string
-    lastRecordedDate: string | null
+}
+
+export interface TitherReportAggregate {
+    key: string
+    titherId: number
+    titherCode: string
+    titherName: string
+    isGeneral: boolean
+    districtName: string | null
+    zoneName: string | null
+    sectorName: string | null
+    envelopeCount: number
+    totalReceived: number
+    averagePerEnvelope: number
+    titheShare: number
+    share: number
+    firstDate: string
+    lastDate: string
 }
 
 export interface DistrictReportAggregate {
     key: string
     districtName: string
     meetingCount: number
-    occurrenceCount: number
-    recordedCount: number
-    pendingCount: number
-    attendance: number
-    averageAttendance: number
-    totalOfferings: number
-    averageOffering: number
+    titherCount: number
+    envelopeCount: number
+    totalReceived: number
+    averagePerEnvelope: number
     share: number
-    receivedAmount: number
-    receivedDifference: number
 }
 
 export interface CategoryReportTotal {
-    id: number | 'uncategorized'
+    id: number | 'uncategorized' | 'tithes'
     name: string
     amount: number
     share: number
@@ -163,6 +175,5 @@ export type ReportTrendGranularity = 'day' | 'week' | 'month'
 
 export interface ReportTrend {
     granularity: ReportTrendGranularity
-    offerings: ReportTrendPoint[]
-    attendance: ReportTrendPoint[]
+    received: ReportTrendPoint[]
 }

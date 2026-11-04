@@ -6,39 +6,52 @@ import type {
     ReportCategory,
     ReportDateRange,
     ReportSummary,
+    TitherReportAggregate,
 } from '../interfaces/meeting-report.interface'
-import { UNCATEGORIZED_LABEL, sumAttendance, sumCategory } from '../utils/meeting-report.util'
 import {
+    UNCATEGORIZED_LABEL,
+    isTitheRow,
+    receptionState,
+    sumCategory,
+} from '../utils/meeting-report.util'
+import {
+    TITHES_LABEL,
     formatReportDate,
     formatReportDateTime,
     formatReportMoney,
     formatReportNumber,
     formatReportPercent,
     formatReportRange,
-    formatReportSignedMoney,
     formatReportWeekday,
+    reportAggregateDistrictLabel,
+    reportAggregateTerritoryLabel,
     reportDistrictLabel,
-    reportReceptionLabel,
-    reportStatusLabel,
+    reportRowCode,
+    reportRowTitle,
+    reportRowType,
+    reportStateLabel,
     reportTerritoryLabel,
 } from '../utils/report-format.util'
 
 export interface MeetingReportExportContext {
     appName: string
     title: string
+    subtitle: string
     range: ReportDateRange
     generatedAt: string
     filterLabels: string[]
     summary: ReportSummary
     categories: ReportCategory[]
     showUncategorized: boolean
+    showTitheColumn: boolean
     categoryTotals: CategoryReportTotal[]
     meetings: MeetingReportAggregate[]
+    tithers: TitherReportAggregate[]
     districts: DistrictReportAggregate[]
     rows: MeetingReportRow[]
 }
 
-export type MeetingReportCsvKind = 'reuniones' | 'detalle'
+export type MeetingReportCsvKind = 'reuniones' | 'diezmadores' | 'detalle'
 
 type ExportValue = string | number | null
 type ExportKind = 'text' | 'money' | 'integer' | 'decimal' | 'percent' | 'date'
@@ -72,20 +85,25 @@ const EXCEL_FORMATS: Partial<Record<ExportKind, string>> = {
 const TOTAL_LABEL = 'Total general'
 
 function fileBaseName(range: ReportDateRange) {
-    return `reporte-reuniones_${range.from}_${range.to}`
+    return `reporte-ofrendas-y-diezmos_${range.from}_${range.to}`
+}
+
+function categoryTotal(context: MeetingReportExportContext, id: CategoryReportTotal['id']) {
+    return context.categoryTotals.find((total) => total.id === id)?.amount ?? 0
 }
 
 function categoryColumns<T>(
     context: MeetingReportExportContext,
     amountOf: (item: T, categoryId: number) => number,
     uncategorizedOf: (item: T) => number,
+    titheOf: (item: T) => number,
 ): ExportColumn<T>[] {
     const columns: ExportColumn<T>[] = context.categories.map((category) => ({
         header: category.name,
         width: Math.max(14, category.name.length + 4),
         kind: 'money',
         value: (item) => amountOf(item, category.id),
-        total: context.categoryTotals.find((total) => total.id === category.id)?.amount ?? 0,
+        total: categoryTotal(context, category.id),
     }))
     if (context.showUncategorized) {
         columns.push({
@@ -93,17 +111,39 @@ function categoryColumns<T>(
             width: 16,
             kind: 'money',
             value: uncategorizedOf,
-            total:
-                context.categoryTotals.find((total) => total.id === 'uncategorized')?.amount ?? 0,
+            total: categoryTotal(context, 'uncategorized'),
+        })
+    }
+    if (context.showTitheColumn) {
+        columns.push({
+            header: TITHES_LABEL,
+            width: 14,
+            kind: 'money',
+            value: titheOf,
+            total: categoryTotal(context, 'tithes'),
         })
     }
     return columns
 }
 
+function hasMeetings(context: MeetingReportExportContext) {
+    return context.summary.meetingEnvelopeCount > 0
+}
+
+function hasTithes(context: MeetingReportExportContext) {
+    return context.summary.titheCount > 0
+}
+
+function subjectHeader(context: MeetingReportExportContext) {
+    if (!hasTithes(context)) return 'Reunión'
+    return hasMeetings(context) ? 'Reunión o diezmador' : 'Diezmador'
+}
+
 function meetingColumns(
     context: MeetingReportExportContext,
 ): ExportColumn<MeetingReportAggregate>[] {
-    const { summary, meetings } = context
+    const { summary } = context
+    const isTithes = (item: MeetingReportAggregate) => item.source === 'diezmo'
     return [
         {
             header: 'Código',
@@ -118,97 +158,77 @@ function meetingColumns(
             header: 'Distrito',
             width: 20,
             kind: 'text',
-            value: (item) => reportDistrictLabel(item),
+            value: (item) => reportAggregateDistrictLabel(item),
         },
         { header: 'Zona', width: 18, kind: 'text', value: (item) => item.zoneName ?? '' },
         { header: 'Sector', width: 18, kind: 'text', value: (item) => item.sectorName ?? '' },
-        { header: 'Líder', width: 26, kind: 'text', value: (item) => item.leaderName ?? '' },
         {
-            header: 'Fechas',
+            header: 'Líder',
+            width: 26,
+            kind: 'text',
+            value: (item) =>
+                isTithes(item)
+                    ? `${summary.titherCount} ${summary.titherCount === 1 ? 'diezmador' : 'diezmadores'}`
+                    : (item.leaderName ?? ''),
+        },
+        {
+            header: 'Sobres',
             width: 10,
             kind: 'integer',
-            value: (item) => item.occurrenceCount,
-            total: summary.occurrenceCount,
-        },
-        {
-            header: 'Registradas',
-            width: 12,
-            kind: 'integer',
-            value: (item) => item.recordedCount,
-            total: summary.recordedCount,
-        },
-        {
-            header: 'Pendientes',
-            width: 12,
-            kind: 'integer',
-            value: (item) => item.pendingCount,
-            total: summary.pendingCount,
-        },
-        {
-            header: 'Asistencia',
-            width: 12,
-            kind: 'integer',
-            value: (item) => item.attendance,
-            total: meetings.reduce((sum, item) => sum + item.attendance, 0),
-        },
-        {
-            header: 'Prom. asistencia',
-            width: 15,
-            kind: 'decimal',
-            value: (item) => item.averageAttendance,
-            total: summary.averageAttendance,
+            value: (item) => item.envelopeCount,
+            total: summary.envelopeCount,
         },
         ...categoryColumns<MeetingReportAggregate>(
             context,
             (item, categoryId) => item.categoryAmounts[categoryId] ?? 0,
             (item) => item.uncategorizedAmount,
+            (item) => item.titheAmount,
         ),
         {
-            header: 'Total ofrendas',
+            header: 'Total recibido',
             width: 16,
             kind: 'money',
-            value: (item) => item.totalOfferings,
-            total: summary.totalOfferings,
+            value: (item) => item.totalReceived,
+            total: summary.totalReceived,
         },
         {
-            header: 'Promedio por fecha',
+            header: 'Promedio por sobre',
             width: 18,
             kind: 'money',
-            value: (item) => item.averageOffering,
-            total: summary.averagePerOccurrence,
+            value: (item) => item.averagePerEnvelope,
+            total: summary.averagePerEnvelope,
         },
         {
             header: '% del total',
             width: 12,
             kind: 'percent',
             value: (item) => item.share,
-            total: summary.totalOfferings > 0 ? 1 : 0,
+            total: summary.totalReceived > 0 ? 1 : 0,
         },
         {
-            header: 'Recibido comité',
-            width: 16,
-            kind: 'money',
-            value: (item) => item.receivedAmount,
-            total: summary.receivedAmount,
+            header: 'Diferencias abiertas',
+            width: 18,
+            kind: 'integer',
+            value: (item) => item.openDiscrepancyCount,
+            total: summary.openDiscrepancyCount,
         },
         {
-            header: 'Diferencia',
+            header: 'Primera fecha',
             width: 14,
-            kind: 'money',
-            value: (item) => item.receivedDifference,
-            total: summary.receivedDifference,
+            kind: 'date',
+            value: (item) => item.firstDate,
         },
         {
-            header: 'Última fecha registrada',
-            width: 22,
+            header: 'Última fecha',
+            width: 14,
             kind: 'date',
-            value: (item) => item.lastRecordedDate,
+            value: (item) => item.lastDate,
         },
     ]
 }
 
 function detailColumns(context: MeetingReportExportContext): ExportColumn<MeetingReportRow>[] {
-    const { summary, rows } = context
+    const { summary } = context
     return [
         {
             header: 'Fecha',
@@ -218,69 +238,131 @@ function detailColumns(context: MeetingReportExportContext): ExportColumn<Meetin
             total: TOTAL_LABEL,
         },
         { header: 'Día', width: 12, kind: 'text', value: (row) => formatReportWeekday(row.date) },
-        { header: 'Código', width: 20, kind: 'text', value: (row) => row.meetingCode },
-        { header: 'Reunión', width: 34, kind: 'text', value: (row) => row.meetingTitle },
-        { header: 'Tipo', width: 18, kind: 'text', value: (row) => row.meetingTypeName },
+        { header: 'Código', width: 20, kind: 'text', value: (row) => reportRowCode(row) },
+        {
+            header: subjectHeader(context),
+            width: 34,
+            kind: 'text',
+            value: (row) => reportRowTitle(row),
+        },
+        { header: 'Tipo', width: 18, kind: 'text', value: (row) => reportRowType(row) },
         { header: 'Distrito', width: 20, kind: 'text', value: (row) => reportDistrictLabel(row) },
         { header: 'Zona', width: 18, kind: 'text', value: (row) => row.zoneName ?? '' },
         { header: 'Sector', width: 18, kind: 'text', value: (row) => row.sectorName ?? '' },
-        { header: 'Líder', width: 26, kind: 'text', value: (row) => row.leaderName ?? '' },
-        {
-            header: 'Estado',
-            width: 12,
-            kind: 'text',
-            value: (row) => reportStatusLabel(row.status),
-        },
-        {
-            header: 'Asistencia',
-            width: 12,
-            kind: 'integer',
-            value: (row) => row.attendance,
-            total: sumAttendance(rows),
-        },
+        ...(hasMeetings(context)
+            ? [
+                  {
+                      header: 'Líder',
+                      width: 26,
+                      kind: 'text' as const,
+                      value: (row: MeetingReportRow) => row.leaderName ?? '',
+                  },
+              ]
+            : []),
         ...categoryColumns<MeetingReportRow>(
             context,
             (row, categoryId) => sumCategory([row], categoryId),
             (row) => row.uncategorizedAmount,
+            (row) => (isTitheRow(row) ? row.receivedAmount : 0),
         ),
         {
-            header: 'Total ofrenda',
+            header: 'Total recibido',
             width: 15,
             kind: 'money',
-            value: (row) => row.totalAmount,
-            total: summary.totalOfferings,
+            value: (row) => row.receivedAmount,
+            total: summary.totalReceived,
         },
         {
-            header: 'Recepción',
+            header: 'Estado del sobre',
             width: 18,
             kind: 'text',
-            value: (row) => reportReceptionLabel(row.reception, row.status),
+            value: (row) => reportStateLabel(receptionState(row)),
         },
         {
-            header: 'Recibido',
-            width: 14,
-            kind: 'money',
-            value: (row) => row.reception?.receivedAmount ?? null,
-            total: summary.receivedAmount,
-        },
-        {
-            header: 'Diferencia',
-            width: 14,
-            kind: 'money',
-            value: (row) => row.reception?.difference ?? null,
-            total: summary.receivedDifference,
-        },
-        {
-            header: 'Registrado por',
+            header: 'Recibido por',
             width: 24,
             kind: 'text',
-            value: (row) => row.recordedByName ?? '',
+            value: (row) => row.receivedByName ?? '',
         },
         {
-            header: 'Fecha de registro',
+            header: 'Fecha de recepción',
             width: 22,
             kind: 'text',
-            value: (row) => (row.recordedAt ? formatReportDateTime(row.recordedAt) : ''),
+            value: (row) => formatReportDateTime(row.receivedAt),
+        },
+        ...(hasTithes(context)
+            ? [
+                  {
+                      header: 'Nota',
+                      width: 30,
+                      kind: 'text' as const,
+                      value: (row: MeetingReportRow) => row.notes ?? '',
+                  },
+              ]
+            : []),
+    ]
+}
+
+function titherColumns(context: MeetingReportExportContext): ExportColumn<TitherReportAggregate>[] {
+    const { summary } = context
+    return [
+        {
+            header: 'Código',
+            width: 14,
+            kind: 'text',
+            value: (item) => item.titherCode,
+            total: TOTAL_LABEL,
+        },
+        { header: 'Diezmador', width: 34, kind: 'text', value: (item) => item.titherName },
+        { header: 'Distrito', width: 20, kind: 'text', value: (item) => reportDistrictLabel(item) },
+        { header: 'Zona', width: 18, kind: 'text', value: (item) => item.zoneName ?? '' },
+        { header: 'Sector', width: 18, kind: 'text', value: (item) => item.sectorName ?? '' },
+        {
+            header: 'Sobres',
+            width: 10,
+            kind: 'integer',
+            value: (item) => item.envelopeCount,
+            total: summary.titheCount,
+        },
+        {
+            header: 'Total recibido',
+            width: 16,
+            kind: 'money',
+            value: (item) => item.totalReceived,
+            total: summary.titheTotal,
+        },
+        {
+            header: 'Promedio por sobre',
+            width: 18,
+            kind: 'money',
+            value: (item) => item.averagePerEnvelope,
+            total: summary.averagePerTithe,
+        },
+        {
+            header: '% de los diezmos',
+            width: 16,
+            kind: 'percent',
+            value: (item) => item.titheShare,
+            total: summary.titheTotal > 0 ? 1 : 0,
+        },
+        {
+            header: '% del total',
+            width: 12,
+            kind: 'percent',
+            value: (item) => item.share,
+            total: summary.totalReceived > 0 ? summary.titheTotal / summary.totalReceived : 0,
+        },
+        {
+            header: 'Primera fecha',
+            width: 14,
+            kind: 'date',
+            value: (item) => item.firstDate,
+        },
+        {
+            header: 'Última fecha',
+            width: 14,
+            kind: 'date',
+            value: (item) => item.lastDate,
         },
     ]
 }
@@ -288,7 +370,7 @@ function detailColumns(context: MeetingReportExportContext): ExportColumn<Meetin
 function districtColumns(
     context: MeetingReportExportContext,
 ): ExportColumn<DistrictReportAggregate>[] {
-    const { summary, districts } = context
+    const { summary } = context
     return [
         {
             header: 'Distrito',
@@ -297,92 +379,89 @@ function districtColumns(
             value: (item) => item.districtName,
             total: TOTAL_LABEL,
         },
+        ...(hasMeetings(context)
+            ? [
+                  {
+                      header: 'Reuniones',
+                      width: 12,
+                      kind: 'integer' as const,
+                      value: (item: DistrictReportAggregate) => item.meetingCount,
+                      total: summary.meetingCount,
+                  },
+              ]
+            : []),
+        ...(hasTithes(context)
+            ? [
+                  {
+                      header: 'Diezmadores',
+                      width: 13,
+                      kind: 'integer' as const,
+                      value: (item: DistrictReportAggregate) => item.titherCount,
+                      total: summary.titherCount,
+                  },
+              ]
+            : []),
         {
-            header: 'Reuniones',
-            width: 12,
-            kind: 'integer',
-            value: (item) => item.meetingCount,
-            total: summary.meetingCount,
-        },
-        {
-            header: 'Fechas',
+            header: 'Sobres',
             width: 10,
             kind: 'integer',
-            value: (item) => item.occurrenceCount,
-            total: summary.occurrenceCount,
+            value: (item) => item.envelopeCount,
+            total: summary.envelopeCount,
         },
         {
-            header: 'Registradas',
-            width: 12,
-            kind: 'integer',
-            value: (item) => item.recordedCount,
-            total: summary.recordedCount,
-        },
-        {
-            header: 'Asistencia',
-            width: 12,
-            kind: 'integer',
-            value: (item) => item.attendance,
-            total: districts.reduce((sum, item) => sum + item.attendance, 0),
-        },
-        {
-            header: 'Total ofrendas',
+            header: 'Total recibido',
             width: 16,
             kind: 'money',
-            value: (item) => item.totalOfferings,
-            total: summary.totalOfferings,
+            value: (item) => item.totalReceived,
+            total: summary.totalReceived,
         },
         {
-            header: 'Promedio por fecha',
+            header: 'Promedio por sobre',
             width: 18,
             kind: 'money',
-            value: (item) => item.averageOffering,
-            total: summary.averagePerOccurrence,
+            value: (item) => item.averagePerEnvelope,
+            total: summary.averagePerEnvelope,
         },
         {
             header: '% del total',
             width: 12,
             kind: 'percent',
             value: (item) => item.share,
-            total: summary.totalOfferings > 0 ? 1 : 0,
-        },
-        {
-            header: 'Recibido comité',
-            width: 16,
-            kind: 'money',
-            value: (item) => item.receivedAmount,
-            total: summary.receivedAmount,
-        },
-        {
-            header: 'Diferencia',
-            width: 14,
-            kind: 'money',
-            value: (item) => item.receivedDifference,
-            total: summary.receivedDifference,
+            total: summary.totalReceived > 0 ? 1 : 0,
         },
     ]
 }
 
 function summaryLines(context: MeetingReportExportContext): [string, ExportValue, ExportKind][] {
     const { summary } = context
-    return [
-        ['Total de ofrendas', summary.totalOfferings, 'money'],
-        ['Reuniones en el período', summary.meetingCount, 'integer'],
-        ['Fechas programadas', summary.occurrenceCount, 'integer'],
-        ['Fechas registradas', summary.recordedCount, 'integer'],
-        ['Fechas pendientes', summary.pendingCount, 'integer'],
-        ['Cumplimiento de registro', summary.complianceRate ?? 0, 'percent'],
-        ['Promedio por fecha registrada', summary.averagePerOccurrence, 'money'],
-        ['Promedio por reunión', summary.averagePerMeeting, 'money'],
-        ['Asistencia total', summary.totalAttendance, 'integer'],
-        ['Asistencia promedio por fecha', summary.averageAttendance, 'decimal'],
-        ['Ofrenda por persona', summary.offeringPerAttendee, 'money'],
-        ['Sobres recibidos por el comité', summary.receivedCount, 'integer'],
-        ['Monto recibido por el comité', summary.receivedAmount, 'money'],
-        ['Diferencia recibido vs. registrado', summary.receivedDifference, 'money'],
-        ['Sobres con diferencia abierta', summary.discrepancyCount, 'integer'],
-        ['Fechas registradas sin entregar', summary.unreceivedCount, 'integer'],
+    const lines: [string, ExportValue, ExportKind][] = [
+        ['Total recibido por el comité', summary.totalReceived, 'money'],
+        ['Sobres recibidos', summary.envelopeCount, 'integer'],
+        ['Promedio por sobre', summary.averagePerEnvelope, 'money'],
     ]
+    if (hasMeetings(context)) {
+        lines.push(
+            ['Recibido de reuniones', summary.meetingTotal, 'money'],
+            ['Reuniones con sobres recibidos', summary.meetingCount, 'integer'],
+            ['Sobres de reunión', summary.meetingEnvelopeCount, 'integer'],
+            ['Promedio por reunión', summary.averagePerMeeting, 'money'],
+            ['Sobres que cuadran', summary.balancedCount, 'integer'],
+            ['Porcentaje que cuadra', summary.balancedRate ?? 0, 'percent'],
+            ['Sobres con diferencia abierta', summary.openDiscrepancyCount, 'integer'],
+            ['Sobres con diferencia cerrada', summary.closedDiscrepancyCount, 'integer'],
+            ['Ingresos directos de cultos generales', summary.directEntryCount, 'integer'],
+        )
+    }
+    if (hasTithes(context)) {
+        lines.push(
+            ['Recibido en diezmos', summary.titheTotal, 'money'],
+            ['Sobres de diezmo', summary.titheCount, 'integer'],
+            ['Diezmadores', summary.titherCount, 'integer'],
+            ['Promedio por diezmador', summary.averagePerTither, 'money'],
+            ['Diezmo más alto', summary.largestTithe, 'money'],
+        )
+    }
+    return lines
 }
 
 function formatExportValue(value: ExportValue, kind: ExportKind) {
@@ -468,7 +547,7 @@ function padRow(cells: ExcelCell[], width: number) {
 }
 
 function excelSummarySheet(context: MeetingReportExportContext) {
-    const width = 10
+    const width = 6
     const sectionTitle = (value: string): ExcelCell[] =>
         padRow([{ value, fontWeight: 'bold', fontSize: 12, textColor: BRAND_COLOR }], width)
     const labelValue = (label: string, value: ExportValue, kind: ExportKind): ExcelCell[] =>
@@ -503,18 +582,18 @@ function excelSummarySheet(context: MeetingReportExportContext) {
                 total: TOTAL_LABEL,
             },
             {
-                header: 'Monto',
+                header: 'Monto recibido',
                 width: 0,
                 kind: 'money',
                 value: (item) => item.amount,
-                total: context.summary.totalOfferings,
+                total: context.summary.totalReceived,
             },
             {
                 header: '% del total',
                 width: 0,
                 kind: 'percent',
                 value: (item) => item.share,
-                total: context.summary.totalOfferings > 0 ? 1 : 0,
+                total: context.summary.totalReceived > 0 ? 1 : 0,
             },
         ],
         context.categoryTotals,
@@ -526,16 +605,10 @@ function excelSummarySheet(context: MeetingReportExportContext) {
 
     const data: ExcelCell[][] = [
         padRow(
-            [
-                {
-                    value: context.title,
-                    fontWeight: 'bold',
-                    fontSize: 16,
-                    textColor: BRAND_COLOR,
-                },
-            ],
+            [{ value: context.title, fontWeight: 'bold', fontSize: 16, textColor: BRAND_COLOR }],
             width,
         ),
+        padRow([{ value: context.subtitle, textColor: MUTED_TEXT }], width),
         padRow([{ value: context.appName, textColor: MUTED_TEXT }], width),
         blank(),
         labelValue('Período', formatReportRange(context.range.from, context.range.to), 'text'),
@@ -549,19 +622,17 @@ function excelSummarySheet(context: MeetingReportExportContext) {
         sectionTitle('Indicadores'),
         ...summaryLines(context).map(([label, value, kind]) => labelValue(label, value, kind)),
         blank(),
-        sectionTitle('Ofrendas por categoría'),
+        sectionTitle('Recibido por categoría'),
         ...categoryTable,
         blank(),
-        sectionTitle('Totales por distrito'),
+        sectionTitle('Recibido por distrito'),
         ...districtTable,
     ]
 
     return {
         data: data as never[][],
         sheet: 'Resumen',
-        columns: [36, 22, 14, 14, 14, 18, 18, 14, 18, 14].map((columnWidth) => ({
-            width: columnWidth,
-        })),
+        columns: [38, 22, 14, 18, 18, 14].map((columnWidth) => ({ width: columnWidth })),
         showGridLines: false,
     }
 }
@@ -584,8 +655,13 @@ export async function exportMeetingReportExcel(context: MeetingReportExportConte
     await writeExcelFile(
         [
             excelSummarySheet(context),
-            excelTableSheet('Por reunión', meetingColumns(context), context.meetings),
-            excelTableSheet('Detalle por fecha', detailColumns(context), context.rows),
+            ...(hasMeetings(context)
+                ? [excelTableSheet('Por reunión', meetingColumns(context), context.meetings)]
+                : []),
+            ...(hasTithes(context)
+                ? [excelTableSheet('Por diezmador', titherColumns(context), context.tithers)]
+                : []),
+            excelTableSheet('Detalle por sobre', detailColumns(context), context.rows),
         ],
         { fontFamily: 'Arial', fontSize: 10 },
     ).toFile(`${fileBaseName(context.range)}.xlsx`)
@@ -614,7 +690,7 @@ function buildCsv<T>(columns: ExportColumn<T>[], items: T[]) {
         ),
         columns.map((column) => csvRawValue(column.total ?? null, column.kind)),
     ]
-    return `﻿${lines.map((cells) => cells.map(csvEscape).join(',')).join('\r\n')}\r\n`
+    return `\uFEFF${lines.map((cells) => cells.map(csvEscape).join(',')).join('\r\n')}\r\n`
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -633,13 +709,24 @@ export function exportMeetingReportCsv(
     context: MeetingReportExportContext,
     kind: MeetingReportCsvKind,
 ) {
-    const content =
-        kind === 'reuniones'
-            ? buildCsv(meetingColumns(context), context.meetings)
-            : buildCsv(detailColumns(context), context.rows)
+    const files: Record<MeetingReportCsvKind, { content: () => string; suffix: string }> = {
+        reuniones: {
+            content: () => buildCsv(meetingColumns(context), context.meetings),
+            suffix: 'por-reunion',
+        },
+        diezmadores: {
+            content: () => buildCsv(titherColumns(context), context.tithers),
+            suffix: 'por-diezmador',
+        },
+        detalle: {
+            content: () => buildCsv(detailColumns(context), context.rows),
+            suffix: 'detalle',
+        },
+    }
+    const file = files[kind]
     downloadBlob(
-        new Blob([content], { type: 'text/csv;charset=utf-8' }),
-        `${fileBaseName(context.range)}_${kind === 'reuniones' ? 'por-reunion' : 'detalle'}.csv`,
+        new Blob([file.content()], { type: 'text/csv;charset=utf-8' }),
+        `${fileBaseName(context.range)}_${file.suffix}.csv`,
     )
 }
 
@@ -652,10 +739,10 @@ const PDF_ALTERNATE: Rgb = [251, 247, 240]
 const PDF_TOTAL: Rgb = [239, 229, 216]
 const PDF_BORDER: Rgb = [222, 212, 202]
 const PDF_MARGIN = 36
-const PDF_MAX_CATEGORY_COLUMNS = 4
+const PDF_MAX_CATEGORY_COLUMNS = 5
 
 function pdfText(value: string) {
-    return value.replace(/[   ]/g, ' ').replace(/−/g, '-')
+    return value.replace(/[\u00A0\u202F\u2009]/g, ' ').replace(/\u2212/g, '-')
 }
 
 function pdfCell(value: ExportValue, kind: ExportKind) {
@@ -682,10 +769,71 @@ function pdfColumnsFrom<T>(columns: ExportColumn<T>[], headers: string[]): PdfCo
 }
 
 function pdfCategoryHeaders(context: MeetingReportExportContext) {
-    if (context.categories.length > PDF_MAX_CATEGORY_COLUMNS) return []
+    const titheHeaders = context.showTitheColumn ? [TITHES_LABEL] : []
+    if (context.categories.length > PDF_MAX_CATEGORY_COLUMNS) return titheHeaders
     return [
         ...context.categories.map((category) => category.name),
         ...(context.showUncategorized ? [UNCATEGORIZED_LABEL] : []),
+        ...titheHeaders,
+    ]
+}
+
+function countLabel(count: number, singular: string, plural: string) {
+    return `${count} ${count === 1 ? singular : plural}`
+}
+
+function pdfKpis(context: MeetingReportExportContext): [string, string, string][] {
+    const { summary } = context
+    const total: [string, string, string] = [
+        'Total recibido',
+        formatReportMoney(summary.totalReceived),
+        countLabel(summary.envelopeCount, 'sobre contado', 'sobres contados'),
+    ]
+    const tithers: [string, string, string] = [
+        TITHES_LABEL,
+        formatReportMoney(summary.titheTotal),
+        `${countLabel(summary.titheCount, 'sobre', 'sobres')} · ${countLabel(summary.titherCount, 'diezmador', 'diezmadores')}`,
+    ]
+    if (!hasMeetings(context)) {
+        return [
+            total,
+            [
+                'Diezmadores',
+                String(summary.titherCount),
+                `${formatReportMoney(summary.averagePerTither)} por diezmador`,
+            ],
+            [
+                'Promedio por sobre',
+                formatReportMoney(summary.averagePerTithe),
+                countLabel(summary.titheCount, 'sobre de diezmo', 'sobres de diezmo'),
+            ],
+            ['Diezmo más alto', formatReportMoney(summary.largestTithe), 'en el período'],
+        ]
+    }
+    return [
+        total,
+        [
+            'Reuniones',
+            String(summary.meetingCount),
+            `${formatReportMoney(summary.averagePerMeeting)} por reunión`,
+        ],
+        hasTithes(context)
+            ? tithers
+            : [
+                  'Promedio por sobre',
+                  formatReportMoney(summary.averagePerEnvelope),
+                  `${summary.envelopeCount} sobres en el período`,
+              ],
+        [
+            'Sobres que cuadran',
+            formatReportPercent(summary.balancedRate, 0),
+            `${summary.balancedCount} de ${summary.meetingEnvelopeCount} de reunión`,
+        ],
+        [
+            'Diferencias abiertas',
+            String(summary.openDiscrepancyCount),
+            `${summary.closedDiscrepancyCount} ya cerradas`,
+        ],
     ]
 }
 
@@ -797,53 +945,23 @@ export async function exportMeetingReportPdf(context: MeetingReportExportContext
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(...PDF_MUTED)
-    doc.text(`Período: ${rangeLabel}`, PDF_MARGIN, PDF_MARGIN + 40)
+    doc.text(pdfText(context.subtitle), PDF_MARGIN, PDF_MARGIN + 38)
+    doc.text(`Período: ${rangeLabel}`, PDF_MARGIN, PDF_MARGIN + 51)
     doc.text(
         pdfText(`Generado: ${formatReportDateTime(context.generatedAt)}`),
         pageWidth - PDF_MARGIN,
-        PDF_MARGIN + 40,
+        PDF_MARGIN + 51,
         { align: 'right' },
     )
     const filtersText = pdfText(
         `Filtros: ${context.filterLabels.length > 0 ? context.filterLabels.join(' · ') : 'Ninguno'}`,
     )
     const filterLines = doc.splitTextToSize(filtersText, contentWidth) as string[]
-    doc.text(filterLines, PDF_MARGIN, PDF_MARGIN + 53)
+    doc.text(filterLines, PDF_MARGIN, PDF_MARGIN + 64)
 
     const { summary } = context
-    const kpis: [string, string, string][] = [
-        [
-            'Total de ofrendas',
-            formatReportMoney(summary.totalOfferings),
-            `${summary.recordedCount} fechas registradas`,
-        ],
-        [
-            'Reuniones',
-            String(summary.meetingCount),
-            `${summary.occurrenceCount} fechas en el período`,
-        ],
-        [
-            'Promedio por fecha',
-            formatReportMoney(summary.averagePerOccurrence),
-            `${formatReportMoney(summary.averagePerMeeting)} por reunión`,
-        ],
-        [
-            'Asistencia',
-            summary.totalAttendance.toLocaleString('es-SV'),
-            `${formatReportNumber(summary.averageAttendance)} en promedio`,
-        ],
-        [
-            'Cumplimiento',
-            formatReportPercent(summary.complianceRate),
-            `${summary.pendingCount} fechas pendientes`,
-        ],
-        [
-            'Recibido comité',
-            formatReportMoney(summary.receivedAmount),
-            `Diferencia ${formatReportSignedMoney(summary.receivedDifference)}`,
-        ],
-    ]
-    const kpiTop = PDF_MARGIN + 60 + filterLines.length * 11
+    const kpis = pdfKpis(context)
+    const kpiTop = PDF_MARGIN + 72 + filterLines.length * 11
     const kpiGap = 8
     const kpiWidth = (contentWidth - kpiGap * (kpis.length - 1)) / kpis.length
     kpis.forEach(([label, value, meta], index) => {
@@ -865,38 +983,40 @@ export async function exportMeetingReportPdf(context: MeetingReportExportContext
     })
 
     let y = sectionTitle(
-        'Ofrendas por categoría y por distrito',
-        'Distribución del total del período',
+        'Recibido por categoría y por distrito',
+        'Distribución del total contado por el comité',
         kpiTop + 82,
     )
     const halfWidth = (contentWidth - 16) / 2
-    const categoryPdfColumns: PdfColumn<CategoryReportTotal>[] = [
-        { header: 'Categoría', kind: 'text', value: (item) => item.name, total: TOTAL_LABEL },
-        {
-            header: 'Monto',
-            kind: 'money',
-            value: (item) => item.amount,
-            total: summary.totalOfferings,
-        },
-        {
-            header: '% del total',
-            kind: 'percent',
-            value: (item) => item.share,
-            total: summary.totalOfferings > 0 ? 1 : 0,
-        },
-    ]
-    drawTable(categoryPdfColumns, context.categoryTotals, y, {
-        margin: { ...tableTheme.margin, right: PDF_MARGIN + halfWidth + 16 },
-    })
+    drawTable<CategoryReportTotal>(
+        [
+            { header: 'Categoría', kind: 'text', value: (item) => item.name, total: TOTAL_LABEL },
+            {
+                header: 'Monto recibido',
+                kind: 'money',
+                value: (item) => item.amount,
+                total: summary.totalReceived,
+            },
+            {
+                header: '% del total',
+                kind: 'percent',
+                value: (item) => item.share,
+                total: summary.totalReceived > 0 ? 1 : 0,
+            },
+        ],
+        context.categoryTotals,
+        y,
+        { margin: { ...tableTheme.margin, right: PDF_MARGIN + halfWidth + 16 } },
+    )
     const categoryEnd = tableEnd()
     doc.setPage(1)
     drawTable(
         pdfColumnsFrom(districtColumns(context), [
             'Distrito',
             'Reuniones',
-            'Fechas',
-            'Asistencia',
-            'Total ofrendas',
+            'Diezmadores',
+            'Sobres',
+            'Total recibido',
             '% del total',
         ]),
         context.districts,
@@ -913,71 +1033,99 @@ export async function exportMeetingReportPdf(context: MeetingReportExportContext
     doc.setPage(breakdownEnd.page)
     y = breakdownEnd.y
 
-    y = sectionTitle(
-        'Total de ofrendas por reunión',
-        `${context.meetings.length} reuniones · ordenadas por monto`,
-        ensureSpace(y + 24, 120),
-    )
-    const meetingTable = meetingColumns(context)
-    const meetingRank = new Map(context.meetings.map((item, index) => [item, index + 1]))
-    drawTable(
-        [
-            {
-                header: '#',
-                kind: 'integer',
-                value: (item: MeetingReportAggregate) => meetingRank.get(item) ?? null,
-                width: 22,
-            },
-            ...pdfColumnsFrom(meetingTable, ['Código', 'Reunión', 'Tipo']),
-            {
-                header: 'Territorio',
-                kind: 'text',
-                value: (item: MeetingReportAggregate) => reportTerritoryLabel(item),
-            },
-            {
-                header: 'Fechas',
-                kind: 'text',
-                value: (item: MeetingReportAggregate) =>
-                    `${item.recordedCount}/${item.occurrenceCount}`,
-                total: `${summary.recordedCount}/${summary.occurrenceCount}`,
-                width: 40,
-            },
-            ...pdfColumnsFrom(meetingTable, [
-                'Asistencia',
-                ...pdfCategoryHeaders(context),
-                'Total ofrendas',
-                '% del total',
-                'Recibido comité',
-                'Diferencia',
-            ]),
-        ],
-        context.meetings,
-        y,
-    )
+    if (hasMeetings(context)) {
+        y = sectionTitle(
+            'Total recibido por reunión',
+            hasTithes(context)
+                ? `${summary.meetingCount} reuniones y los diezmos · ordenadas por monto`
+                : `${summary.meetingCount} reuniones · ordenadas por monto`,
+            ensureSpace(y + 24, 120),
+        )
+        const meetingTable = meetingColumns(context)
+        const meetingRank = new Map(context.meetings.map((item, index) => [item, index + 1]))
+        drawTable(
+            [
+                {
+                    header: '#',
+                    kind: 'integer',
+                    value: (item: MeetingReportAggregate) => meetingRank.get(item) ?? null,
+                    width: 22,
+                },
+                ...pdfColumnsFrom(meetingTable, ['Código', 'Reunión', 'Tipo']),
+                {
+                    header: 'Territorio',
+                    kind: 'text',
+                    value: (item: MeetingReportAggregate) => reportAggregateTerritoryLabel(item),
+                },
+                ...pdfColumnsFrom(meetingTable, [
+                    'Sobres',
+                    ...pdfCategoryHeaders(context),
+                    'Total recibido',
+                    '% del total',
+                ]),
+            ],
+            context.meetings,
+            y,
+        )
+        y = lastY()
+    }
+
+    if (hasTithes(context)) {
+        y = sectionTitle(
+            'Diezmos por diezmador',
+            `${countLabel(summary.titherCount, 'diezmador', 'diezmadores')} · ${formatReportMoney(summary.titheTotal)} en ${countLabel(summary.titheCount, 'sobre', 'sobres')}`,
+            ensureSpace(y + 24, 120),
+        )
+        const titherTable = titherColumns(context)
+        const titherRank = new Map(context.tithers.map((item, index) => [item, index + 1]))
+        drawTable(
+            [
+                {
+                    header: '#',
+                    kind: 'integer',
+                    value: (item: TitherReportAggregate) => titherRank.get(item) ?? null,
+                    width: 22,
+                },
+                ...pdfColumnsFrom(titherTable, ['Código', 'Diezmador']),
+                {
+                    header: 'Territorio',
+                    kind: 'text',
+                    value: (item: TitherReportAggregate) => reportTerritoryLabel(item),
+                },
+                ...pdfColumnsFrom(titherTable, [
+                    'Sobres',
+                    'Total recibido',
+                    'Promedio por sobre',
+                    '% de los diezmos',
+                    'Última fecha',
+                ]),
+            ],
+            context.tithers,
+            y,
+        )
+    }
 
     doc.addPage()
     y = sectionTitle(
-        'Detalle por fecha',
-        `${context.rows.length} fechas de reunión en el período`,
+        'Detalle por sobre',
+        `${countLabel(context.rows.length, 'sobre recibido', 'sobres recibidos')} en el período`,
         PDF_MARGIN + 30,
     )
     const detailTable = detailColumns(context)
     drawTable(
         [
-            ...pdfColumnsFrom(detailTable, ['Fecha', 'Código', 'Reunión']),
+            ...pdfColumnsFrom(detailTable, ['Fecha', 'Código', subjectHeader(context)]),
             {
                 header: 'Territorio',
                 kind: 'text',
                 value: (row: MeetingReportRow) => reportTerritoryLabel(row),
             },
             ...pdfColumnsFrom(detailTable, [
-                'Estado',
-                'Asistencia',
-                'Total ofrenda',
-                'Recepción',
-                'Recibido',
-                'Diferencia',
-                'Registrado por',
+                ...pdfCategoryHeaders(context),
+                'Total recibido',
+                'Estado del sobre',
+                'Recibido por',
+                'Fecha de recepción',
             ]),
         ],
         context.rows,

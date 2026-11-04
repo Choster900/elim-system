@@ -33,6 +33,7 @@ import type {
     DashboardMetric,
     DashboardPeriodDays,
 } from '~/presentation/dashboard/interfaces/dashboard.interface'
+import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
 import AppTour from '~/presentation/shared/components/AppTour.vue'
 import TerritoryAssignment from '~/presentation/shared/components/TerritoryAssignment.vue'
@@ -64,12 +65,21 @@ const appliedRange = computed<DashboardDateRange | null>(() => {
     if (!start || !end || isRangeTooLong.value) return null
     return { startDate: start, endDate: end }
 })
+const canViewGeneralServices = computed(() =>
+    authStore.hasPermission(routePermissionCodes.dashboardGeneralServices),
+)
 const selectedKind = ref<DashboardKind>('reuniones')
 const isGeneralView = computed(() => selectedKind.value === 'generales')
 const kindTabs: Array<{ value: DashboardKind; label: string; icon: Component }> = [
     { value: 'reuniones', label: 'Reuniones', icon: UsersRound },
     { value: 'generales', label: 'Cultos generales', icon: Church },
 ]
+const visibleKindTabs = computed(() =>
+    canViewGeneralServices.value ? kindTabs : kindTabs.filter((tab) => tab.value !== 'generales'),
+)
+watch(canViewGeneralServices, (canView) => {
+    if (!canView) selectedKind.value = 'reuniones'
+})
 const queryDistrictId = computed(() => (isGeneralView.value ? null : selectedDistrictId.value))
 const dashboardQuery = useDashboardQuery(
     selectedPeriod,
@@ -180,6 +190,9 @@ const tourSteps: TourStep[] = [
         description: 'Inicia las tareas disponibles para tu cuenta desde estos accesos directos.',
     },
 ]
+const visibleTourSteps = computed(() =>
+    canViewGeneralServices.value ? tourSteps : tourSteps.filter((step) => step.id !== 'kind'),
+)
 
 function startTour() {
     if (!summary.value) return
@@ -553,7 +566,7 @@ const quickActionClass =
             aria-label="Tipo de información del dashboard"
         >
             <button
-                v-for="tab in kindTabs"
+                v-for="tab in visibleKindTabs"
                 :key="tab.value"
                 type="button"
                 :class="[
@@ -574,9 +587,10 @@ const quickActionClass =
                 Solo los cultos generales de toda la iglesia. No pertenecen a ningún distrito ni
                 sector, y su ofrenda la cuenta el comité de apoyo.
             </template>
-            <template v-else>
+            <template v-else-if="canViewGeneralServices">
                 Solo las reuniones de los sectores. Los cultos generales están en su propia pestaña.
             </template>
+            <template v-else>Solo las reuniones de los sectores.</template>
         </p>
 
         <section
@@ -1320,6 +1334,11 @@ const quickActionClass =
                 </UiCard>
             </section>
         </template>
-        <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
+        <AppTour
+            :open="isTourOpen"
+            :steps="visibleTourSteps"
+            @close="endTour"
+            @complete="endTour"
+        />
     </main>
 </template>

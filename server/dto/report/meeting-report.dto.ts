@@ -3,38 +3,31 @@ export interface MeetingReportQueryDto {
     to: string
 }
 
-export type MeetingReportOccurrenceStatus = 'registrada' | 'pendiente'
-
 export type MeetingReportReceptionStatus = 'cuadra' | 'con_diferencia'
+
+export type MeetingReportSource = 'reunion' | 'diezmo'
 
 export interface MeetingReportOfferingDto {
     categoryId: number
     amount: number
 }
 
-export interface MeetingReportReceptionDto {
-    status: MeetingReportReceptionStatus
-    receivedAmount: number
-    difference: number
-    directEntry: boolean
-    isClosed: boolean
-    receivedAt: string
-}
-
 export interface MeetingReportRowDto {
+    key: string
+    source: MeetingReportSource
     id: number
-    meetingId: number
-    meetingCode: string
-    meetingTitle: string
-    meetingColor: string
-    meetingTypeId: number
-    meetingTypeName: string
+    occurrenceId: number | null
+    meetingId: number | null
+    meetingCode: string | null
+    meetingTitle: string | null
+    meetingColor: string | null
+    meetingTypeId: number | null
+    meetingTypeName: string | null
     isGeneral: boolean
     isMeetingActive: boolean
     date: string
-    startTime: string
-    endTime: string
-    status: MeetingReportOccurrenceStatus
+    startTime: string | null
+    endTime: string | null
     districtId: number | null
     districtName: string | null
     zoneId: number | null
@@ -42,13 +35,18 @@ export interface MeetingReportRowDto {
     sectorId: number | null
     sectorName: string | null
     leaderName: string | null
-    attendance: number | null
-    totalAmount: number | null
+    titherId: number | null
+    titherCode: string | null
+    titherName: string | null
+    notes: string | null
+    receivedAmount: number
     uncategorizedAmount: number
     offerings: MeetingReportOfferingDto[]
-    reception: MeetingReportReceptionDto | null
-    recordedByName: string | null
-    recordedAt: string | null
+    status: MeetingReportReceptionStatus | null
+    isClosed: boolean
+    directEntry: boolean
+    receivedByName: string | null
+    receivedAt: string
 }
 
 export interface MeetingReportCategoryDto {

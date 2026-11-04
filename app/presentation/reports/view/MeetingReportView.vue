@@ -12,15 +12,16 @@ import {
     FileText,
     FilterX,
     HandCoins,
-    Landmark,
+    Inbox,
     ListChecks,
     Loader2,
     MapPinned,
     PieChart,
     RefreshCw,
+    Scale,
     Sheet,
     TrendingUp,
-    Users,
+    UsersRound,
 } from '@lucide/vue'
 import {
     DropdownMenuContent,
@@ -31,6 +32,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from 'radix-vue'
+import type { Component } from 'vue'
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
@@ -48,7 +50,9 @@ import type {
     MeetingReportRow,
     ReportDateRange,
     ReportMeetingKind,
-    ReportStatusFilter,
+    ReportReceptionState,
+    ReportStateFilter,
+    TitherReportAggregate,
 } from '../interfaces/meeting-report.interface'
 import {
     exportMeetingReportCsv,
@@ -66,28 +70,33 @@ import {
     fromCents,
     groupByDistrict,
     groupByMeeting,
+    groupByTither,
+    isTitheRow,
     rangeDays,
-    sumAttendance,
+    receptionState,
     sumCategory,
     summarizeReport,
-    sumOfferings,
     sumReceived,
-    sumReceivedDifference,
+    sumTithes,
     sumUncategorized,
     toCents,
     usedCategories,
 } from '../utils/meeting-report.util'
 import {
+    TITHE_COLOR,
+    TITHES_LABEL,
+    TITHES_TERRITORY_LABEL,
     formatReportDate,
     formatReportDateTime,
     formatReportMoney,
-    formatReportNumber,
     formatReportPercent,
     formatReportRange,
-    formatReportSignedMoney,
     formatReportWeekday,
-    reportReceptionLabel,
-    reportStatusLabel,
+    reportRowCode,
+    reportRowColor,
+    reportRowTitle,
+    reportRowType,
+    reportStateLabel,
 } from '../utils/report-format.util'
 import {
     defaultReportRange,
@@ -100,13 +109,24 @@ import {
 
 defineOptions({ name: 'MeetingReportView' })
 
-const REPORT_TITLE = 'Reporte de reuniones y ofrendas'
+const REPORT_TITLE = 'Reporte de ofrendas y diezmos recibidos'
+const REPORT_SUBTITLE = 'Sobres de reuniones y diezmos contados por el comité de apoyo'
 const MAX_RANGE_DAYS = 366
 
-useHead({ title: 'Reporte de reuniones · Sistema' })
+useHead({ title: 'Reporte de ofrendas y diezmos recibidos · Sistema' })
 
-type ReportTab = 'reuniones' | 'detalle' | 'distritos'
-type ExportFormat = 'excel' | 'pdf' | 'csv-reuniones' | 'csv-detalle'
+type ReportTab = 'reuniones' | 'diezmadores' | 'detalle' | 'distritos'
+type ExportFormat = 'excel' | 'pdf' | 'csv-reuniones' | 'csv-diezmadores' | 'csv-detalle'
+
+interface KpiCard {
+    key: string
+    label: string
+    value: string
+    hint: string
+    icon: Component
+    highlight?: boolean
+    warn?: boolean
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -139,13 +159,10 @@ const activePreset = computed(() => matchReportRangePreset(appliedRange.value))
 const rangeLabel = computed(() => formatReportRange(appliedRange.value.from, appliedRange.value.to))
 const rangeLength = computed(() => rangeDays(appliedRange.value))
 
-function applyRange(range: ReportDateRange) {
+function applyPreset(key: ReportRangePresetKey) {
+    const range = resolveReportRangePreset(key)
     appliedRange.value = range
     pickerRange.value = { start: range.from, end: range.to }
-}
-
-function applyPreset(key: ReportRangePresetKey) {
-    applyRange(resolveReportRangePreset(key))
 }
 
 watch(pickerRange, (value) => {
@@ -183,17 +200,20 @@ const isStale = computed(
 )
 
 const filters = reactive<MeetingReportFilters>(createEmptyFilters())
+const isTithesOnly = computed(() => filters.kind === 'diezmos')
 
 const kindOptions: { value: ReportMeetingKind; label: string }[] = [
     { value: 'todas', label: 'Todas' },
     { value: 'celulas', label: 'Células y sectores' },
     { value: 'generales', label: 'Cultos generales' },
+    { value: 'diezmos', label: 'Diezmos' },
 ]
 
-const statusOptions: { value: ReportStatusFilter; label: string }[] = [
-    { value: 'todas', label: 'Todas las fechas' },
-    { value: 'registrada', label: 'Solo registradas' },
-    { value: 'pendiente', label: 'Solo pendientes' },
+const stateOptions: { value: ReportStateFilter; label: string }[] = [
+    { value: 'todas', label: 'Todos los sobres' },
+    { value: 'cuadra', label: 'Cuadran' },
+    { value: 'diferencia_abierta', label: 'Con diferencia abierta' },
+    { value: 'diferencia_cerrada', label: 'Diferencia cerrada' },
 ]
 
 function distinctOptions(
@@ -211,10 +231,10 @@ function distinctOptions(
 }
 
 const meetingTypeOptions = computed(() =>
-    distinctOptions(allRows.value, (row) => ({
-        value: row.meetingTypeId,
-        label: row.meetingTypeName,
-    })),
+    distinctOptions(
+        allRows.value.filter((row) => !isTitheRow(row)),
+        (row) => ({ value: row.meetingTypeId, label: row.meetingTypeName }),
+    ),
 )
 const districtOptions = computed(() =>
     distinctOptions(allRows.value, (row) => ({ value: row.districtId, label: row.districtName })),
@@ -267,13 +287,17 @@ watch(
             filters.zoneId = null
             filters.sectorId = null
         }
+        if (kind === 'diezmos') {
+            filters.meetingTypeIds = []
+            filters.state = 'todas'
+        }
     },
 )
 
 const hasActiveFilters = computed(
     () =>
         filters.kind !== 'todas' ||
-        filters.status !== 'todas' ||
+        filters.state !== 'todas' ||
         filters.meetingTypeIds.length > 0 ||
         filters.districtId !== null ||
         filters.zoneId !== null ||
@@ -295,9 +319,9 @@ const filterLabels = computed(() => {
             `Alcance: ${kindOptions.find((option) => option.value === filters.kind)?.label}`,
         )
     }
-    if (filters.status !== 'todas') {
+    if (filters.state !== 'todas') {
         labels.push(
-            `Estado: ${statusOptions.find((option) => option.value === filters.status)?.label}`,
+            `Sobres: ${stateOptions.find((option) => option.value === filters.state)?.label}`,
         )
     }
     if (filters.meetingTypeIds.length > 0) {
@@ -321,26 +345,169 @@ const filteredRows = computed(() =>
         .sort(
             (left, right) =>
                 left.date.localeCompare(right.date) ||
-                left.meetingCode.localeCompare(right.meetingCode, 'es'),
+                Number(isTitheRow(left)) - Number(isTitheRow(right)) ||
+                reportRowCode(left).localeCompare(reportRowCode(right), 'es'),
         ),
 )
+const summary = computed(() => summarizeReport(filteredRows.value))
+const hasMeetingRows = computed(() => summary.value.meetingEnvelopeCount > 0)
+const hasTitheRows = computed(() => summary.value.titheCount > 0)
 const reportCategories = computed(() =>
     usedCategories(allRows.value, report.value?.categories ?? []),
 )
-const showUncategorized = computed(() =>
-    allRows.value.some((row) => toCents(row.uncategorizedAmount) > 0),
+const visibleCategories = computed(() => (hasMeetingRows.value ? reportCategories.value : []))
+const showUncategorized = computed(
+    () => hasMeetingRows.value && allRows.value.some((row) => toCents(row.uncategorizedAmount) > 0),
 )
-const summary = computed(() => summarizeReport(filteredRows.value))
+const showTitheColumn = computed(() => hasMeetingRows.value && hasTitheRows.value)
 const meetingAggregates = computed(() => groupByMeeting(filteredRows.value))
+const titherAggregates = computed(() => groupByTither(filteredRows.value))
 const districtAggregates = computed(() => groupByDistrict(filteredRows.value))
-const categoryBreakdown = computed(() => categoryTotals(filteredRows.value, reportCategories.value))
+const categoryBreakdown = computed(() =>
+    categoryTotals(filteredRows.value, visibleCategories.value),
+)
 const trend = computed(() => buildReportTrend(filteredRows.value, appliedRange.value))
 
-const trendTitle = computed(() => {
-    if (trend.value.granularity === 'day') return 'Ofrendas por día'
-    if (trend.value.granularity === 'week') return 'Ofrendas por semana'
-    return 'Ofrendas por mes'
+const subjectLabel = computed(() => {
+    if (!hasTitheRows.value) return 'Reunión'
+    return hasMeetingRows.value ? 'Reunión o diezmador' : 'Diezmador'
 })
+
+const trendTitle = computed(() => {
+    if (trend.value.granularity === 'day') return 'Recibido por día'
+    if (trend.value.granularity === 'week') return 'Recibido por semana'
+    return 'Recibido por mes'
+})
+
+const trendSubtitle = computed(() => {
+    if (!hasTitheRows.value) return 'Suma de los sobres recibidos, según la fecha de la reunión'
+    if (!hasMeetingRows.value) return 'Suma de los diezmos recibidos, según la fecha del diezmo'
+    return 'Sobres de reunión y diezmos, según la fecha de la reunión o del diezmo'
+})
+
+const kpiCards = computed<KpiCard[]>(() => {
+    const value = summary.value
+    const total: KpiCard = {
+        key: 'total',
+        label: 'Total recibido',
+        value: formatReportMoney(value.totalReceived),
+        hint:
+            hasMeetingRows.value && hasTitheRows.value
+                ? `${formatReportMoney(value.meetingTotal)} de reuniones + ${formatReportMoney(value.titheTotal)} de diezmos`
+                : 'contado por el comité en el período',
+        icon: Coins,
+        highlight: true,
+    }
+    const balanced: KpiCard = {
+        key: 'balanced',
+        label: 'Sobres que cuadran',
+        value: formatReportPercent(value.balancedRate, 0),
+        hint: `${value.balancedCount} de ${value.meetingEnvelopeCount} sobres de reunión`,
+        icon: Scale,
+    }
+    const discrepancies: KpiCard = {
+        key: 'discrepancies',
+        label: 'Diferencias abiertas',
+        value: String(value.openDiscrepancyCount),
+        hint: `${value.closedDiscrepancyCount} ya cerradas por finanzas`,
+        icon: AlertTriangle,
+        warn: value.openDiscrepancyCount > 0,
+    }
+
+    if (!hasMeetingRows.value) {
+        return [
+            total,
+            {
+                key: 'tithe-envelopes',
+                label: 'Sobres de diezmo',
+                value: String(value.titheCount),
+                hint: `${formatReportMoney(value.averagePerTithe)} por sobre`,
+                icon: Inbox,
+            },
+            {
+                key: 'tithers',
+                label: 'Diezmadores',
+                value: String(value.titherCount),
+                hint: 'con al menos un diezmo en el período',
+                icon: UsersRound,
+            },
+            {
+                key: 'per-tither',
+                label: 'Promedio por diezmador',
+                value: formatReportMoney(value.averagePerTither),
+                hint: 'en el período',
+                icon: HandCoins,
+            },
+            {
+                key: 'largest',
+                label: 'Diezmo más alto',
+                value: formatReportMoney(value.largestTithe),
+                hint: 'en un solo sobre',
+                icon: TrendingUp,
+            },
+        ]
+    }
+
+    if (!hasTitheRows.value) {
+        return [
+            total,
+            {
+                key: 'meetings',
+                label: 'Reuniones',
+                value: String(value.meetingCount),
+                hint: 'con al menos un sobre recibido',
+                icon: ListChecks,
+            },
+            {
+                key: 'envelopes',
+                label: 'Sobres recibidos',
+                value: String(value.envelopeCount),
+                hint: `${formatReportMoney(value.averagePerEnvelope)} por sobre`,
+                icon: Inbox,
+            },
+            {
+                key: 'per-meeting',
+                label: 'Promedio por reunión',
+                value: formatReportMoney(value.averagePerMeeting),
+                hint: 'en el período',
+                icon: HandCoins,
+            },
+            balanced,
+            discrepancies,
+        ]
+    }
+
+    return [
+        total,
+        {
+            key: 'meetings',
+            label: 'Reuniones',
+            value: String(value.meetingCount),
+            hint: `${value.meetingEnvelopeCount} sobres · ${formatReportMoney(value.averagePerMeeting)} por reunión`,
+            icon: ListChecks,
+        },
+        {
+            key: 'tithes',
+            label: TITHES_LABEL,
+            value: formatReportMoney(value.titheTotal),
+            hint: `${envelopeCountLabel(value.titheCount)} de ${titherCountLabel(value.titherCount)}`,
+            icon: HandCoins,
+        },
+        {
+            key: 'envelopes',
+            label: 'Sobres recibidos',
+            value: String(value.envelopeCount),
+            hint: `${formatReportMoney(value.averagePerEnvelope)} por sobre`,
+            icon: Inbox,
+        },
+        balanced,
+        discrepancies,
+    ]
+})
+
+const kpiGridClass = computed(() =>
+    kpiCards.value.length === 5 ? '2xl:grid-cols-5' : '2xl:grid-cols-6',
+)
 
 const categoryItems = computed(() =>
     categoryBreakdown.value
@@ -354,51 +521,55 @@ const categoryItems = computed(() =>
 )
 const districtItems = computed(() =>
     districtAggregates.value
-        .filter((item) => item.totalOfferings > 0)
+        .filter((item) => item.totalReceived > 0)
         .map((item) => ({
             id: item.key,
             label: item.districtName,
-            value: item.totalOfferings,
+            value: item.totalReceived,
             meta: formatReportPercent(item.share),
         })),
 )
-const topMeetingItems = computed(() =>
-    meetingAggregates.value
-        .filter((item) => item.totalOfferings > 0)
-        .map((item) => ({
-            id: item.meetingId,
-            label: `${item.meetingCode} · ${item.meetingTitle}`,
-            value: item.totalOfferings,
-            meta: formatReportPercent(item.share),
-        })),
+const rankingTitle = computed(() =>
+    hasMeetingRows.value ? 'Reuniones con más ofrenda recibida' : 'Diezmadores con mayor aporte',
+)
+const rankingItems = computed(() =>
+    hasMeetingRows.value
+        ? meetingAggregates.value
+              .filter((item) => item.source === 'reunion' && item.totalReceived > 0)
+              .map((item) => ({
+                  id: item.key,
+                  label: `${item.meetingCode} · ${item.meetingTitle}`,
+                  value: item.totalReceived,
+                  meta: formatReportPercent(item.share),
+              }))
+        : titherAggregates.value
+              .filter((item) => item.totalReceived > 0)
+              .map((item) => ({
+                  id: item.key,
+                  label: item.titherName,
+                  value: item.totalReceived,
+                  meta: formatReportPercent(item.titheShare),
+              })),
 )
 
-const progressItems = computed(() => {
+const envelopeStateItems = computed(() => {
     const value = summary.value
     return [
+        { label: 'Cuadran', count: value.balancedCount, tone: 'bg-emerald-500' },
         {
-            label: 'Fechas registradas',
-            count: value.recordedCount,
-            total: value.occurrenceCount,
-            tone: 'bg-primary',
-        },
-        {
-            label: 'Sobres recibidos por el comité',
-            count: value.receivedCount,
-            total: value.recordedCount,
-            tone: 'bg-emerald-500',
-        },
-        {
-            label: 'Sobres con diferencia abierta',
-            count: value.discrepancyCount,
-            total: value.receivedCount,
+            label: 'Con diferencia abierta',
+            count: value.openDiscrepancyCount,
             tone: 'bg-amber-500',
         },
         {
-            label: 'Registradas sin entregar',
-            count: value.unreceivedCount,
-            total: value.recordedCount,
-            tone: 'bg-destructive',
+            label: 'Diferencia cerrada por finanzas',
+            count: value.closedDiscrepancyCount,
+            tone: 'bg-primary',
+        },
+        {
+            label: 'Ingreso directo (cultos generales)',
+            count: value.directEntryCount,
+            tone: 'bg-on-surface-variant',
         },
     ]
 })
@@ -409,30 +580,61 @@ function progressWidth(count: number, total: number) {
 
 const activeTab = ref<ReportTab>('reuniones')
 const tabs = computed<{ key: ReportTab; label: string; count: number }[]>(() => [
-    { key: 'reuniones', label: 'Por reunión', count: meetingAggregates.value.length },
-    { key: 'detalle', label: 'Detalle por fecha', count: filteredRows.value.length },
+    ...(hasMeetingRows.value
+        ? [
+              {
+                  key: 'reuniones' as const,
+                  label: 'Por reunión',
+                  count: meetingAggregates.value.length,
+              },
+          ]
+        : []),
+    ...(hasTitheRows.value
+        ? [
+              {
+                  key: 'diezmadores' as const,
+                  label: 'Por diezmador',
+                  count: titherAggregates.value.length,
+              },
+          ]
+        : []),
+    { key: 'detalle', label: 'Detalle por sobre', count: filteredRows.value.length },
     { key: 'distritos', label: 'Por distrito', count: districtAggregates.value.length },
 ])
+const currentTab = computed<ReportTab>(() =>
+    tabs.value.some((tab) => tab.key === activeTab.value)
+        ? activeTab.value
+        : (tabs.value[0]?.key ?? 'detalle'),
+)
 
 function sumMoney<T>(rows: T[], pick: (row: T) => number) {
     return fromCents(rows.reduce((sum, row) => sum + toCents(pick(row)), 0))
 }
 
 function shareOf(amount: number) {
-    return summary.value.totalOfferings > 0 ? amount / summary.value.totalOfferings : 0
+    return summary.value.totalReceived > 0 ? amount / summary.value.totalReceived : 0
 }
 
-function differenceClass(value: number) {
-    if (toCents(value) === 0) return 'text-on-surface-variant'
-    return value > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-destructive'
+function averagePer(total: number, count: number) {
+    return count > 0 ? fromCents(Math.round(toCents(total) / count)) : 0
 }
 
-function territoryParts(item: {
+function stateBadgeClass(state: ReportReceptionState | null) {
+    if (state === null) return 'border-primary text-primary'
+    if (state === 'diferencia_abierta') {
+        return 'border-amber-500 text-amber-700 dark:text-amber-300'
+    }
+    return 'border-emerald-500 text-emerald-700 dark:text-emerald-300'
+}
+
+interface TerritoryItem {
     isGeneral: boolean
     sectorName: string | null
     zoneName: string | null
     districtName: string | null
-}) {
+}
+
+function territoryParts(item: TerritoryItem) {
     if (!item.sectorName) {
         return {
             primary: item.isGeneral ? 'Toda la iglesia' : 'Sin asignar',
@@ -445,7 +647,47 @@ function territoryParts(item: {
     }
 }
 
+function aggregateTerritoryParts(item: MeetingReportAggregate) {
+    if (item.source === 'diezmo') {
+        return { primary: TITHES_TERRITORY_LABEL, secondary: null }
+    }
+    return territoryParts(item)
+}
+
+function territorySearchText(item: TerritoryItem) {
+    return (
+        [item.sectorName, item.zoneName, item.districtName].filter(Boolean).join(' ') ||
+        (item.isGeneral ? 'Toda la iglesia' : 'Sin asignar')
+    )
+}
+
+function titherCountLabel(count: number) {
+    return `${count} ${count === 1 ? 'diezmador' : 'diezmadores'}`
+}
+
+function envelopeCountLabel(count: number) {
+    return `${count} ${count === 1 ? 'sobre' : 'sobres'}`
+}
+
 const moneyCellClass = 'whitespace-nowrap tabular-nums'
+
+function moneyColumn<T>(
+    key: string,
+    label: string,
+    pick: (row: T) => number,
+    total: (rows: T[]) => number,
+): DataTableColumn<T> {
+    return {
+        key,
+        label,
+        sortable: true,
+        align: 'right',
+        accessor: pick,
+        cellClass: moneyCellClass,
+        footer: (rows) => formatReportMoney(total(rows)),
+        footerClass: moneyCellClass,
+    }
+}
 
 const meetingColumns = computed<DataTableColumn<MeetingReportAggregate>[]>(() => [
     {
@@ -461,8 +703,7 @@ const meetingColumns = computed<DataTableColumn<MeetingReportAggregate>[]>(() =>
         label: 'Territorio',
         sortable: true,
         accessor: (row) =>
-            [row.sectorName, row.zoneName, row.districtName].filter(Boolean).join(' ') ||
-            (row.isGeneral ? 'Toda la iglesia' : 'Sin asignar'),
+            row.source === 'diezmo' ? TITHES_TERRITORY_LABEL : territorySearchText(row),
         cellClass: 'min-w-[180px]',
     },
     {
@@ -473,80 +714,63 @@ const meetingColumns = computed<DataTableColumn<MeetingReportAggregate>[]>(() =>
         cellClass: 'min-w-[160px]',
     },
     {
-        key: 'dates',
-        label: 'Fechas',
+        key: 'envelopeCount',
+        label: 'Sobres',
         sortable: true,
         align: 'center',
-        accessor: (row) => row.recordedCount,
-        footer: (rows) =>
-            `${rows.reduce((sum, row) => sum + row.recordedCount, 0)}/${rows.reduce((sum, row) => sum + row.occurrenceCount, 0)}`,
-    },
-    {
-        key: 'attendance',
-        label: 'Asistencia',
-        sortable: true,
-        align: 'right',
-        accessor: (row) => row.attendance,
         cellClass: moneyCellClass,
-        footer: (rows) =>
-            rows.reduce((sum, row) => sum + row.attendance, 0).toLocaleString('es-SV'),
+        footer: (rows) => rows.reduce((sum, row) => sum + row.envelopeCount, 0),
     },
-    {
-        key: 'averageAttendance',
-        label: 'Prom. asist.',
-        sortable: true,
-        align: 'right',
-        accessor: (row) => Math.round(row.averageAttendance * 10) / 10,
-        cellClass: moneyCellClass,
-    },
-    ...reportCategories.value.map<DataTableColumn<MeetingReportAggregate>>((category) => ({
-        key: `category-${category.id}`,
-        label: category.name,
-        sortable: true,
-        align: 'right',
-        accessor: (row) => row.categoryAmounts[category.id] ?? 0,
-        cellClass: moneyCellClass,
-        footer: (rows) =>
-            formatReportMoney(sumMoney(rows, (row) => row.categoryAmounts[category.id] ?? 0)),
-        footerClass: moneyCellClass,
-    })),
+    ...visibleCategories.value.map((category) =>
+        moneyColumn<MeetingReportAggregate>(
+            `category-${category.id}`,
+            category.name,
+            (row) => row.categoryAmounts[category.id] ?? 0,
+            (rows) => sumMoney(rows, (row) => row.categoryAmounts[category.id] ?? 0),
+        ),
+    ),
     ...(showUncategorized.value
         ? [
-              {
-                  key: 'uncategorized',
-                  label: UNCATEGORIZED_LABEL,
-                  sortable: true,
-                  align: 'right' as const,
-                  accessor: (row: MeetingReportAggregate) => row.uncategorizedAmount,
-                  cellClass: moneyCellClass,
-                  footer: (rows: MeetingReportAggregate[]) =>
-                      formatReportMoney(sumMoney(rows, (row) => row.uncategorizedAmount)),
-                  footerClass: moneyCellClass,
-              },
+              moneyColumn<MeetingReportAggregate>(
+                  'uncategorized',
+                  UNCATEGORIZED_LABEL,
+                  (row) => row.uncategorizedAmount,
+                  (rows) => sumMoney(rows, (row) => row.uncategorizedAmount),
+              ),
+          ]
+        : []),
+    ...(showTitheColumn.value
+        ? [
+              moneyColumn<MeetingReportAggregate>(
+                  'titheAmount',
+                  TITHES_LABEL,
+                  (row) => row.titheAmount,
+                  (rows) => sumMoney(rows, (row) => row.titheAmount),
+              ),
           ]
         : []),
     {
-        key: 'totalOfferings',
-        label: 'Total ofrendas',
+        key: 'totalReceived',
+        label: 'Total recibido',
         sortable: true,
         align: 'right',
-        accessor: (row) => row.totalOfferings,
         cellClass: `${moneyCellClass} font-semibold`,
-        footer: (rows) => formatReportMoney(sumMoney(rows, (row) => row.totalOfferings)),
+        footer: (rows) => formatReportMoney(sumMoney(rows, (row) => row.totalReceived)),
         footerClass: `${moneyCellClass} text-primary`,
     },
     {
-        key: 'averageOffering',
-        label: 'Prom. por fecha',
+        key: 'averagePerEnvelope',
+        label: 'Prom. por sobre',
         sortable: true,
         align: 'right',
-        accessor: (row) => row.averageOffering,
         cellClass: moneyCellClass,
-        footer: (rows) => {
-            const recorded = rows.reduce((sum, row) => sum + row.recordedCount, 0)
-            const total = toCents(sumMoney(rows, (row) => row.totalOfferings))
-            return formatReportMoney(recorded > 0 ? fromCents(Math.round(total / recorded)) : 0)
-        },
+        footer: (rows) =>
+            formatReportMoney(
+                averagePer(
+                    sumMoney(rows, (row) => row.totalReceived),
+                    rows.reduce((sum, row) => sum + row.envelopeCount, 0),
+                ),
+            ),
         footerClass: moneyCellClass,
     },
     {
@@ -554,36 +778,22 @@ const meetingColumns = computed<DataTableColumn<MeetingReportAggregate>[]>(() =>
         label: '% del total',
         sortable: true,
         align: 'right',
-        accessor: (row) => row.share,
         cellClass: 'min-w-[130px]',
-        footer: (rows) => formatReportPercent(shareOf(sumMoney(rows, (row) => row.totalOfferings))),
+        footer: (rows) => formatReportPercent(shareOf(sumMoney(rows, (row) => row.totalReceived))),
         footerClass: moneyCellClass,
     },
     {
-        key: 'receivedAmount',
-        label: 'Recibido comité',
+        key: 'openDiscrepancyCount',
+        label: 'Dif. abiertas',
         sortable: true,
-        align: 'right',
-        accessor: (row) => row.receivedAmount,
+        align: 'center',
         cellClass: moneyCellClass,
-        footer: (rows) => formatReportMoney(sumMoney(rows, (row) => row.receivedAmount)),
-        footerClass: moneyCellClass,
+        footer: (rows) => rows.reduce((sum, row) => sum + row.openDiscrepancyCount, 0),
     },
     {
-        key: 'receivedDifference',
-        label: 'Diferencia',
-        sortable: true,
-        align: 'right',
-        accessor: (row) => row.receivedDifference,
-        cellClass: moneyCellClass,
-        footer: (rows) => formatReportSignedMoney(sumMoney(rows, (row) => row.receivedDifference)),
-        footerClass: moneyCellClass,
-    },
-    {
-        key: 'lastRecordedDate',
+        key: 'lastDate',
         label: 'Última fecha',
         sortable: true,
-        accessor: (row) => row.lastRecordedDate ?? '',
         cellClass: 'whitespace-nowrap',
     },
     ...(canOpenMeetingHistory.value
@@ -591,122 +801,158 @@ const meetingColumns = computed<DataTableColumn<MeetingReportAggregate>[]>(() =>
         : []),
 ])
 
-const detailColumns = computed<DataTableColumn<MeetingReportRow>[]>(() => [
+const titherColumns = computed<DataTableColumn<TitherReportAggregate>[]>(() => [
     {
-        key: 'date',
-        label: 'Fecha',
+        key: 'tither',
+        label: 'Diezmador',
         sortable: true,
-        accessor: (row) => row.date,
-        footer: () => 'Total general',
-        cellClass: 'whitespace-nowrap',
-    },
-    {
-        key: 'meeting',
-        label: 'Reunión',
-        sortable: true,
-        accessor: (row) => `${row.meetingCode} ${row.meetingTitle}`,
+        accessor: (row) => `${row.titherCode} ${row.titherName}`,
+        footer: () => 'Total de diezmos',
         cellClass: 'min-w-[240px]',
     },
     {
         key: 'territory',
         label: 'Territorio',
         sortable: true,
-        accessor: (row) =>
-            [row.sectorName, row.zoneName, row.districtName].filter(Boolean).join(' ') ||
-            (row.isGeneral ? 'Toda la iglesia' : 'Sin asignar'),
+        accessor: territorySearchText,
         cellClass: 'min-w-[180px]',
     },
     {
-        key: 'leaderName',
-        label: 'Líder',
-        sortable: true,
-        accessor: (row) => row.leaderName ?? '',
-        cellClass: 'min-w-[150px]',
-    },
-    {
-        key: 'status',
-        label: 'Estado',
+        key: 'envelopeCount',
+        label: 'Sobres',
         sortable: true,
         align: 'center',
-        accessor: (row) => reportStatusLabel(row.status),
-        footer: (rows) =>
-            `${rows.filter((row) => row.status === 'registrada').length}/${rows.length}`,
+        cellClass: moneyCellClass,
+        footer: (rows) => rows.reduce((sum, row) => sum + row.envelopeCount, 0),
     },
     {
-        key: 'attendance',
-        label: 'Asistencia',
+        key: 'totalReceived',
+        label: 'Total recibido',
         sortable: true,
         align: 'right',
-        accessor: (row) => row.attendance ?? '',
-        cellClass: moneyCellClass,
-        footer: (rows) => sumAttendance(rows).toLocaleString('es-SV'),
-    },
-    ...reportCategories.value.map<DataTableColumn<MeetingReportRow>>((category) => ({
-        key: `category-${category.id}`,
-        label: category.name,
-        sortable: true,
-        align: 'right',
-        accessor: (row) => sumCategory([row], category.id),
-        cellClass: moneyCellClass,
-        footer: (rows) => formatReportMoney(sumCategory(rows, category.id)),
-        footerClass: moneyCellClass,
-    })),
-    ...(showUncategorized.value
-        ? [
-              {
-                  key: 'uncategorized',
-                  label: UNCATEGORIZED_LABEL,
-                  sortable: true,
-                  align: 'right' as const,
-                  accessor: (row: MeetingReportRow) => row.uncategorizedAmount,
-                  cellClass: moneyCellClass,
-                  footer: (rows: MeetingReportRow[]) => formatReportMoney(sumUncategorized(rows)),
-                  footerClass: moneyCellClass,
-              },
-          ]
-        : []),
-    {
-        key: 'totalAmount',
-        label: 'Total ofrenda',
-        sortable: true,
-        align: 'right',
-        accessor: (row) => row.totalAmount ?? '',
         cellClass: `${moneyCellClass} font-semibold`,
-        footer: (rows) => formatReportMoney(sumOfferings(rows)),
+        footer: (rows) => formatReportMoney(sumMoney(rows, (row) => row.totalReceived)),
         footerClass: `${moneyCellClass} text-primary`,
     },
     {
-        key: 'reception',
-        label: 'Recepción',
+        key: 'averagePerEnvelope',
+        label: 'Prom. por sobre',
         sortable: true,
-        align: 'center',
-        accessor: (row) => reportReceptionLabel(row.reception, row.status),
+        align: 'right',
+        cellClass: moneyCellClass,
+        footer: (rows) =>
+            formatReportMoney(
+                averagePer(
+                    sumMoney(rows, (row) => row.totalReceived),
+                    rows.reduce((sum, row) => sum + row.envelopeCount, 0),
+                ),
+            ),
+        footerClass: moneyCellClass,
     },
+    {
+        key: 'titheShare',
+        label: '% de los diezmos',
+        sortable: true,
+        align: 'right',
+        cellClass: 'min-w-[140px]',
+        footer: (rows) =>
+            formatReportPercent(
+                summary.value.titheTotal > 0
+                    ? sumMoney(rows, (row) => row.totalReceived) / summary.value.titheTotal
+                    : 0,
+            ),
+        footerClass: moneyCellClass,
+    },
+    {
+        key: 'lastDate',
+        label: 'Último diezmo',
+        sortable: true,
+        cellClass: 'whitespace-nowrap',
+    },
+])
+
+const detailColumns = computed<DataTableColumn<MeetingReportRow>[]>(() => [
+    {
+        key: 'date',
+        label: 'Fecha',
+        sortable: true,
+        footer: () => 'Total general',
+        cellClass: 'whitespace-nowrap',
+    },
+    {
+        key: 'subject',
+        label: subjectLabel.value,
+        sortable: true,
+        accessor: (row) => `${reportRowCode(row)} ${reportRowTitle(row)} ${row.notes ?? ''}`,
+        cellClass: 'min-w-[240px]',
+    },
+    {
+        key: 'territory',
+        label: 'Territorio',
+        sortable: true,
+        accessor: territorySearchText,
+        cellClass: 'min-w-[180px]',
+    },
+    ...(hasMeetingRows.value
+        ? [
+              {
+                  key: 'leaderName',
+                  label: 'Líder',
+                  sortable: true,
+                  accessor: (row: MeetingReportRow) => row.leaderName ?? '',
+                  cellClass: 'min-w-[150px]',
+              },
+          ]
+        : []),
+    ...visibleCategories.value.map((category) =>
+        moneyColumn<MeetingReportRow>(
+            `category-${category.id}`,
+            category.name,
+            (row) => sumCategory([row], category.id),
+            (rows) => sumCategory(rows, category.id),
+        ),
+    ),
+    ...(showUncategorized.value
+        ? [
+              moneyColumn<MeetingReportRow>(
+                  'uncategorized',
+                  UNCATEGORIZED_LABEL,
+                  (row) => row.uncategorizedAmount,
+                  sumUncategorized,
+              ),
+          ]
+        : []),
+    ...(showTitheColumn.value
+        ? [
+              moneyColumn<MeetingReportRow>(
+                  'titheAmount',
+                  TITHES_LABEL,
+                  (row) => (isTitheRow(row) ? row.receivedAmount : 0),
+                  sumTithes,
+              ),
+          ]
+        : []),
     {
         key: 'receivedAmount',
-        label: 'Recibido',
+        label: 'Total recibido',
         sortable: true,
         align: 'right',
-        accessor: (row) => row.reception?.receivedAmount ?? '',
-        cellClass: moneyCellClass,
+        cellClass: `${moneyCellClass} font-semibold`,
         footer: (rows) => formatReportMoney(sumReceived(rows)),
-        footerClass: moneyCellClass,
+        footerClass: `${moneyCellClass} text-primary`,
     },
     {
-        key: 'difference',
-        label: 'Diferencia',
+        key: 'state',
+        label: 'Estado del sobre',
         sortable: true,
-        align: 'right',
-        accessor: (row) => row.reception?.difference ?? '',
-        cellClass: moneyCellClass,
-        footer: (rows) => formatReportSignedMoney(sumReceivedDifference(rows)),
-        footerClass: moneyCellClass,
+        align: 'center',
+        accessor: (row) => reportStateLabel(receptionState(row)),
     },
     {
-        key: 'recordedBy',
-        label: 'Registrado por',
+        key: 'receivedBy',
+        label: 'Recibido por',
         sortable: true,
-        accessor: (row) => row.recordedByName ?? '',
+        accessor: (row) => row.receivedByName ?? '',
         cellClass: 'min-w-[170px]',
     },
 ])
@@ -719,55 +965,63 @@ const districtColumns = computed<DataTableColumn<DistrictReportAggregate>[]>(() 
         footer: () => 'Total general',
         cellClass: 'min-w-[200px] font-semibold',
     },
+    ...(hasMeetingRows.value
+        ? [
+              {
+                  key: 'meetingCount',
+                  label: 'Reuniones',
+                  sortable: true,
+                  align: 'right' as const,
+                  cellClass: moneyCellClass,
+                  footer: (rows: DistrictReportAggregate[]) =>
+                      rows.reduce((sum, row) => sum + row.meetingCount, 0),
+              },
+          ]
+        : []),
+    ...(hasTitheRows.value
+        ? [
+              {
+                  key: 'titherCount',
+                  label: 'Diezmadores',
+                  sortable: true,
+                  align: 'right' as const,
+                  cellClass: moneyCellClass,
+                  footer: (rows: DistrictReportAggregate[]) =>
+                      rows.reduce((sum, row) => sum + row.titherCount, 0),
+              },
+          ]
+        : []),
     {
-        key: 'meetingCount',
-        label: 'Reuniones',
+        key: 'envelopeCount',
+        label: 'Sobres',
         sortable: true,
         align: 'right',
         cellClass: moneyCellClass,
-        footer: (rows) => rows.reduce((sum, row) => sum + row.meetingCount, 0),
+        footer: (rows) => rows.reduce((sum, row) => sum + row.envelopeCount, 0),
     },
     {
-        key: 'dates',
-        label: 'Fechas',
-        sortable: true,
-        align: 'center',
-        accessor: (row) => row.recordedCount,
-        footer: (rows) =>
-            `${rows.reduce((sum, row) => sum + row.recordedCount, 0)}/${rows.reduce((sum, row) => sum + row.occurrenceCount, 0)}`,
-    },
-    {
-        key: 'attendance',
-        label: 'Asistencia',
-        sortable: true,
-        align: 'right',
-        cellClass: moneyCellClass,
-        footer: (rows) =>
-            rows.reduce((sum, row) => sum + row.attendance, 0).toLocaleString('es-SV'),
-    },
-    {
-        key: 'averageAttendance',
-        label: 'Prom. asist.',
-        sortable: true,
-        align: 'right',
-        accessor: (row) => Math.round(row.averageAttendance * 10) / 10,
-        cellClass: moneyCellClass,
-    },
-    {
-        key: 'totalOfferings',
-        label: 'Total ofrendas',
+        key: 'totalReceived',
+        label: 'Total recibido',
         sortable: true,
         align: 'right',
         cellClass: `${moneyCellClass} font-semibold`,
-        footer: (rows) => formatReportMoney(sumMoney(rows, (row) => row.totalOfferings)),
+        footer: (rows) => formatReportMoney(sumMoney(rows, (row) => row.totalReceived)),
         footerClass: `${moneyCellClass} text-primary`,
     },
     {
-        key: 'averageOffering',
-        label: 'Prom. por fecha',
+        key: 'averagePerEnvelope',
+        label: 'Prom. por sobre',
         sortable: true,
         align: 'right',
         cellClass: moneyCellClass,
+        footer: (rows) =>
+            formatReportMoney(
+                averagePer(
+                    sumMoney(rows, (row) => row.totalReceived),
+                    rows.reduce((sum, row) => sum + row.envelopeCount, 0),
+                ),
+            ),
+        footerClass: moneyCellClass,
     },
     {
         key: 'share',
@@ -775,25 +1029,7 @@ const districtColumns = computed<DataTableColumn<DistrictReportAggregate>[]>(() 
         sortable: true,
         align: 'right',
         cellClass: 'min-w-[130px]',
-        footer: (rows) => formatReportPercent(shareOf(sumMoney(rows, (row) => row.totalOfferings))),
-        footerClass: moneyCellClass,
-    },
-    {
-        key: 'receivedAmount',
-        label: 'Recibido comité',
-        sortable: true,
-        align: 'right',
-        cellClass: moneyCellClass,
-        footer: (rows) => formatReportMoney(sumMoney(rows, (row) => row.receivedAmount)),
-        footerClass: moneyCellClass,
-    },
-    {
-        key: 'receivedDifference',
-        label: 'Diferencia',
-        sortable: true,
-        align: 'right',
-        cellClass: moneyCellClass,
-        footer: (rows) => formatReportSignedMoney(sumMoney(rows, (row) => row.receivedDifference)),
+        footer: (rows) => formatReportPercent(shareOf(sumMoney(rows, (row) => row.totalReceived))),
         footerClass: moneyCellClass,
     },
 ])
@@ -806,14 +1042,17 @@ const canDownload = computed(
 const exportContext = computed<MeetingReportExportContext>(() => ({
     appName: appName.value,
     title: REPORT_TITLE,
+    subtitle: REPORT_SUBTITLE,
     range: appliedRange.value,
     generatedAt: report.value?.generatedAt ?? new Date().toISOString(),
     filterLabels: filterLabels.value,
     summary: summary.value,
-    categories: reportCategories.value,
+    categories: visibleCategories.value,
     showUncategorized: showUncategorized.value,
+    showTitheColumn: showTitheColumn.value,
     categoryTotals: categoryBreakdown.value,
     meetings: meetingAggregates.value,
+    tithers: titherAggregates.value,
     districts: districtAggregates.value,
     rows: filteredRows.value,
 }))
@@ -822,6 +1061,7 @@ const exportLabels: Record<ExportFormat, string> = {
     excel: 'Excel',
     pdf: 'PDF',
     'csv-reuniones': 'CSV por reunión',
+    'csv-diezmadores': 'CSV por diezmador',
     'csv-detalle': 'CSV de detalle',
 }
 
@@ -853,6 +1093,7 @@ function errorMessage(error: unknown) {
 
 const filterLabelClass =
     'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
+const kpiLabelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
 const menuItemClass =
     'flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-on-surface outline-none transition-colors data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary'
 </script>
@@ -864,14 +1105,15 @@ const menuItemClass =
         >
             <div class="min-w-0">
                 <p class="text-xs font-semibold uppercase tracking-[0.4em] text-on-surface-variant">
-                    Reportería · Reuniones
+                    Reportería · Ofrendas y diezmos
                 </p>
                 <h1 class="mt-4 font-display text-4xl font-semibold text-on-surface md:text-5xl">
                     {{ REPORT_TITLE }}
                 </h1>
                 <p class="mt-3 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-                    Total de ofrendas por reunión y del período completo, con su desglose por
-                    categoría, territorio y fecha, y lo recibido por el comité de apoyo.
+                    Solo lo que el comité de apoyo recibió y contó: los sobres de las reuniones y
+                    los diezmos, con su total del período y su desglose por categoría, territorio,
+                    diezmador y fecha.
                 </p>
             </div>
 
@@ -920,7 +1162,7 @@ const menuItemClass =
                                 <span class="flex flex-col">
                                     <span class="font-semibold">Excel (.xlsx)</span>
                                     <span class="text-xs text-on-surface-variant">
-                                        Resumen, por reunión y detalle
+                                        Resumen, totales y detalle por sobre
                                     </span>
                                 </span>
                             </DropdownMenuItem>
@@ -935,6 +1177,7 @@ const menuItemClass =
                             </DropdownMenuItem>
                             <DropdownMenuSeparator class="my-1 h-px bg-outline-variant" />
                             <DropdownMenuItem
+                                v-if="hasMeetingRows"
                                 :class="menuItemClass"
                                 @select="runExport('csv-reuniones')"
                             >
@@ -947,6 +1190,19 @@ const menuItemClass =
                                 </span>
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                                v-if="hasTitheRows"
+                                :class="menuItemClass"
+                                @select="runExport('csv-diezmadores')"
+                            >
+                                <Sheet class="size-4 text-on-surface-variant" />
+                                <span class="flex flex-col">
+                                    <span class="font-semibold">CSV por diezmador</span>
+                                    <span class="text-xs text-on-surface-variant">
+                                        Una fila por diezmador con su total
+                                    </span>
+                                </span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                                 :class="menuItemClass"
                                 @select="runExport('csv-detalle')"
                             >
@@ -954,7 +1210,7 @@ const menuItemClass =
                                 <span class="flex flex-col">
                                     <span class="font-semibold">CSV de detalle</span>
                                     <span class="text-xs text-on-surface-variant">
-                                        Una fila por fecha de reunión
+                                        Una fila por sobre o diezmo recibido
                                     </span>
                                 </span>
                             </DropdownMenuItem>
@@ -967,7 +1223,9 @@ const menuItemClass =
         <section class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4">
             <div class="flex flex-col gap-4 xl:flex-row xl:items-end">
                 <div class="w-full xl:max-w-xs">
-                    <span :class="filterLabelClass">Período (fecha de la reunión)</span>
+                    <span :class="filterLabelClass"
+                        >Período (fecha de la reunión o del diezmo)</span
+                    >
                     <UiDatePicker
                         v-model="pickerRange"
                         mode="range"
@@ -1009,7 +1267,7 @@ const menuItemClass =
                         v-model="filters.kind"
                         :options="kindOptions"
                         :searchable="false"
-                        aria-label="Alcance de las reuniones"
+                        aria-label="Alcance del reporte"
                     />
                 </div>
                 <div>
@@ -1019,7 +1277,7 @@ const menuItemClass =
                         :options="meetingTypeOptions"
                         multiple
                         clearable
-                        :disabled="meetingTypeOptions.length === 0"
+                        :disabled="isTithesOnly || meetingTypeOptions.length === 0"
                         placeholder="Todos los tipos"
                         search-placeholder="Buscar tipo..."
                     />
@@ -1058,12 +1316,13 @@ const menuItemClass =
                     />
                 </div>
                 <div>
-                    <span :class="filterLabelClass">Estado del registro</span>
+                    <span :class="filterLabelClass">Estado del sobre</span>
                     <UiSearchSelect
-                        v-model="filters.status"
-                        :options="statusOptions"
+                        v-model="filters.state"
+                        :options="stateOptions"
                         :searchable="false"
-                        aria-label="Estado del registro"
+                        :disabled="isTithesOnly"
+                        aria-label="Estado del sobre"
                     />
                 </div>
             </div>
@@ -1129,13 +1388,13 @@ const menuItemClass =
             v-else-if="allRows.length === 0"
             class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low px-6 py-16 text-center"
         >
-            <CalendarRange class="mx-auto size-10 text-primary" />
+            <Inbox class="mx-auto size-10 text-primary" />
             <h2 class="mt-3 font-display text-2xl font-semibold text-on-surface">
-                Sin reuniones en este período
+                Sin sobres ni diezmos recibidos en este período
             </h2>
             <p class="mt-2 text-sm text-on-surface-variant">
-                No hay fechas de reunión entre {{ rangeLabel }} dentro de tu alcance. Prueba con
-                otro rango.
+                El comité de apoyo no ha recibido sobres de reuniones ni diezmos entre
+                {{ rangeLabel }} dentro de tu alcance. Prueba con otro rango.
             </p>
         </div>
 
@@ -1153,7 +1412,11 @@ const menuItemClass =
                         Sin coincidencias
                     </h2>
                     <p class="mt-2 text-sm text-on-surface-variant">
-                        Ninguna fecha de reunión coincide con los filtros aplicados.
+                        {{
+                            isTithesOnly
+                                ? 'Ningún diezmo recibido coincide con los filtros aplicados.'
+                                : 'Ningún sobre recibido coincide con los filtros aplicados.'
+                        }}
                     </p>
                     <UiButton
                         variant="outline"
@@ -1166,121 +1429,37 @@ const menuItemClass =
                 </div>
 
                 <template v-else>
-                    <section class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-                        <UiCard class="border-primary p-5 sm:col-span-2 lg:col-span-1">
+                    <section
+                        class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                        :class="kpiGridClass"
+                    >
+                        <UiCard
+                            v-for="card in kpiCards"
+                            :key="card.key"
+                            class="p-5"
+                            :class="
+                                card.highlight ? 'border-primary sm:col-span-2 lg:col-span-1' : ''
+                            "
+                        >
                             <div class="flex items-center justify-between">
-                                <p
-                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    Total de ofrendas
-                                </p>
-                                <Coins class="size-4 text-primary" />
+                                <p :class="kpiLabelClass">{{ card.label }}</p>
+                                <component
+                                    :is="card.icon"
+                                    class="size-4"
+                                    :class="
+                                        card.warn
+                                            ? 'text-amber-600 dark:text-amber-300'
+                                            : 'text-primary'
+                                    "
+                                />
                             </div>
                             <p
-                                class="mt-2 font-display text-3xl font-semibold tabular-nums text-primary"
+                                class="mt-2 font-display text-3xl font-semibold tabular-nums"
+                                :class="card.highlight ? 'text-primary' : 'text-on-surface'"
                             >
-                                {{ formatReportMoney(summary.totalOfferings) }}
+                                {{ card.value }}
                             </p>
-                            <p class="mt-1 text-xs text-on-surface-variant">
-                                de todas las reuniones del período
-                            </p>
-                        </UiCard>
-                        <UiCard class="p-5">
-                            <div class="flex items-center justify-between">
-                                <p
-                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    Reuniones
-                                </p>
-                                <ListChecks class="size-4 text-primary" />
-                            </div>
-                            <p
-                                class="mt-2 font-display text-3xl font-semibold tabular-nums text-on-surface"
-                            >
-                                {{ summary.meetingCount }}
-                            </p>
-                            <p class="mt-1 text-xs text-on-surface-variant">
-                                {{ summary.occurrenceCount }}
-                                {{ summary.occurrenceCount === 1 ? 'fecha' : 'fechas' }} en el
-                                período
-                            </p>
-                        </UiCard>
-                        <UiCard class="p-5">
-                            <div class="flex items-center justify-between">
-                                <p
-                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    Promedio por fecha
-                                </p>
-                                <HandCoins class="size-4 text-primary" />
-                            </div>
-                            <p
-                                class="mt-2 font-display text-3xl font-semibold tabular-nums text-on-surface"
-                            >
-                                {{ formatReportMoney(summary.averagePerOccurrence) }}
-                            </p>
-                            <p class="mt-1 text-xs text-on-surface-variant">
-                                {{ formatReportMoney(summary.averagePerMeeting) }} por reunión
-                            </p>
-                        </UiCard>
-                        <UiCard class="p-5">
-                            <div class="flex items-center justify-between">
-                                <p
-                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    Asistencia
-                                </p>
-                                <Users class="size-4 text-primary" />
-                            </div>
-                            <p
-                                class="mt-2 font-display text-3xl font-semibold tabular-nums text-on-surface"
-                            >
-                                {{ summary.totalAttendance.toLocaleString('es-SV') }}
-                            </p>
-                            <p class="mt-1 text-xs text-on-surface-variant">
-                                {{ formatReportNumber(summary.averageAttendance) }} por fecha ·
-                                {{ formatReportMoney(summary.offeringPerAttendee) }} por persona
-                            </p>
-                        </UiCard>
-                        <UiCard class="p-5">
-                            <div class="flex items-center justify-between">
-                                <p
-                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    Cumplimiento
-                                </p>
-                                <ClipboardCheck class="size-4 text-primary" />
-                            </div>
-                            <p
-                                class="mt-2 font-display text-3xl font-semibold tabular-nums text-on-surface"
-                            >
-                                {{ formatReportPercent(summary.complianceRate, 0) }}
-                            </p>
-                            <p class="mt-1 text-xs text-on-surface-variant">
-                                {{ summary.recordedCount }} registradas ·
-                                {{ summary.pendingCount }} pendientes
-                            </p>
-                        </UiCard>
-                        <UiCard class="p-5">
-                            <div class="flex items-center justify-between">
-                                <p
-                                    class="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                                >
-                                    Recibido por el comité
-                                </p>
-                                <Landmark class="size-4 text-primary" />
-                            </div>
-                            <p
-                                class="mt-2 font-display text-3xl font-semibold tabular-nums text-on-surface"
-                            >
-                                {{ formatReportMoney(summary.receivedAmount) }}
-                            </p>
-                            <p
-                                class="mt-1 text-xs"
-                                :class="differenceClass(summary.receivedDifference)"
-                            >
-                                Diferencia {{ formatReportSignedMoney(summary.receivedDifference) }}
-                            </p>
+                            <p class="mt-1 text-xs text-on-surface-variant">{{ card.hint }}</p>
                         </UiCard>
                     </section>
 
@@ -1293,7 +1472,7 @@ const menuItemClass =
                                         {{ trendTitle }}
                                     </h2>
                                     <p class="mt-0.5 text-[11px] text-on-surface-variant">
-                                        Suma de todas las reuniones registradas en cada período
+                                        {{ trendSubtitle }}
                                     </p>
                                 </div>
                                 <span class="ml-auto shrink-0 text-[11px] text-on-surface-variant">
@@ -1301,10 +1480,10 @@ const menuItemClass =
                                 </span>
                             </div>
                             <ColumnChart
-                                :values="trend.offerings"
+                                :values="trend.received"
                                 format="currency"
                                 :label="trendTitle"
-                                empty-message="No hay ofrendas registradas en el período."
+                                empty-message="No hay montos recibidos en el período."
                             />
                         </UiCard>
 
@@ -1316,15 +1495,15 @@ const menuItemClass =
                                         Por categoría
                                     </h2>
                                     <p class="mt-0.5 text-[11px] text-on-surface-variant">
-                                        Cómo se compone el total del período
+                                        Cómo se compone lo recibido
                                     </p>
                                 </div>
                             </div>
                             <RankedBarList
                                 :items="categoryItems"
-                                label="Ofrendas por categoría"
-                                :limit="7"
-                                empty-message="Sin ofrendas por categoría."
+                                label="Recibido por categoría"
+                                :limit="8"
+                                empty-message="Sin montos por categoría."
                             />
                         </UiCard>
                     </section>
@@ -1335,18 +1514,22 @@ const menuItemClass =
                                 <BarChart3 class="mt-0.5 size-4 shrink-0 text-primary" />
                                 <div class="min-w-0">
                                     <h2 class="text-sm font-semibold text-on-surface">
-                                        Reuniones con más ofrenda
+                                        {{ rankingTitle }}
                                     </h2>
                                     <p class="mt-0.5 text-[11px] text-on-surface-variant">
-                                        Participación sobre el total
+                                        {{
+                                            hasMeetingRows
+                                                ? 'Participación sobre el total'
+                                                : 'Participación sobre el total de diezmos'
+                                        }}
                                     </p>
                                 </div>
                             </div>
                             <RankedBarList
-                                :items="topMeetingItems"
-                                label="Reuniones con más ofrenda"
+                                :items="rankingItems"
+                                :label="rankingTitle"
                                 :limit="6"
-                                empty-message="Sin ofrendas registradas."
+                                empty-message="Sin montos recibidos."
                             />
                         </UiCard>
 
@@ -1358,15 +1541,16 @@ const menuItemClass =
                                         Por distrito
                                     </h2>
                                     <p class="mt-0.5 text-[11px] text-on-surface-variant">
-                                        Los cultos generales cuentan como toda la iglesia
+                                        Según el sector de cada reunión o diezmador; las reuniones
+                                        sin sector cuentan como toda la iglesia
                                     </p>
                                 </div>
                             </div>
                             <RankedBarList
                                 :items="districtItems"
-                                label="Ofrendas por distrito"
+                                label="Recibido por distrito"
                                 :limit="6"
-                                empty-message="Sin ofrendas registradas."
+                                empty-message="Sin montos recibidos."
                             />
                         </UiCard>
 
@@ -1375,15 +1559,16 @@ const menuItemClass =
                                 <ClipboardCheck class="mt-0.5 size-4 shrink-0 text-primary" />
                                 <div class="min-w-0">
                                     <h2 class="text-sm font-semibold text-on-surface">
-                                        Registro y entrega de sobres
+                                        Estado de los sobres
                                     </h2>
                                     <p class="mt-0.5 text-[11px] text-on-surface-variant">
-                                        Avance del período
+                                        {{ summary.meetingEnvelopeCount }} sobres de reunión en el
+                                        período
                                     </p>
                                 </div>
                             </div>
-                            <ul class="flex flex-col gap-4">
-                                <li v-for="item in progressItems" :key="item.label">
+                            <ul v-if="hasMeetingRows" class="flex flex-col gap-4">
+                                <li v-for="item in envelopeStateItems" :key="item.label">
                                     <div class="mb-1.5 flex items-baseline justify-between gap-4">
                                         <span class="text-sm text-on-surface">
                                             {{ item.label }}
@@ -1393,7 +1578,7 @@ const menuItemClass =
                                         >
                                             {{ item.count }}
                                             <span class="font-normal text-on-surface-variant">
-                                                / {{ item.total }}
+                                                / {{ summary.meetingEnvelopeCount }}
                                             </span>
                                         </span>
                                     </div>
@@ -1404,12 +1589,31 @@ const menuItemClass =
                                             class="h-full rounded-full transition-[width] duration-500"
                                             :class="item.tone"
                                             :style="{
-                                                width: progressWidth(item.count, item.total),
+                                                width: progressWidth(
+                                                    item.count,
+                                                    summary.meetingEnvelopeCount,
+                                                ),
                                             }"
                                         />
                                     </div>
                                 </li>
                             </ul>
+                            <p
+                                v-if="hasTitheRows"
+                                class="text-xs leading-relaxed text-on-surface-variant"
+                                :class="
+                                    hasMeetingRows
+                                        ? 'mt-5 border-t border-outline-variant pt-4'
+                                        : ''
+                                "
+                            >
+                                {{
+                                    summary.titheCount === 1
+                                        ? 'El sobre de diezmo no se cuadra'
+                                        : `Los ${summary.titheCount} sobres de diezmo no se cuadran`
+                                }}: no hay un monto reportado por un líder contra el cual
+                                compararlos.
+                            </p>
                         </UiCard>
                     </section>
 
@@ -1427,7 +1631,7 @@ const menuItemClass =
                                 </p>
                             </div>
                             <div
-                                class="inline-flex rounded-lg border border-outline-variant bg-surface-container-low p-1"
+                                class="inline-flex flex-wrap rounded-lg border border-outline-variant bg-surface-container-low p-1"
                                 role="tablist"
                             >
                                 <button
@@ -1435,10 +1639,10 @@ const menuItemClass =
                                     :key="tab.key"
                                     type="button"
                                     role="tab"
-                                    :aria-selected="activeTab === tab.key"
+                                    :aria-selected="currentTab === tab.key"
                                     class="inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors"
                                     :class="
-                                        activeTab === tab.key
+                                        currentTab === tab.key
                                             ? 'bg-primary text-primary-foreground'
                                             : 'text-on-surface-variant hover:text-on-surface'
                                     "
@@ -1448,7 +1652,7 @@ const menuItemClass =
                                     <span
                                         class="rounded-full px-1.5 py-0.5 text-[10px] tabular-nums"
                                         :class="
-                                            activeTab === tab.key
+                                            currentTab === tab.key
                                                 ? 'bg-primary-foreground text-primary'
                                                 : 'bg-surface-container-high'
                                         "
@@ -1460,10 +1664,10 @@ const menuItemClass =
                         </div>
 
                         <DataTable
-                            v-if="activeTab === 'reuniones'"
+                            v-if="currentTab === 'reuniones'"
                             :rows="meetingAggregates"
                             :columns="meetingColumns"
-                            row-key="meetingId"
+                            row-key="key"
                             :page-size="25"
                             :page-size-options="[10, 25, 50, 100, 250]"
                             show-search
@@ -1484,48 +1688,44 @@ const menuItemClass =
                                         <p
                                             class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant"
                                         >
-                                            {{ row.meetingCode }} · {{ row.meetingTypeName }}
-                                            <span v-if="!row.isMeetingActive">· Inactiva</span>
+                                            <template v-if="row.source === 'diezmo'">
+                                                A nombre de cada diezmador
+                                            </template>
+                                            <template v-else>
+                                                {{ row.meetingCode }} · {{ row.meetingTypeName }}
+                                                <span v-if="!row.isMeetingActive">· Inactiva</span>
+                                            </template>
                                         </p>
                                     </div>
                                 </div>
                             </template>
                             <template #cell-territory="{ row }">
                                 <p class="text-on-surface">
-                                    {{ territoryParts(row).primary }}
+                                    {{ aggregateTerritoryParts(row).primary }}
                                 </p>
                                 <p
-                                    v-if="territoryParts(row).secondary"
+                                    v-if="aggregateTerritoryParts(row).secondary"
                                     class="mt-0.5 text-[11px] text-on-surface-variant"
                                 >
-                                    {{ territoryParts(row).secondary }}
+                                    {{ aggregateTerritoryParts(row).secondary }}
                                 </p>
                             </template>
                             <template #cell-leaderName="{ row }">
-                                <span :class="row.leaderName ? '' : 'text-on-surface-variant'">
+                                <span
+                                    v-if="row.source === 'diezmo'"
+                                    class="text-on-surface-variant"
+                                >
+                                    {{ titherCountLabel(summary.titherCount) }}
+                                </span>
+                                <span
+                                    v-else
+                                    :class="row.leaderName ? '' : 'text-on-surface-variant'"
+                                >
                                     {{ row.leaderName ?? 'Sin líder' }}
                                 </span>
                             </template>
-                            <template #cell-dates="{ row }">
-                                <span class="font-semibold tabular-nums">
-                                    {{ row.recordedCount }}/{{ row.occurrenceCount }}
-                                </span>
-                                <p
-                                    v-if="row.pendingCount > 0"
-                                    class="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300"
-                                >
-                                    {{ row.pendingCount }}
-                                    {{ row.pendingCount === 1 ? 'pendiente' : 'pendientes' }}
-                                </p>
-                            </template>
-                            <template #cell-attendance="{ row }">
-                                {{ row.attendance.toLocaleString('es-SV') }}
-                            </template>
-                            <template #cell-averageAttendance="{ row }">
-                                {{ formatReportNumber(row.averageAttendance) }}
-                            </template>
                             <template
-                                v-for="category in reportCategories"
+                                v-for="category in visibleCategories"
                                 :key="category.id"
                                 #[`cell-category-${category.id}`]="{ row }"
                             >
@@ -1548,11 +1748,16 @@ const menuItemClass =
                                     {{ formatReportMoney(row.uncategorizedAmount) }}
                                 </span>
                             </template>
-                            <template #cell-totalOfferings="{ row }">
-                                {{ formatReportMoney(row.totalOfferings) }}
+                            <template #cell-titheAmount="{ row }">
+                                <span :class="row.titheAmount ? '' : 'text-on-surface-variant'">
+                                    {{ formatReportMoney(row.titheAmount) }}
+                                </span>
                             </template>
-                            <template #cell-averageOffering="{ row }">
-                                {{ formatReportMoney(row.averageOffering) }}
+                            <template #cell-totalReceived="{ row }">
+                                {{ formatReportMoney(row.totalReceived) }}
+                            </template>
+                            <template #cell-averagePerEnvelope="{ row }">
+                                {{ formatReportMoney(row.averagePerEnvelope) }}
                             </template>
                             <template #cell-share="{ row }">
                                 <div class="flex items-center justify-end gap-2">
@@ -1569,19 +1774,27 @@ const menuItemClass =
                                     </span>
                                 </div>
                             </template>
-                            <template #cell-receivedAmount="{ row }">
-                                {{ formatReportMoney(row.receivedAmount) }}
-                            </template>
-                            <template #cell-receivedDifference="{ row }">
-                                <span :class="differenceClass(row.receivedDifference)">
-                                    {{ formatReportSignedMoney(row.receivedDifference) }}
+                            <template #cell-openDiscrepancyCount="{ row }">
+                                <span
+                                    v-if="row.source === 'diezmo'"
+                                    class="text-on-surface-variant"
+                                >
+                                    —
                                 </span>
+                                <span
+                                    v-else-if="row.openDiscrepancyCount > 0"
+                                    class="font-semibold text-amber-700 dark:text-amber-300"
+                                >
+                                    {{ row.openDiscrepancyCount }}
+                                </span>
+                                <span v-else class="text-on-surface-variant">0</span>
                             </template>
-                            <template #cell-lastRecordedDate="{ row }">
-                                {{ formatReportDate(row.lastRecordedDate) }}
+                            <template #cell-lastDate="{ row }">
+                                {{ formatReportDate(row.lastDate) }}
                             </template>
                             <template #cell-actions="{ row }">
                                 <button
+                                    v-if="row.meetingId !== null"
                                     type="button"
                                     class="inline-flex size-8 items-center justify-center rounded border border-outline-variant text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
                                     :aria-label="`Ver historial de ${row.meetingTitle}`"
@@ -1594,16 +1807,85 @@ const menuItemClass =
                         </DataTable>
 
                         <DataTable
-                            v-else-if="activeTab === 'detalle'"
-                            :rows="filteredRows"
-                            :columns="detailColumns"
-                            row-key="id"
+                            v-else-if="currentTab === 'diezmadores'"
+                            :rows="titherAggregates"
+                            :columns="titherColumns"
+                            row-key="key"
                             :page-size="25"
                             :page-size-options="[10, 25, 50, 100, 250]"
                             show-search
                             dense
-                            search-placeholder="Buscar fecha, reunión, territorio, líder o quién registró..."
-                            empty-message="Ninguna fecha coincide con la búsqueda."
+                            search-placeholder="Buscar diezmador, código o territorio..."
+                            empty-message="Ningún diezmador coincide con la búsqueda."
+                        >
+                            <template #cell-tither="{ row }">
+                                <div class="flex items-start gap-3">
+                                    <span
+                                        class="mt-1.5 size-2.5 shrink-0 rounded-full"
+                                        :style="{ backgroundColor: TITHE_COLOR }"
+                                    />
+                                    <div class="min-w-0">
+                                        <p class="font-semibold text-on-surface">
+                                            {{ row.titherName }}
+                                        </p>
+                                        <p
+                                            class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant"
+                                        >
+                                            {{ row.titherCode }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </template>
+                            <template #cell-territory="{ row }">
+                                <p class="text-on-surface">
+                                    {{ territoryParts(row).primary }}
+                                </p>
+                                <p
+                                    v-if="territoryParts(row).secondary"
+                                    class="mt-0.5 text-[11px] text-on-surface-variant"
+                                >
+                                    {{ territoryParts(row).secondary }}
+                                </p>
+                            </template>
+                            <template #cell-totalReceived="{ row }">
+                                {{ formatReportMoney(row.totalReceived) }}
+                            </template>
+                            <template #cell-averagePerEnvelope="{ row }">
+                                {{ formatReportMoney(row.averagePerEnvelope) }}
+                            </template>
+                            <template #cell-titheShare="{ row }">
+                                <div class="flex items-center justify-end gap-2">
+                                    <div
+                                        class="h-1.5 w-16 overflow-hidden rounded-full bg-surface-container-high"
+                                    >
+                                        <div
+                                            class="h-full rounded-full bg-primary"
+                                            :style="{
+                                                width: `${Math.min(100, row.titheShare * 100)}%`,
+                                            }"
+                                        />
+                                    </div>
+                                    <span class="w-14 text-right tabular-nums">
+                                        {{ formatReportPercent(row.titheShare) }}
+                                    </span>
+                                </div>
+                            </template>
+                            <template #cell-lastDate="{ row }">
+                                {{ formatReportDate(row.lastDate) }}
+                            </template>
+                        </DataTable>
+
+                        <DataTable
+                            v-else-if="currentTab === 'detalle'"
+                            :rows="filteredRows"
+                            :columns="detailColumns"
+                            row-key="key"
+                            :page-size="25"
+                            :page-size-options="[10, 25, 50, 100, 250]"
+                            show-search
+                            dense
+                            search-placeholder="Buscar fecha, reunión, diezmador, territorio o quién recibió..."
+                            empty-message="Ningún sobre coincide con la búsqueda."
                         >
                             <template #cell-date="{ row }">
                                 <p class="font-semibold tabular-nums text-on-surface">
@@ -1613,20 +1895,26 @@ const menuItemClass =
                                     {{ formatReportWeekday(row.date) }}
                                 </p>
                             </template>
-                            <template #cell-meeting="{ row }">
+                            <template #cell-subject="{ row }">
                                 <div class="flex items-start gap-3">
                                     <span
                                         class="mt-1.5 size-2.5 shrink-0 rounded-full"
-                                        :style="{ backgroundColor: row.meetingColor }"
+                                        :style="{ backgroundColor: reportRowColor(row) }"
                                     />
                                     <div class="min-w-0">
                                         <p class="font-semibold text-on-surface">
-                                            {{ row.meetingTitle }}
+                                            {{ reportRowTitle(row) }}
                                         </p>
                                         <p
                                             class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant"
                                         >
-                                            {{ row.meetingCode }} · {{ row.meetingTypeName }}
+                                            {{ reportRowCode(row) }} · {{ reportRowType(row) }}
+                                        </p>
+                                        <p
+                                            v-if="row.notes"
+                                            class="mt-1 text-[11px] italic text-on-surface-variant"
+                                        >
+                                            {{ row.notes }}
                                         </p>
                                     </div>
                                 </div>
@@ -1643,88 +1931,51 @@ const menuItemClass =
                                 </p>
                             </template>
                             <template #cell-leaderName="{ row }">
-                                <span :class="row.leaderName ? '' : 'text-on-surface-variant'">
+                                <span v-if="isTitheRow(row)" class="text-on-surface-variant">
+                                    —
+                                </span>
+                                <span
+                                    v-else
+                                    :class="row.leaderName ? '' : 'text-on-surface-variant'"
+                                >
                                     {{ row.leaderName ?? 'Sin líder' }}
                                 </span>
                             </template>
-                            <template #cell-status="{ row }">
-                                <span
-                                    class="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-                                    :class="
-                                        row.status === 'registrada'
-                                            ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300'
-                                            : 'border-amber-500 text-amber-700 dark:text-amber-300'
-                                    "
-                                >
-                                    {{ reportStatusLabel(row.status) }}
-                                </span>
-                            </template>
-                            <template #cell-attendance="{ row }">
-                                <span v-if="row.attendance !== null">
-                                    {{ row.attendance.toLocaleString('es-SV') }}
-                                </span>
-                                <span v-else class="text-on-surface-variant">—</span>
-                            </template>
                             <template
-                                v-for="category in reportCategories"
+                                v-for="category in visibleCategories"
                                 :key="category.id"
                                 #[`cell-category-${category.id}`]="{ row }"
                             >
-                                <span v-if="row.status === 'registrada'">
-                                    {{ formatReportMoney(sumCategory([row], category.id)) }}
-                                </span>
-                                <span v-else class="text-on-surface-variant">—</span>
+                                {{ formatReportMoney(sumCategory([row], category.id)) }}
                             </template>
                             <template #cell-uncategorized="{ row }">
-                                <span v-if="row.status === 'registrada'">
-                                    {{ formatReportMoney(row.uncategorizedAmount) }}
-                                </span>
-                                <span v-else class="text-on-surface-variant">—</span>
+                                {{ formatReportMoney(row.uncategorizedAmount) }}
                             </template>
-                            <template #cell-totalAmount="{ row }">
-                                <span v-if="row.totalAmount !== null">
-                                    {{ formatReportMoney(row.totalAmount) }}
-                                </span>
-                                <span v-else class="font-normal text-on-surface-variant">—</span>
-                            </template>
-                            <template #cell-reception="{ row }">
-                                <span
-                                    class="inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-                                    :class="
-                                        !row.reception
-                                            ? 'border-outline-variant text-on-surface-variant'
-                                            : row.reception.status === 'cuadra' ||
-                                                row.reception.isClosed
-                                              ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300'
-                                              : 'border-amber-500 text-amber-700 dark:text-amber-300'
-                                    "
-                                >
-                                    {{ reportReceptionLabel(row.reception, row.status) }}
-                                </span>
+                            <template #cell-titheAmount="{ row }">
+                                {{ formatReportMoney(isTitheRow(row) ? row.receivedAmount : 0) }}
                             </template>
                             <template #cell-receivedAmount="{ row }">
-                                <span v-if="row.reception">
-                                    {{ formatReportMoney(row.reception.receivedAmount) }}
-                                </span>
-                                <span v-else class="text-on-surface-variant">—</span>
+                                {{ formatReportMoney(row.receivedAmount) }}
                             </template>
-                            <template #cell-difference="{ row }">
+                            <template #cell-state="{ row }">
                                 <span
-                                    v-if="row.reception"
-                                    :class="differenceClass(row.reception.difference)"
+                                    class="inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                                    :class="stateBadgeClass(receptionState(row))"
                                 >
-                                    {{ formatReportSignedMoney(row.reception.difference) }}
+                                    {{ reportStateLabel(receptionState(row)) }}
                                 </span>
-                                <span v-else class="text-on-surface-variant">—</span>
+                                <p
+                                    v-if="row.directEntry"
+                                    class="mt-1 text-[10px] text-on-surface-variant"
+                                >
+                                    Ingreso directo
+                                </p>
                             </template>
-                            <template #cell-recordedBy="{ row }">
-                                <template v-if="row.recordedByName">
-                                    <p class="text-on-surface">{{ row.recordedByName }}</p>
-                                    <p class="mt-0.5 text-[11px] text-on-surface-variant">
-                                        {{ formatReportDateTime(row.recordedAt) }}
-                                    </p>
-                                </template>
-                                <span v-else class="text-on-surface-variant">—</span>
+                            <template #cell-receivedBy="{ row }">
+                                <p class="text-on-surface">{{ row.receivedByName ?? '—' }}</p>
+                                <p class="mt-0.5 text-[11px] text-on-surface-variant">
+                                    {{ formatReportDateTime(row.receivedAt) }}
+                                </p>
                             </template>
                         </DataTable>
 
@@ -1739,22 +1990,11 @@ const menuItemClass =
                             search-placeholder="Buscar distrito..."
                             empty-message="Ningún distrito coincide con la búsqueda."
                         >
-                            <template #cell-dates="{ row }">
-                                <span class="font-semibold tabular-nums">
-                                    {{ row.recordedCount }}/{{ row.occurrenceCount }}
-                                </span>
+                            <template #cell-totalReceived="{ row }">
+                                {{ formatReportMoney(row.totalReceived) }}
                             </template>
-                            <template #cell-attendance="{ row }">
-                                {{ row.attendance.toLocaleString('es-SV') }}
-                            </template>
-                            <template #cell-averageAttendance="{ row }">
-                                {{ formatReportNumber(row.averageAttendance) }}
-                            </template>
-                            <template #cell-totalOfferings="{ row }">
-                                {{ formatReportMoney(row.totalOfferings) }}
-                            </template>
-                            <template #cell-averageOffering="{ row }">
-                                {{ formatReportMoney(row.averageOffering) }}
+                            <template #cell-averagePerEnvelope="{ row }">
+                                {{ formatReportMoney(row.averagePerEnvelope) }}
                             </template>
                             <template #cell-share="{ row }">
                                 <div class="flex items-center justify-end gap-2">
@@ -1770,14 +2010,6 @@ const menuItemClass =
                                         {{ formatReportPercent(row.share) }}
                                     </span>
                                 </div>
-                            </template>
-                            <template #cell-receivedAmount="{ row }">
-                                {{ formatReportMoney(row.receivedAmount) }}
-                            </template>
-                            <template #cell-receivedDifference="{ row }">
-                                <span :class="differenceClass(row.receivedDifference)">
-                                    {{ formatReportSignedMoney(row.receivedDifference) }}
-                                </span>
                             </template>
                         </DataTable>
                     </section>

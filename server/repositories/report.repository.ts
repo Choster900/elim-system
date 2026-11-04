@@ -17,71 +17,101 @@ const sectorPathSelect = {
     },
 } satisfies Prisma.TerritorySectorSelect
 
-const personSelect = {
+const receiverSelect = {
     username: true,
     email: true,
     member: { select: { firstName: true, lastName: true } },
 } satisfies Prisma.UserSelect
 
-export const meetingReportOccurrenceSelect = {
+export const meetingReportReceptionSelect = {
     id: true,
-    meetingId: true,
-    date: true,
+    occurrenceId: true,
     status: true,
-    attendance: true,
-    totalAmount: true,
-    recordedAt: true,
-    meeting: {
-        select: {
-            code: true,
-            title: true,
-            color: true,
-            isActive: true,
-            startTime: true,
-            endTime: true,
-            type: { select: { id: true, name: true, isGeneral: true } },
-            sector: { select: sectorPathSelect },
-        },
-    },
-    sector: { select: sectorPathSelect },
-    leader: { select: { firstName: true, lastName: true } },
-    recordedBy: { select: personSelect },
+    receivedAmount: true,
+    directEntry: true,
+    closedAt: true,
+    receivedAt: true,
+    receivedBy: { select: receiverSelect },
     details: { select: { categoryId: true, amount: true } },
-    offeringReception: {
+    occurrence: {
         select: {
-            status: true,
-            receivedAmount: true,
-            amountDifference: true,
-            directEntry: true,
-            closedAt: true,
-            receivedAt: true,
+            meetingId: true,
+            date: true,
+            meeting: {
+                select: {
+                    code: true,
+                    title: true,
+                    color: true,
+                    isActive: true,
+                    startTime: true,
+                    endTime: true,
+                    type: { select: { id: true, name: true, isGeneral: true } },
+                    sector: { select: sectorPathSelect },
+                },
+            },
+            sector: { select: sectorPathSelect },
+            leader: { select: { firstName: true, lastName: true } },
         },
     },
-} satisfies Prisma.MeetingOccurrenceSelect
+} satisfies Prisma.OfferingReceptionSelect
 
-export type MeetingReportOccurrence = Prisma.MeetingOccurrenceGetPayload<{
-    select: typeof meetingReportOccurrenceSelect
+export type MeetingReportReception = Prisma.OfferingReceptionGetPayload<{
+    select: typeof meetingReportReceptionSelect
+}>
+
+export const meetingReportTitheSelect = {
+    id: true,
+    amount: true,
+    date: true,
+    notes: true,
+    receivedAt: true,
+    receivedBy: { select: receiverSelect },
+    member: {
+        select: {
+            id: true,
+            code: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            secondLastName: true,
+            territorySector: { select: sectorPathSelect },
+        },
+    },
+} satisfies Prisma.TitheSelect
+
+export type MeetingReportTithe = Prisma.TitheGetPayload<{
+    select: typeof meetingReportTitheSelect
 }>
 
 function dateOf(iso: string) {
     return new Date(`${iso}T00:00:00.000Z`)
 }
 
-export function findMeetingReportOccurrences(
+export function findMeetingReportReceptions(
     scope: OccurrenceScopeFilter,
     from: string,
     to: string,
 ) {
-    return prisma.meetingOccurrence.findMany({
+    return prisma.offeringReception.findMany({
         where: {
-            AND: [
-                scopeWhere(scope),
-                { date: { gte: dateOf(from), lte: dateOf(to) } },
-                { OR: [{ status: 'RECORDED' }, { meeting: { isActive: true } }] },
-            ],
+            status: { not: 'CANCELLED' },
+            occurrence: {
+                AND: [scopeWhere(scope), { date: { gte: dateOf(from), lte: dateOf(to) } }],
+            },
         },
-        select: meetingReportOccurrenceSelect,
-        orderBy: [{ date: 'asc' }, { meetingId: 'asc' }],
+        select: meetingReportReceptionSelect,
+        orderBy: [{ occurrence: { date: 'asc' } }, { occurrence: { meetingId: 'asc' } }],
+    })
+}
+
+export function findMeetingReportTithes(scope: OccurrenceScopeFilter, from: string, to: string) {
+    return prisma.tithe.findMany({
+        where: {
+            date: { gte: dateOf(from), lte: dateOf(to) },
+            ...(scope.seesAll ? {} : { member: { territorySectorId: { in: scope.sectorIds } } }),
+        },
+        select: meetingReportTitheSelect,
+        orderBy: [{ date: 'asc' }, { id: 'asc' }],
     })
 }
 

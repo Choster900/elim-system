@@ -6,15 +6,22 @@ import type {
     MeetingReportRow,
     ReportCategory,
     ReportDateRange,
+    ReportReceptionState,
     ReportSummary,
     ReportTrend,
     ReportTrendGranularity,
-    ReportTrendPoint,
+    TitherReportAggregate,
 } from '../interfaces/meeting-report.interface'
-import { formatReportDate, reportDistrictLabel } from './report-format.util'
+import {
+    TITHE_COLOR,
+    TITHE_LABEL,
+    TITHES_LABEL,
+    formatReportDate,
+    reportDistrictLabel,
+} from './report-format.util'
 
 const DAY_MS = 86_400_000
-const DAILY_TREND_MAX_DAYS = 31
+const DAILY_TREND_MAX_DAYS = 14
 const WEEKLY_TREND_MAX_DAYS = 120
 
 export const UNCATEGORIZED_LABEL = 'Sin categoría'
@@ -39,7 +46,7 @@ function utcToIso(time: number) {
     return new Date(time).toISOString().slice(0, 10)
 }
 
-export function addIsoDays(iso: string, days: number) {
+function addIsoDays(iso: string, days: number) {
     return utcToIso(isoToUtc(iso) + days * DAY_MS)
 }
 
@@ -47,14 +54,22 @@ export function rangeDays(range: ReportDateRange) {
     return Math.round((isoToUtc(range.to) - isoToUtc(range.from)) / DAY_MS) + 1
 }
 
-export function isRecorded(row: MeetingReportRow) {
-    return row.status === 'registrada'
+export function isTitheRow(row: Pick<MeetingReportRow, 'source'>) {
+    return row.source === 'diezmo'
+}
+
+export function receptionState(
+    row: Pick<MeetingReportRow, 'status' | 'isClosed'>,
+): ReportReceptionState | null {
+    if (row.status === null) return null
+    if (row.status === 'cuadra') return 'cuadra'
+    return row.isClosed ? 'diferencia_cerrada' : 'diferencia_abierta'
 }
 
 export function createEmptyFilters(): MeetingReportFilters {
     return {
         kind: 'todas',
-        status: 'todas',
+        state: 'todas',
         meetingTypeIds: [],
         districtId: null,
         zoneId: null,
@@ -64,12 +79,14 @@ export function createEmptyFilters(): MeetingReportFilters {
 
 export function filterReportRows(rows: MeetingReportRow[], filters: MeetingReportFilters) {
     return rows.filter((row) => {
-        if (filters.kind === 'celulas' && row.isGeneral) return false
-        if (filters.kind === 'generales' && !row.isGeneral) return false
-        if (filters.status !== 'todas' && row.status !== filters.status) return false
+        const isTithe = isTitheRow(row)
+        if (filters.kind === 'diezmos' && !isTithe) return false
+        if (filters.kind === 'celulas' && (isTithe || row.isGeneral)) return false
+        if (filters.kind === 'generales' && (isTithe || !row.isGeneral)) return false
+        if (filters.state !== 'todas' && receptionState(row) !== filters.state) return false
         if (
             filters.meetingTypeIds.length > 0 &&
-            !filters.meetingTypeIds.includes(row.meetingTypeId)
+            (row.meetingTypeId === null || !filters.meetingTypeIds.includes(row.meetingTypeId))
         ) {
             return false
         }
@@ -80,12 +97,8 @@ export function filterReportRows(rows: MeetingReportRow[], filters: MeetingRepor
     })
 }
 
-export function sumOfferings(rows: MeetingReportRow[]) {
-    return fromCents(rows.reduce((sum, row) => sum + toCents(row.totalAmount), 0))
-}
-
-export function sumAttendance(rows: MeetingReportRow[]) {
-    return rows.reduce((sum, row) => sum + (row.attendance ?? 0), 0)
+export function sumReceived(rows: MeetingReportRow[]) {
+    return fromCents(rows.reduce((sum, row) => sum + toCents(row.receivedAmount), 0))
 }
 
 export function sumCategory(rows: MeetingReportRow[], categoryId: number) {
@@ -105,159 +118,223 @@ export function sumUncategorized(rows: MeetingReportRow[]) {
     return fromCents(rows.reduce((sum, row) => sum + toCents(row.uncategorizedAmount), 0))
 }
 
-export function sumReceived(rows: MeetingReportRow[]) {
-    return fromCents(rows.reduce((sum, row) => sum + toCents(row.reception?.receivedAmount), 0))
-}
-
-export function sumReceivedDifference(rows: MeetingReportRow[]) {
-    return fromCents(rows.reduce((sum, row) => sum + toCents(row.reception?.difference), 0))
+export function sumTithes(rows: MeetingReportRow[]) {
+    return sumReceived(rows.filter(isTitheRow))
 }
 
 export function summarizeReport(rows: MeetingReportRow[]): ReportSummary {
-    const recorded = rows.filter(isRecorded)
-    const withAttendance = recorded.filter((row) => row.attendance !== null)
-    const totalCents = recorded.reduce((sum, row) => sum + toCents(row.totalAmount), 0)
-    const attendanceOfferingCents = withAttendance
-        .filter((row) => (row.attendance ?? 0) > 0)
-        .reduce((sum, row) => sum + toCents(row.totalAmount), 0)
-    const totalAttendance = sumAttendance(withAttendance)
-    const recordedMeetings = new Set(recorded.map((row) => row.meetingId)).size
-    const received = rows.filter((row) => row.reception !== null)
+    const meetingRows = rows.filter((row) => !isTitheRow(row))
+    const titheRows = rows.filter(isTitheRow)
+    const totalCents = toCents(sumReceived(rows))
+    const meetingCents = toCents(sumReceived(meetingRows))
+    const titheCents = toCents(sumReceived(titheRows))
+    const meetingCount = new Set(meetingRows.map((row) => row.meetingId)).size
+    const titherCount = new Set(titheRows.map((row) => row.titherId)).size
+    const countState = (state: ReportReceptionState) =>
+        meetingRows.filter((row) => receptionState(row) === state).length
+    const balancedCount = countState('cuadra')
 
     return {
-        meetingCount: new Set(rows.map((row) => row.meetingId)).size,
-        occurrenceCount: rows.length,
-        recordedCount: recorded.length,
-        pendingCount: rows.length - recorded.length,
-        complianceRate: rows.length > 0 ? recorded.length / rows.length : null,
-        totalOfferings: fromCents(totalCents),
-        averagePerOccurrence: fromCents(Math.round(ratio(totalCents, recorded.length))),
-        averagePerMeeting: fromCents(Math.round(ratio(totalCents, recordedMeetings))),
-        totalAttendance,
-        averageAttendance: ratio(totalAttendance, withAttendance.length),
-        offeringPerAttendee: fromCents(Math.round(ratio(attendanceOfferingCents, totalAttendance))),
-        receivedCount: received.length,
-        receivedAmount: sumReceived(received),
-        receivedDifference: sumReceivedDifference(received),
-        discrepancyCount: received.filter(
-            (row) => row.reception?.status === 'con_diferencia' && !row.reception.isClosed,
-        ).length,
-        unreceivedCount: recorded.filter((row) => row.reception === null).length,
+        meetingCount,
+        envelopeCount: rows.length,
+        meetingEnvelopeCount: meetingRows.length,
+        totalReceived: fromCents(totalCents),
+        meetingTotal: fromCents(meetingCents),
+        averagePerEnvelope: fromCents(Math.round(ratio(totalCents, rows.length))),
+        averagePerMeeting: fromCents(Math.round(ratio(meetingCents, meetingCount))),
+        balancedCount,
+        openDiscrepancyCount: countState('diferencia_abierta'),
+        closedDiscrepancyCount: countState('diferencia_cerrada'),
+        directEntryCount: meetingRows.filter((row) => row.directEntry).length,
+        balancedRate: meetingRows.length > 0 ? balancedCount / meetingRows.length : null,
+        titheCount: titheRows.length,
+        titherCount,
+        titheTotal: fromCents(titheCents),
+        averagePerTither: fromCents(Math.round(ratio(titheCents, titherCount))),
+        averagePerTithe: fromCents(Math.round(ratio(titheCents, titheRows.length))),
+        largestTithe: fromCents(
+            titheRows.reduce((max, row) => Math.max(max, toCents(row.receivedAmount)), 0),
+        ),
     }
 }
 
-export function groupByMeeting(rows: MeetingReportRow[]): MeetingReportAggregate[] {
-    const grandTotalCents = rows.reduce((sum, row) => sum + toCents(row.totalAmount), 0)
-    const groups = new Map<number, MeetingReportRow[]>()
+function groupRows<K>(rows: MeetingReportRow[], keyOf: (row: MeetingReportRow) => K) {
+    const groups = new Map<K, MeetingReportRow[]>()
     for (const row of rows) {
-        const group = groups.get(row.meetingId)
-        if (group) group.push(row)
-        else groups.set(row.meetingId, [row])
-    }
-
-    return [...groups.values()]
-        .map((group) => {
-            const latest = group.reduce((acc, row) => (row.date > acc.date ? row : acc))
-            const recorded = group.filter(isRecorded)
-            const withAttendance = recorded.filter((row) => row.attendance !== null)
-            const totalCents = recorded.reduce((sum, row) => sum + toCents(row.totalAmount), 0)
-            const categoryCents = new Map<number, number>()
-            for (const row of recorded) {
-                for (const offering of row.offerings) {
-                    categoryCents.set(
-                        offering.categoryId,
-                        (categoryCents.get(offering.categoryId) ?? 0) + toCents(offering.amount),
-                    )
-                }
-            }
-            const attendance = sumAttendance(withAttendance)
-            const dates = group.map((row) => row.date).sort()
-            const recordedDates = recorded.map((row) => row.date).sort()
-
-            return {
-                meetingId: latest.meetingId,
-                meetingCode: latest.meetingCode,
-                meetingTitle: latest.meetingTitle,
-                meetingColor: latest.meetingColor,
-                meetingTypeName: latest.meetingTypeName,
-                isGeneral: latest.isGeneral,
-                isMeetingActive: latest.isMeetingActive,
-                districtName: latest.districtName,
-                zoneName: latest.zoneName,
-                sectorName: latest.sectorName,
-                leaderName: latest.leaderName,
-                occurrenceCount: group.length,
-                recordedCount: recorded.length,
-                pendingCount: group.length - recorded.length,
-                attendance,
-                averageAttendance: ratio(attendance, withAttendance.length),
-                categoryAmounts: Object.fromEntries(
-                    [...categoryCents].map(([id, cents]) => [id, fromCents(cents)]),
-                ),
-                uncategorizedAmount: sumUncategorized(recorded),
-                totalOfferings: fromCents(totalCents),
-                averageOffering: fromCents(Math.round(ratio(totalCents, recorded.length))),
-                share: ratio(totalCents, grandTotalCents),
-                receivedAmount: sumReceived(group),
-                receivedDifference: sumReceivedDifference(group),
-                firstDate: dates[0]!,
-                lastDate: dates.at(-1)!,
-                lastRecordedDate: recordedDates.at(-1) ?? null,
-            }
-        })
-        .sort(
-            (left, right) =>
-                right.totalOfferings - left.totalOfferings ||
-                left.meetingCode.localeCompare(right.meetingCode, 'es'),
-        )
-}
-
-export function groupByDistrict(rows: MeetingReportRow[]): DistrictReportAggregate[] {
-    const grandTotalCents = rows.reduce((sum, row) => sum + toCents(row.totalAmount), 0)
-    const groups = new Map<string, MeetingReportRow[]>()
-    for (const row of rows) {
-        const key =
-            row.districtId !== null
-                ? `d-${row.districtId}`
-                : row.isGeneral
-                  ? 'general'
-                  : 'sin-asignar'
+        const key = keyOf(row)
         const group = groups.get(key)
         if (group) group.push(row)
         else groups.set(key, [row])
     }
+    return groups
+}
+
+const TITHES_GROUP_KEY = 'diezmos'
+
+function sortedDates(group: MeetingReportRow[]) {
+    const dates = group.map((row) => row.date).sort()
+    return { firstDate: dates[0]!, lastDate: dates.at(-1)! }
+}
+
+function titheAggregate(
+    group: MeetingReportRow[],
+    grandTotalCents: number,
+): MeetingReportAggregate {
+    const totalCents = toCents(sumReceived(group))
+    return {
+        key: TITHES_GROUP_KEY,
+        source: 'diezmo',
+        meetingId: null,
+        meetingCode: '',
+        meetingTitle: TITHES_LABEL,
+        meetingColor: TITHE_COLOR,
+        meetingTypeName: TITHE_LABEL,
+        isGeneral: false,
+        isMeetingActive: true,
+        districtName: null,
+        zoneName: null,
+        sectorName: null,
+        leaderName: null,
+        envelopeCount: group.length,
+        openDiscrepancyCount: 0,
+        categoryAmounts: {},
+        uncategorizedAmount: 0,
+        titheAmount: fromCents(totalCents),
+        totalReceived: fromCents(totalCents),
+        averagePerEnvelope: fromCents(Math.round(ratio(totalCents, group.length))),
+        share: ratio(totalCents, grandTotalCents),
+        ...sortedDates(group),
+    }
+}
+
+function meetingAggregate(
+    group: MeetingReportRow[],
+    grandTotalCents: number,
+): MeetingReportAggregate {
+    const latest = group.reduce((acc, row) => (row.date > acc.date ? row : acc))
+    const totalCents = toCents(sumReceived(group))
+    const categoryCents = new Map<number, number>()
+    for (const row of group) {
+        for (const offering of row.offerings) {
+            categoryCents.set(
+                offering.categoryId,
+                (categoryCents.get(offering.categoryId) ?? 0) + toCents(offering.amount),
+            )
+        }
+    }
+
+    return {
+        key: `m-${latest.meetingId}`,
+        source: 'reunion',
+        meetingId: latest.meetingId,
+        meetingCode: latest.meetingCode ?? '',
+        meetingTitle: latest.meetingTitle ?? '',
+        meetingColor: latest.meetingColor ?? TITHE_COLOR,
+        meetingTypeName: latest.meetingTypeName ?? '',
+        isGeneral: latest.isGeneral,
+        isMeetingActive: latest.isMeetingActive,
+        districtName: latest.districtName,
+        zoneName: latest.zoneName,
+        sectorName: latest.sectorName,
+        leaderName: latest.leaderName,
+        envelopeCount: group.length,
+        openDiscrepancyCount: group.filter((row) => receptionState(row) === 'diferencia_abierta')
+            .length,
+        categoryAmounts: Object.fromEntries(
+            [...categoryCents].map(([id, cents]) => [id, fromCents(cents)]),
+        ),
+        uncategorizedAmount: sumUncategorized(group),
+        titheAmount: 0,
+        totalReceived: fromCents(totalCents),
+        averagePerEnvelope: fromCents(Math.round(ratio(totalCents, group.length))),
+        share: ratio(totalCents, grandTotalCents),
+        ...sortedDates(group),
+    }
+}
+
+export function groupByMeeting(rows: MeetingReportRow[]): MeetingReportAggregate[] {
+    const grandTotalCents = toCents(sumReceived(rows))
+
+    return [
+        ...groupRows(rows, (row) =>
+            isTitheRow(row) ? TITHES_GROUP_KEY : `m-${row.meetingId}`,
+        ).entries(),
+    ]
+        .map(([key, group]) =>
+            key === TITHES_GROUP_KEY
+                ? titheAggregate(group, grandTotalCents)
+                : meetingAggregate(group, grandTotalCents),
+        )
+        .sort(
+            (left, right) =>
+                right.totalReceived - left.totalReceived ||
+                left.meetingCode.localeCompare(right.meetingCode, 'es'),
+        )
+}
+
+export function groupByTither(rows: MeetingReportRow[]): TitherReportAggregate[] {
+    const titheRows = rows.filter(isTitheRow)
+    const grandTotalCents = toCents(sumReceived(rows))
+    const titheTotalCents = toCents(sumReceived(titheRows))
+
+    return [...groupRows(titheRows, (row) => row.titherId).values()]
+        .map((group) => {
+            const latest = group.reduce((acc, row) => (row.date > acc.date ? row : acc))
+            const totalCents = toCents(sumReceived(group))
+            return {
+                key: `t-${latest.titherId}`,
+                titherId: latest.titherId ?? 0,
+                titherCode: latest.titherCode ?? '',
+                titherName: latest.titherName ?? TITHE_LABEL,
+                isGeneral: false,
+                districtName: latest.districtName,
+                zoneName: latest.zoneName,
+                sectorName: latest.sectorName,
+                envelopeCount: group.length,
+                totalReceived: fromCents(totalCents),
+                averagePerEnvelope: fromCents(Math.round(ratio(totalCents, group.length))),
+                titheShare: ratio(totalCents, titheTotalCents),
+                share: ratio(totalCents, grandTotalCents),
+                ...sortedDates(group),
+            }
+        })
+        .sort(
+            (left, right) =>
+                right.totalReceived - left.totalReceived ||
+                left.titherName.localeCompare(right.titherName, 'es'),
+        )
+}
+
+export function groupByDistrict(rows: MeetingReportRow[]): DistrictReportAggregate[] {
+    const grandTotalCents = toCents(sumReceived(rows))
+    const groups = groupRows(rows, (row) =>
+        row.districtId !== null ? `d-${row.districtId}` : row.isGeneral ? 'general' : 'sin-asignar',
+    )
 
     return [...groups.entries()]
         .map(([key, group]) => {
-            const recorded = group.filter(isRecorded)
-            const withAttendance = recorded.filter((row) => row.attendance !== null)
-            const totalCents = recorded.reduce((sum, row) => sum + toCents(row.totalAmount), 0)
-            const attendance = sumAttendance(withAttendance)
-
+            const totalCents = toCents(sumReceived(group))
+            const meetingRows = group.filter((row) => !isTitheRow(row))
+            const titheRows = group.filter(isTitheRow)
             return {
                 key,
                 districtName: reportDistrictLabel(group[0]!),
-                meetingCount: new Set(group.map((row) => row.meetingId)).size,
-                occurrenceCount: group.length,
-                recordedCount: recorded.length,
-                pendingCount: group.length - recorded.length,
-                attendance,
-                averageAttendance: ratio(attendance, withAttendance.length),
-                totalOfferings: fromCents(totalCents),
-                averageOffering: fromCents(Math.round(ratio(totalCents, recorded.length))),
+                meetingCount: new Set(meetingRows.map((row) => row.meetingId)).size,
+                titherCount: new Set(titheRows.map((row) => row.titherId)).size,
+                envelopeCount: group.length,
+                totalReceived: fromCents(totalCents),
+                averagePerEnvelope: fromCents(Math.round(ratio(totalCents, group.length))),
                 share: ratio(totalCents, grandTotalCents),
-                receivedAmount: sumReceived(group),
-                receivedDifference: sumReceivedDifference(group),
             }
         })
-        .sort((left, right) => right.totalOfferings - left.totalOfferings)
+        .sort((left, right) => right.totalReceived - left.totalReceived)
 }
 
 export function categoryTotals(
     rows: MeetingReportRow[],
     categories: ReportCategory[],
 ): CategoryReportTotal[] {
-    const grandTotalCents = rows.reduce((sum, row) => sum + toCents(row.totalAmount), 0)
+    const grandTotalCents = toCents(sumReceived(rows))
     const totals: CategoryReportTotal[] = categories.map((category) => {
         const amount = sumCategory(rows, category.id)
         return {
@@ -276,6 +353,15 @@ export function categoryTotals(
             share: ratio(toCents(uncategorized), grandTotalCents),
         })
     }
+    const tithes = sumTithes(rows)
+    if (tithes > 0) {
+        totals.push({
+            id: 'tithes',
+            name: TITHES_LABEL,
+            amount: tithes,
+            share: ratio(toCents(tithes), grandTotalCents),
+        })
+    }
     return totals
 }
 
@@ -286,7 +372,7 @@ export function usedCategories(rows: MeetingReportRow[], categories: ReportCateg
     return categories.filter((category) => used.has(category.id))
 }
 
-export function trendGranularity(range: ReportDateRange): ReportTrendGranularity {
+function trendGranularity(range: ReportDateRange): ReportTrendGranularity {
     const days = rangeDays(range)
     if (days <= DAILY_TREND_MAX_DAYS) return 'day'
     if (days <= WEEKLY_TREND_MAX_DAYS) return 'week'
@@ -322,46 +408,40 @@ function bucketLabel(iso: string, granularity: ReportTrendGranularity) {
 
 export function buildReportTrend(rows: MeetingReportRow[], range: ReportDateRange): ReportTrend {
     const granularity = trendGranularity(range)
-    const buckets = new Map<string, { cents: number; attendance: number; recorded: number }>()
+    const buckets = new Map<string, { cents: number; envelopes: number }>()
     for (
         let cursor = bucketStart(range.from, granularity);
         cursor <= range.to;
         cursor = nextBucket(cursor, granularity)
     ) {
-        buckets.set(cursor, { cents: 0, attendance: 0, recorded: 0 })
+        buckets.set(cursor, { cents: 0, envelopes: 0 })
     }
 
-    for (const row of rows.filter(isRecorded)) {
+    for (const row of rows) {
         const bucket = buckets.get(bucketStart(row.date, granularity))
         if (!bucket) continue
-        bucket.cents += toCents(row.totalAmount)
-        bucket.attendance += row.attendance ?? 0
-        bucket.recorded += 1
-    }
-
-    const points = [...buckets.entries()]
-    const detailOf = (start: string, recorded: number) => {
-        const end = granularity === 'day' ? start : addIsoDays(nextBucket(start, granularity), -1)
-        const period =
-            granularity === 'day'
-                ? formatReportDate(start)
-                : `${formatReportDate(start < range.from ? range.from : start)} – ${formatReportDate(end > range.to ? range.to : end)}`
-        return [period, `${recorded} ${recorded === 1 ? 'fecha registrada' : 'fechas registradas'}`]
+        bucket.cents += toCents(row.receivedAmount)
+        bucket.envelopes += 1
     }
 
     return {
         granularity,
-        offerings: points.map<ReportTrendPoint>(([start, bucket]) => ({
-            key: start,
-            label: bucketLabel(start, granularity),
-            value: fromCents(bucket.cents),
-            detail: detailOf(start, bucket.recorded),
-        })),
-        attendance: points.map<ReportTrendPoint>(([start, bucket]) => ({
-            key: start,
-            label: bucketLabel(start, granularity),
-            value: bucket.attendance,
-            detail: detailOf(start, bucket.recorded),
-        })),
+        received: [...buckets.entries()].map(([start, bucket]) => {
+            const end =
+                granularity === 'day' ? start : addIsoDays(nextBucket(start, granularity), -1)
+            const period =
+                granularity === 'day'
+                    ? formatReportDate(start)
+                    : `${formatReportDate(start < range.from ? range.from : start)} – ${formatReportDate(end > range.to ? range.to : end)}`
+            return {
+                key: start,
+                label: bucketLabel(start, granularity),
+                value: fromCents(bucket.cents),
+                detail: [
+                    period,
+                    `${bucket.envelopes} ${bucket.envelopes === 1 ? 'sobre recibido' : 'sobres recibidos'}`,
+                ],
+            }
+        }),
     }
 }

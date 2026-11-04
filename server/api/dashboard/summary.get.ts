@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
     try {
         const auth = requirePermission(event, 'dashboard.view')
         const query = validateDto(dashboardQuerySchema, getQuery(event))
+        if (query.kind === 'generales') requirePermission(event, 'dashboard.general_services')
         const scope = await resolveOccurrenceScope(auth)
         const data = await getDashboardSummary(query, scope.seesAll ? undefined : scope)
 
