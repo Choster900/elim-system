@@ -2,8 +2,9 @@
 import {
     AlertTriangle,
     BarChart3,
-    CalendarRange,
+    Check,
     ChevronDown,
+    ChevronRight,
     ClipboardCheck,
     Coins,
     Download,
@@ -22,6 +23,7 @@ import {
     Sheet,
     TrendingUp,
     UsersRound,
+    X,
 } from '@lucide/vue'
 import {
     DropdownMenuContent,
@@ -62,6 +64,7 @@ import {
     type MeetingReportExportContext,
 } from '../services/meeting-report-export.service'
 import {
+    REPORT_MEETING_KINDS,
     UNCATEGORIZED_LABEL,
     buildReportTrend,
     categoryTotals,
@@ -217,14 +220,42 @@ async function refreshReport() {
 }
 
 const filters = reactive<MeetingReportFilters>(createEmptyFilters())
-const isTithesOnly = computed(() => filters.kind === 'diezmos')
+const includesAllKinds = computed(() => filters.kinds.length === REPORT_MEETING_KINDS.length)
+const isTithesOnly = computed(() => filters.kinds.every((kind) => kind === 'diezmos'))
+const isTerritoryDisabled = computed(() => filters.kinds.every((kind) => kind === 'generales'))
+const hasMeetingFilter = computed(
+    () => filters.meetingTypeIds.length > 0 || filters.state !== 'todas',
+)
 
 const kindOptions: { value: ReportMeetingKind; label: string }[] = [
-    { value: 'todas', label: 'Todas' },
     { value: 'celulas', label: 'Células y sectores' },
     { value: 'generales', label: 'Cultos generales' },
     { value: 'diezmos', label: 'Diezmos' },
 ]
+
+function isOnlySelectedKind(kind: ReportMeetingKind) {
+    return filters.kinds.length === 1 && filters.kinds[0] === kind
+}
+
+function toggleKind(kind: ReportMeetingKind) {
+    if (isOnlySelectedKind(kind)) return
+    const selected = filters.kinds.includes(kind)
+    filters.kinds = REPORT_MEETING_KINDS.filter((option) =>
+        option === kind ? !selected : filters.kinds.includes(option),
+    )
+}
+
+const territoryHint = computed(() =>
+    isTerritoryDisabled.value ? 'No aplica a los cultos generales' : null,
+)
+
+const meetingsHint = computed(() => {
+    if (isTithesOnly.value) return 'No aplica a los diezmos'
+    if (filters.kinds.includes('diezmos') && hasMeetingFilter.value) {
+        return 'Al filtrar por tipo o estado quedan fuera los diezmos'
+    }
+    return null
+})
 
 const stateOptions: { value: ReportStateFilter; label: string }[] = [
     { value: 'todas', label: 'Todos los sobres' },
@@ -296,30 +327,18 @@ watch(
     },
 )
 
-watch(
-    () => filters.kind,
-    (kind) => {
-        if (kind === 'generales') {
-            filters.districtId = null
-            filters.zoneId = null
-            filters.sectorId = null
-        }
-        if (kind === 'diezmos') {
-            filters.meetingTypeIds = []
-            filters.state = 'todas'
-        }
-    },
-)
+watch(isTerritoryDisabled, (disabled) => {
+    if (!disabled) return
+    filters.districtId = null
+    filters.zoneId = null
+    filters.sectorId = null
+})
 
-const hasActiveFilters = computed(
-    () =>
-        filters.kind !== 'todas' ||
-        filters.state !== 'todas' ||
-        filters.meetingTypeIds.length > 0 ||
-        filters.districtId !== null ||
-        filters.zoneId !== null ||
-        filters.sectorId !== null,
-)
+watch(isTithesOnly, (tithesOnly) => {
+    if (!tithesOnly) return
+    filters.meetingTypeIds = []
+    filters.state = 'todas'
+})
 
 function clearFilters() {
     Object.assign(filters, createEmptyFilters())
@@ -329,32 +348,74 @@ function optionLabel(options: { value: number; label: string }[], value: number 
     return options.find((option) => option.value === value)?.label ?? null
 }
 
-const filterLabels = computed(() => {
-    const labels: string[] = []
-    if (filters.kind !== 'todas') {
-        labels.push(
-            `Alcance: ${kindOptions.find((option) => option.value === filters.kind)?.label}`,
-        )
-    }
-    if (filters.state !== 'todas') {
-        labels.push(
-            `Sobres: ${stateOptions.find((option) => option.value === filters.state)?.label}`,
-        )
+interface ActiveFilterChip {
+    key: string
+    label: string
+    clear: () => void
+}
+
+const activeFilterChips = computed<ActiveFilterChip[]>(() => {
+    const chips: ActiveFilterChip[] = []
+    if (!includesAllKinds.value) {
+        const names = kindOptions
+            .filter((option) => filters.kinds.includes(option.value))
+            .map((option) => option.label)
+        chips.push({
+            key: 'kinds',
+            label: `Incluye: ${names.join(', ')}`,
+            clear: () => (filters.kinds = [...REPORT_MEETING_KINDS]),
+        })
     }
     if (filters.meetingTypeIds.length > 0) {
         const names = filters.meetingTypeIds
             .map((id) => optionLabel(meetingTypeOptions.value, id))
             .filter(Boolean)
-        labels.push(`Tipo: ${names.join(', ')}`)
+        chips.push({
+            key: 'meetingTypes',
+            label: `Tipo: ${names.join(', ')}`,
+            clear: () => (filters.meetingTypeIds = []),
+        })
+    }
+    if (filters.state !== 'todas') {
+        chips.push({
+            key: 'state',
+            label: `Sobres: ${stateOptions.find((option) => option.value === filters.state)?.label}`,
+            clear: () => (filters.state = 'todas'),
+        })
     }
     const district = optionLabel(districtOptions.value, filters.districtId)
-    if (district) labels.push(`Distrito: ${district}`)
+    if (district) {
+        chips.push({
+            key: 'district',
+            label: `Distrito: ${district}`,
+            clear: () => (filters.districtId = null),
+        })
+    }
     const zone = optionLabel(zoneOptions.value, filters.zoneId)
-    if (zone) labels.push(`Zona: ${zone}`)
+    if (zone) {
+        chips.push({ key: 'zone', label: `Zona: ${zone}`, clear: () => (filters.zoneId = null) })
+    }
     const sector = optionLabel(sectorOptions.value, filters.sectorId)
-    if (sector) labels.push(`Sector: ${sector}`)
-    return labels
+    if (sector) {
+        chips.push({
+            key: 'sector',
+            label: `Sector: ${sector}`,
+            clear: () => (filters.sectorId = null),
+        })
+    }
+    return chips
 })
+
+const filterLabels = computed(() => activeFilterChips.value.map((chip) => chip.label))
+const hasActiveFilters = computed(
+    () =>
+        !includesAllKinds.value ||
+        filters.state !== 'todas' ||
+        filters.meetingTypeIds.length > 0 ||
+        filters.districtId !== null ||
+        filters.zoneId !== null ||
+        filters.sectorId !== null,
+)
 
 const filteredRows = computed(() =>
     filterReportRows(allRows.value, filters)
@@ -1110,6 +1171,8 @@ function errorMessage(error: unknown) {
 
 const filterLabelClass =
     'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant'
+const groupLabelClass = 'text-[11px] font-semibold uppercase tracking-[0.18em] text-on-surface'
+const groupHintClass = 'text-[11px] text-on-surface-variant'
 const kpiLabelClass = 'text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant'
 const menuItemClass =
     'flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-on-surface outline-none transition-colors data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary'
@@ -1237,123 +1300,223 @@ const menuItemClass =
             </div>
         </section>
 
-        <section class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low p-4">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-end">
-                <div class="w-full xl:max-w-xs">
-                    <span :class="filterLabelClass"
-                        >Período (fecha de la reunión o del diezmo)</span
-                    >
-                    <UiDatePicker
-                        v-model="pickerRange"
-                        mode="range"
-                        :clearable="false"
-                        :max-year="new Date().getFullYear() + 1"
-                        placeholder="Selecciona el rango"
-                    />
+        <section
+            class="mt-8 rounded-xl border border-outline-variant bg-surface-container-low"
+            aria-label="Filtros del reporte"
+        >
+            <div class="flex flex-col gap-5 p-4 sm:p-5 2xl:flex-row 2xl:items-end 2xl:gap-8">
+                <div class="min-w-0 2xl:flex-1">
+                    <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span id="report-period-label" :class="groupLabelClass">Período</span>
+                        <span :class="groupHintClass">
+                            {{ rangeLength }} {{ rangeLength === 1 ? 'día' : 'días' }}, según la
+                            fecha de la reunión o del diezmo
+                        </span>
+                    </div>
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+                        <div class="w-full lg:w-72 lg:shrink-0">
+                            <UiDatePicker
+                                v-model="pickerRange"
+                                mode="range"
+                                :clearable="false"
+                                :max-year="new Date().getFullYear() + 1"
+                                placeholder="Selecciona el rango"
+                            />
+                        </div>
+                        <div
+                            role="group"
+                            aria-label="Atajos de período"
+                            class="flex flex-wrap gap-1.5"
+                        >
+                            <button
+                                v-for="preset in reportRangePresets"
+                                :key="preset.key"
+                                type="button"
+                                class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                :class="
+                                    activePreset === preset.key
+                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        : 'border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary'
+                                "
+                                :aria-pressed="activePreset === preset.key"
+                                @click="applyPreset(preset.key)"
+                            >
+                                {{ preset.label }}
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <button
-                        v-for="preset in reportRangePresets"
-                        :key="preset.key"
-                        type="button"
-                        class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
-                        :class="
-                            activePreset === preset.key
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary'
-                        "
-                        @click="applyPreset(preset.key)"
+
+                <div class="min-w-0 2xl:shrink-0">
+                    <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span id="report-kind-label" :class="groupLabelClass">Qué incluir</span>
+                        <span :class="groupHintClass">puedes marcar varios</span>
+                    </div>
+                    <div
+                        role="group"
+                        aria-labelledby="report-kind-label"
+                        class="flex flex-wrap gap-2"
                     >
-                        {{ preset.label }}
-                    </button>
+                        <button
+                            v-for="option in kindOptions"
+                            :key="option.value"
+                            type="button"
+                            :class="[
+                                'inline-flex h-10 items-center gap-2.5 whitespace-nowrap rounded-lg border bg-surface px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                                filters.kinds.includes(option.value)
+                                    ? 'border-primary text-on-surface'
+                                    : 'border-outline-variant text-on-surface-variant hover:border-primary hover:text-on-surface',
+                                isOnlySelectedKind(option.value) ? 'cursor-default' : '',
+                            ]"
+                            :aria-pressed="filters.kinds.includes(option.value)"
+                            :title="
+                                isOnlySelectedKind(option.value)
+                                    ? 'Debe quedar al menos una opción marcada'
+                                    : undefined
+                            "
+                            @click="toggleKind(option.value)"
+                        >
+                            <span
+                                :class="[
+                                    'flex size-4 shrink-0 items-center justify-center rounded border transition-colors',
+                                    filters.kinds.includes(option.value)
+                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        : 'border-outline-variant',
+                                ]"
+                                aria-hidden="true"
+                            >
+                                <Check
+                                    v-if="filters.kinds.includes(option.value)"
+                                    class="size-3"
+                                    :stroke-width="3"
+                                />
+                            </span>
+                            {{ option.label }}
+                        </button>
+                    </div>
                 </div>
-                <p
-                    class="inline-flex items-center gap-2 text-xs text-on-surface-variant xl:ml-auto"
-                >
-                    <CalendarRange class="size-4 text-primary" />
-                    {{ rangeLabel }} · {{ rangeLength }} {{ rangeLength === 1 ? 'día' : 'días' }}
-                </p>
             </div>
 
             <div
-                class="mt-4 grid gap-3 border-t border-outline-variant pt-4 sm:grid-cols-2 xl:grid-cols-6"
+                class="grid gap-6 border-t border-outline-variant p-4 sm:p-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-0"
             >
-                <div>
-                    <span :class="filterLabelClass">Alcance</span>
-                    <UiSearchSelect
-                        v-model="filters.kind"
-                        :options="kindOptions"
-                        :searchable="false"
-                        aria-label="Alcance del reporte"
-                    />
+                <div role="group" aria-labelledby="report-territory-label" class="min-w-0 lg:pr-6">
+                    <div class="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span id="report-territory-label" :class="groupLabelClass">
+                            Territorio
+                        </span>
+                        <span v-if="territoryHint" :class="[groupHintClass, 'text-primary']">
+                            {{ territoryHint }}
+                        </span>
+                    </div>
+                    <div
+                        class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-end sm:gap-2"
+                    >
+                        <div class="min-w-0">
+                            <span :class="filterLabelClass">Distrito</span>
+                            <UiSearchSelect
+                                v-model="filters.districtId"
+                                :options="districtOptions"
+                                clearable
+                                :disabled="isTerritoryDisabled || districtOptions.length === 0"
+                                placeholder="Todos los distritos"
+                                search-placeholder="Buscar distrito..."
+                                aria-label="Distrito"
+                            />
+                        </div>
+                        <div class="hidden h-11 items-center sm:flex" aria-hidden="true">
+                            <ChevronRight class="size-4 text-on-surface-variant" />
+                        </div>
+                        <div class="min-w-0">
+                            <span :class="filterLabelClass">Zona</span>
+                            <UiSearchSelect
+                                v-model="filters.zoneId"
+                                :options="zoneOptions"
+                                clearable
+                                :disabled="isTerritoryDisabled || zoneOptions.length === 0"
+                                placeholder="Todas las zonas"
+                                search-placeholder="Buscar zona..."
+                                aria-label="Zona"
+                            />
+                        </div>
+                        <div class="hidden h-11 items-center sm:flex" aria-hidden="true">
+                            <ChevronRight class="size-4 text-on-surface-variant" />
+                        </div>
+                        <div class="min-w-0">
+                            <span :class="filterLabelClass">Sector</span>
+                            <UiSearchSelect
+                                v-model="filters.sectorId"
+                                :options="sectorOptions"
+                                clearable
+                                :disabled="isTerritoryDisabled || sectorOptions.length === 0"
+                                placeholder="Todos los sectores"
+                                search-placeholder="Buscar sector..."
+                                aria-label="Sector"
+                            />
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <span :class="filterLabelClass">Tipo de reunión</span>
-                    <UiSearchSelect
-                        v-model="filters.meetingTypeIds"
-                        :options="meetingTypeOptions"
-                        multiple
-                        clearable
-                        :disabled="isTithesOnly || meetingTypeOptions.length === 0"
-                        placeholder="Todos los tipos"
-                        search-placeholder="Buscar tipo..."
-                    />
-                </div>
-                <div>
-                    <span :class="filterLabelClass">Distrito</span>
-                    <UiSearchSelect
-                        v-model="filters.districtId"
-                        :options="districtOptions"
-                        clearable
-                        :disabled="filters.kind === 'generales' || districtOptions.length === 0"
-                        placeholder="Todos los distritos"
-                        search-placeholder="Buscar distrito..."
-                    />
-                </div>
-                <div>
-                    <span :class="filterLabelClass">Zona</span>
-                    <UiSearchSelect
-                        v-model="filters.zoneId"
-                        :options="zoneOptions"
-                        clearable
-                        :disabled="filters.kind === 'generales' || zoneOptions.length === 0"
-                        placeholder="Todas las zonas"
-                        search-placeholder="Buscar zona..."
-                    />
-                </div>
-                <div>
-                    <span :class="filterLabelClass">Sector</span>
-                    <UiSearchSelect
-                        v-model="filters.sectorId"
-                        :options="sectorOptions"
-                        clearable
-                        :disabled="filters.kind === 'generales' || sectorOptions.length === 0"
-                        placeholder="Todos los sectores"
-                        search-placeholder="Buscar sector..."
-                    />
-                </div>
-                <div>
-                    <span :class="filterLabelClass">Estado del sobre</span>
-                    <UiSearchSelect
-                        v-model="filters.state"
-                        :options="stateOptions"
-                        :searchable="false"
-                        :disabled="isTithesOnly"
-                        aria-label="Estado del sobre"
-                    />
+
+                <div
+                    role="group"
+                    aria-labelledby="report-meetings-label"
+                    class="min-w-0 lg:border-l lg:border-outline-variant lg:pl-6"
+                >
+                    <div class="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span id="report-meetings-label" :class="groupLabelClass">Reuniones</span>
+                        <span v-if="meetingsHint" :class="[groupHintClass, 'text-primary']">
+                            {{ meetingsHint }}
+                        </span>
+                    </div>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div class="min-w-0">
+                            <span :class="filterLabelClass">Tipo de reunión</span>
+                            <UiSearchSelect
+                                v-model="filters.meetingTypeIds"
+                                :options="meetingTypeOptions"
+                                multiple
+                                clearable
+                                :disabled="isTithesOnly || meetingTypeOptions.length === 0"
+                                placeholder="Todos los tipos"
+                                search-placeholder="Buscar tipo..."
+                                aria-label="Tipo de reunión"
+                            />
+                        </div>
+                        <div class="min-w-0">
+                            <span :class="filterLabelClass">Estado del sobre</span>
+                            <UiSearchSelect
+                                v-model="filters.state"
+                                :options="stateOptions"
+                                :searchable="false"
+                                :disabled="isTithesOnly"
+                                aria-label="Estado del sobre"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div
                 v-if="hasActiveFilters"
-                class="mt-3 flex flex-wrap items-center gap-2 border-t border-outline-variant pt-3"
+                class="flex flex-wrap items-center gap-2 border-t border-outline-variant px-4 py-3 sm:px-5"
             >
+                <span class="mr-1 text-xs font-semibold text-on-surface-variant">
+                    Filtros activos:
+                </span>
                 <span
-                    v-for="label in filterLabels"
-                    :key="label"
-                    class="rounded-full border border-outline-variant bg-surface px-2.5 py-1 text-[11px] text-on-surface-variant"
+                    v-for="chip in activeFilterChips"
+                    :key="chip.key"
+                    class="inline-flex max-w-full items-center gap-1 rounded-full border border-outline-variant bg-surface py-0.5 pl-2.5 pr-1 text-[11px] text-on-surface"
                 >
-                    {{ label }}
+                    <span class="truncate">{{ chip.label }}</span>
+                    <button
+                        type="button"
+                        class="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        :aria-label="`Quitar filtro ${chip.label}`"
+                        @click="chip.clear()"
+                    >
+                        <X class="size-3" />
+                    </button>
                 </span>
                 <button
                     type="button"

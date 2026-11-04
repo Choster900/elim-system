@@ -68,12 +68,12 @@ export interface ReportDateRange {
     to: string
 }
 
-export type ReportMeetingKind = 'todas' | 'celulas' | 'generales' | 'diezmos'
+export type ReportMeetingKind = 'celulas' | 'generales' | 'diezmos'
 
 export type ReportStateFilter = 'todas' | ReportReceptionState
 
 export interface MeetingReportFilters {
-    kind: ReportMeetingKind
+    kinds: ReportMeetingKind[]
     state: ReportStateFilter
     meetingTypeIds: number[]
     districtId: number | null

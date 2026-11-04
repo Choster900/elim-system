@@ -6,6 +6,7 @@ import type {
     MeetingReportRow,
     ReportCategory,
     ReportDateRange,
+    ReportMeetingKind,
     ReportReceptionState,
     ReportSummary,
     ReportTrend,
@@ -66,9 +67,22 @@ export function receptionState(
     return row.isClosed ? 'diferencia_cerrada' : 'diferencia_abierta'
 }
 
+export const REPORT_MEETING_KINDS: readonly ReportMeetingKind[] = [
+    'celulas',
+    'generales',
+    'diezmos',
+]
+
+export function reportRowKind(
+    row: Pick<MeetingReportRow, 'source' | 'isGeneral'>,
+): ReportMeetingKind {
+    if (isTitheRow(row)) return 'diezmos'
+    return row.isGeneral ? 'generales' : 'celulas'
+}
+
 export function createEmptyFilters(): MeetingReportFilters {
     return {
-        kind: 'todas',
+        kinds: [...REPORT_MEETING_KINDS],
         state: 'todas',
         meetingTypeIds: [],
         districtId: null,
@@ -79,10 +93,7 @@ export function createEmptyFilters(): MeetingReportFilters {
 
 export function filterReportRows(rows: MeetingReportRow[], filters: MeetingReportFilters) {
     return rows.filter((row) => {
-        const isTithe = isTitheRow(row)
-        if (filters.kind === 'diezmos' && !isTithe) return false
-        if (filters.kind === 'celulas' && (isTithe || row.isGeneral)) return false
-        if (filters.kind === 'generales' && (isTithe || !row.isGeneral)) return false
+        if (!filters.kinds.includes(reportRowKind(row))) return false
         if (filters.state !== 'todas' && receptionState(row) !== filters.state) return false
         if (
             filters.meetingTypeIds.length > 0 &&
