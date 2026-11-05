@@ -4,6 +4,8 @@ import {
     CalendarClock,
     CheckCircle2,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     ClipboardList,
     Compass,
     Eye,
@@ -190,6 +192,39 @@ const stats = computed(() => ({
     oldest: groups.value.length > 0 ? groups.value[0]!.daysBehind : 0,
 }))
 
+const PAGE_SIZE = 10
+const page = ref(1)
+const listRef = ref<HTMLElement | null>(null)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(groups.value.length / PAGE_SIZE)))
+const pagedGroups = computed(() =>
+    groups.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+)
+const rangeText = computed(() => {
+    const first = (page.value - 1) * PAGE_SIZE + 1
+    const last = Math.min(page.value * PAGE_SIZE, groups.value.length)
+    return `${first}–${last}`
+})
+
+watch([selectedZone, selectedSector], () => {
+    page.value = 1
+})
+
+watch(totalPages, (total) => {
+    if (page.value > total) page.value = total
+})
+
+function goToPage(next: number) {
+    page.value = next
+    nextTick(() => {
+        const top = listRef.value?.getBoundingClientRect().top ?? 0
+        if (top < 0) listRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+}
+
+const pageButtonClass =
+    'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant bg-surface px-3 text-sm font-semibold text-on-surface transition-colors hover:border-primary disabled:pointer-events-none disabled:opacity-40'
+
 function toneFor(daysBehind: number) {
     if (daysBehind >= 30) return 'text-destructive'
     if (daysBehind >= 14) return 'text-primary'
@@ -369,7 +404,7 @@ watch([() => authStore.user?.id, () => pendingQuery.isPending.value], startFirst
             </div>
         </section>
 
-        <section data-tour="offerings-pending-list" class="mt-8">
+        <section ref="listRef" data-tour="offerings-pending-list" class="mt-8 scroll-mt-24">
             <div
                 v-if="pendingQuery.isPending.value"
                 class="rounded-lg border border-outline-variant bg-surface-container-low px-6 py-12 text-center text-sm text-on-surface-variant"
@@ -401,7 +436,7 @@ watch([() => authStore.user?.id, () => pendingQuery.isPending.value], startFirst
 
             <div v-else class="flex flex-col gap-3">
                 <article
-                    v-for="group in groups"
+                    v-for="group in pagedGroups"
                     :key="group.meetingId"
                     class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container-low"
                 >
@@ -498,6 +533,42 @@ watch([() => authStore.user?.id, () => pendingQuery.isPending.value], startFirst
                         </button>
                     </div>
                 </article>
+
+                <nav
+                    class="mt-3 flex flex-col items-center justify-between gap-3 border-t border-outline-variant pt-4 sm:flex-row"
+                    aria-label="Paginación de reuniones pendientes"
+                >
+                    <p class="text-xs text-on-surface-variant">
+                        Mostrando
+                        <strong class="text-on-surface">{{ rangeText }}</strong>
+                        de
+                        <strong class="text-on-surface">{{ groups.length }}</strong>
+                        {{ groups.length === 1 ? 'reunión' : 'reuniones' }}
+                    </p>
+                    <div v-if="totalPages > 1" class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            :class="pageButtonClass"
+                            :disabled="page <= 1"
+                            @click="goToPage(page - 1)"
+                        >
+                            <ChevronLeft class="size-4" />
+                            Anterior
+                        </button>
+                        <span class="px-2 text-xs tabular-nums text-on-surface-variant">
+                            Página {{ page }} de {{ totalPages }}
+                        </span>
+                        <button
+                            type="button"
+                            :class="pageButtonClass"
+                            :disabled="page >= totalPages"
+                            @click="goToPage(page + 1)"
+                        >
+                            Siguiente
+                            <ChevronRight class="size-4" />
+                        </button>
+                    </div>
+                </nav>
             </div>
         </section>
 
