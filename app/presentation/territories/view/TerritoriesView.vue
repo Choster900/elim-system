@@ -114,10 +114,10 @@ const authStore = useAuthStore()
 const canManage = computed(() => authStore.hasPermission('territories.manage'))
 const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
 const canManageOfferings = computed(() => authStore.hasPermission('finance.manage'))
-const showTourButton = import.meta.dev
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
-const { hasSeen, markSeen } = useTourProgress('territories', 2)
+const { isEnabled: isTourEnabled, hasSeen, markSeen } = useTourProgress('territories', 2)
+const showTourButton = import.meta.dev && isTourEnabled
 const hierarchyQuery = useTerritoryHierarchyQuery()
 const leadersQuery = useTerritoryLeadersQuery()
 const coordinatorsQuery = useZoneCoordinatorsQuery()
@@ -221,6 +221,7 @@ const tourSteps: TourStep[] = [
 ]
 
 function startTour() {
+    if (!isTourEnabled) return
     isTourOpen.value = true
 }
 

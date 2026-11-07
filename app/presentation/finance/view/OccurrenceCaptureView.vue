@@ -107,7 +107,7 @@ const isLoading = computed(
 const isSaving = computed(() => bulkMutation.isPending.value)
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
-const { hasSeen, markSeen } = useTourProgress('offering-capture', 1)
+const { isEnabled: isTourEnabled, hasSeen, markSeen } = useTourProgress('offering-capture', 1)
 
 const tourSteps: TourStep[] = [
     {
@@ -141,6 +141,7 @@ const tourSteps: TourStep[] = [
 ]
 
 function startTour() {
+    if (!isTourEnabled) return
     isTourOpen.value = true
 }
 
@@ -400,7 +401,7 @@ const cellInputClass =
             >
                 <ArrowLeft class="size-4" /> Volver a pendientes
             </button>
-            <div class="group relative">
+            <div v-if="isTourEnabled" class="group relative">
                 <button
                     type="button"
                     class="flex size-8 items-center justify-center rounded-full border border-primary/30 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"

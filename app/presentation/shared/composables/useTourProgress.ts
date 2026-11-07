@@ -1,4 +1,10 @@
+export function useAppTourEnabled() {
+    return useRuntimeConfig().public.appTourEnabled === true
+}
+
 export function useTourProgress(tourId: string, version: number) {
+    const isEnabled = useAppTourEnabled()
+
     function storageKey(userId: number) {
         return `app-tour:${tourId}:v${version}:user:${userId}`
     }
@@ -19,5 +25,5 @@ export function useTourProgress(tourId: string, version: number) {
         } catch {}
     }
 
-    return { hasSeen, markSeen }
+    return { isEnabled, hasSeen, markSeen }
 }

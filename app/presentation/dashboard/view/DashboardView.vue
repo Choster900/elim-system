@@ -92,7 +92,7 @@ const isLoading = computed(() => dashboardQuery.isPending.value)
 const isRefreshing = computed(() => dashboardQuery.isFetching.value && !isLoading.value)
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
-const { hasSeen, markSeen } = useTourProgress('dashboard', 1)
+const { isEnabled: isTourEnabled, hasSeen, markSeen } = useTourProgress('dashboard', 1)
 
 const tourSteps: TourStep[] = [
     {
@@ -195,6 +195,7 @@ const visibleTourSteps = computed(() =>
 )
 
 function startTour() {
+    if (!isTourEnabled) return
     if (!summary.value) return
     isTourOpen.value = true
 }
@@ -519,7 +520,7 @@ const quickActionClass =
             </div>
 
             <div class="flex items-center gap-3">
-                <div class="group relative">
+                <div v-if="isTourEnabled" class="group relative">
                     <button
                         type="button"
                         class="flex size-10 items-center justify-center rounded-full border border-primary/40 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"

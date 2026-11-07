@@ -41,7 +41,7 @@ const pendingQuery = usePendingOccurrencesQuery({ autoRefresh: true })
 const canRecord = computed(() => authStore.hasPermission(routePermissionCodes.financeRecord))
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
-const { hasSeen, markSeen } = useTourProgress('offering-pending', 1)
+const { isEnabled: isTourEnabled, hasSeen, markSeen } = useTourProgress('offering-pending', 1)
 
 const tourSteps: TourStep[] = [
     {
@@ -89,6 +89,7 @@ const tourSteps: TourStep[] = [
 ]
 
 function startTour() {
+    if (!isTourEnabled) return
     isTourOpen.value = true
 }
 
@@ -284,7 +285,7 @@ watch([() => authStore.user?.id, () => pendingQuery.isPending.value], startFirst
             </div>
 
             <div v-if="!personalScope" class="flex flex-wrap gap-2">
-                <div class="group relative">
+                <div v-if="isTourEnabled" class="group relative">
                     <button
                         type="button"
                         class="flex size-9 items-center justify-center rounded-full border border-primary/30 bg-surface text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"

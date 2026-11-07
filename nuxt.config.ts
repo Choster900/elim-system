@@ -45,6 +45,7 @@ export default defineNuxtConfig({
             mapTileUrl: env.NUXT_PUBLIC_MAP_TILE_URL,
             mapAttribution: env.NUXT_PUBLIC_MAP_ATTRIBUTION,
             mapApiKey: env.NUXT_PUBLIC_MAP_API_KEY,
+            appTourEnabled: env.NUXT_PUBLIC_APP_TOUR_ENABLED,
         },
     },
     alias: {

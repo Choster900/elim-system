@@ -12,6 +12,7 @@ export interface AppEnv {
     NUXT_PUBLIC_MAP_TILE_URL: string
     NUXT_PUBLIC_MAP_ATTRIBUTION: string
     NUXT_PUBLIC_MAP_API_KEY: string
+    NUXT_PUBLIC_APP_TOUR_ENABLED: boolean
     NODE_ENV: 'development' | 'production' | 'test'
     APP_BASE_URL: string
     CORS_ALLOWED_ORIGINS: string
@@ -47,6 +48,7 @@ const envSchema = Joi.object<AppEnv>({
     NUXT_PUBLIC_MAP_TILE_URL: Joi.string().allow('').default(''),
     NUXT_PUBLIC_MAP_ATTRIBUTION: Joi.string().allow('').default(''),
     NUXT_PUBLIC_MAP_API_KEY: Joi.string().allow('').default(''),
+    NUXT_PUBLIC_APP_TOUR_ENABLED: Joi.boolean().truthy('true').falsy('false').default(false),
     NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
     APP_BASE_URL: Joi.string().uri().default('http://127.0.0.1:3000'),
     CORS_ALLOWED_ORIGINS: Joi.string()

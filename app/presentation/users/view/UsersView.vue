@@ -88,7 +88,7 @@ const resetRequirePasswordChange = ref(true)
 const resetExpiresInHours = ref(24)
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
-const { hasSeen, markSeen } = useTourProgress('users', 1)
+const { isEnabled: isTourEnabled, hasSeen, markSeen } = useTourProgress('users', 1)
 
 const tourSteps: TourStep[] = [
     {
@@ -129,6 +129,7 @@ const tourSteps: TourStep[] = [
 ]
 
 function startTour() {
+    if (!isTourEnabled) return
     isTourOpen.value = true
 }
 
@@ -437,7 +438,7 @@ function retryQueries() {
 
                 <template #toolbar-end>
                     <div class="flex items-center gap-2">
-                        <div class="group relative">
+                        <div v-if="isTourEnabled" class="group relative">
                             <UiButton
                                 variant="outline"
                                 size="icon"

@@ -110,7 +110,7 @@ const canCreate = computed(() => authStore.hasPermission('members.create'))
 const canImportExport = computed(() => authStore.hasPermission('members.import_export'))
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
-const { hasSeen, markSeen } = useTourProgress('members', 1)
+const { isEnabled: isTourEnabled, hasSeen, markSeen } = useTourProgress('members', 1)
 
 const tourSteps: TourStep[] = [
     {
@@ -157,6 +157,7 @@ const tourSteps: TourStep[] = [
 ]
 
 function startTour() {
+    if (!isTourEnabled) return
     isTourOpen.value = true
 }
 
@@ -631,7 +632,7 @@ async function downloadPendingMembers() {
 
                 <template #toolbar-end>
                     <div class="flex flex-wrap items-center justify-end gap-2">
-                        <div class="group relative">
+                        <div v-if="isTourEnabled" class="group relative">
                             <UiButton
                                 variant="outline"
                                 size="icon"

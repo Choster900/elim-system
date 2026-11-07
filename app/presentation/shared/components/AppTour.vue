@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, ArrowRight, Check, X } from '@lucide/vue'
+import { useAppTourEnabled } from '../composables/useTourProgress'
 import type { TourStep } from '../interfaces/tour.interface'
 
 const props = defineProps<{
@@ -12,6 +13,7 @@ const emit = defineEmits<{
     complete: []
 }>()
 
+const isEnabled = useAppTourEnabled()
 const dialog = ref<HTMLElement | null>(null)
 const title = ref<HTMLElement | null>(null)
 const visibleSteps = ref<TourStep[]>([])
@@ -115,7 +117,7 @@ function onKeydown(event: KeyboardEvent) {
 watch(
     () => props.open,
     async (open) => {
-        if (!import.meta.client) return
+        if (!import.meta.client || !isEnabled) return
         if (open) {
             previousFocus = document.activeElement as HTMLElement | null
             await nextTick()
@@ -150,7 +152,7 @@ onBeforeUnmount(() => {
 
 <template>
     <Teleport to="body">
-        <div v-if="open && currentStep" class="fixed inset-0 z-[80]">
+        <div v-if="isEnabled && open && currentStep" class="fixed inset-0 z-[80]">
             <div class="absolute inset-0" aria-hidden="true" />
             <div
                 class="pointer-events-none fixed rounded-xl ring-2 ring-primary shadow-[0_0_0_9999px_rgba(15,23,42,0.68)] transition-[top,left,width,height] duration-150"
