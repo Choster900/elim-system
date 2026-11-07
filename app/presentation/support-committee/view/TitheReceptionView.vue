@@ -4,7 +4,7 @@ import DataTable, {
     type DataTableColumn,
 } from '~/presentation/shared/components/DataTable/DataTable.vue'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
-import { formatLocalIsoDate } from '~/utils/date/date-format.util'
+import { businessIsoDate, formatLocalIsoDate } from '~/utils/date/date-format.util'
 import { resolveHttpErrorMessage } from '~/utils/http/resolve-http-error-message.util'
 import SupportCommitteeTabs from '../components/SupportCommitteeTabs.vue'
 import TitheForm from '../components/TitheForm.vue'
@@ -13,7 +13,7 @@ import { useDeleteTitheMutation } from '../composables/useTitheMutations'
 import { useTithesQuery } from '../composables/useTitheQueries'
 import type { TitheRecord } from '../interfaces/tithe.interface'
 import { formatMoney, toCents } from '../utils/reception-format.util'
-import { localIsoDate, memberMeta, timeLabel } from '../utils/tithe-format.util'
+import { memberMeta, timeLabel } from '../utils/tithe-format.util'
 
 defineOptions({ name: 'TitheReceptionView' })
 
@@ -21,9 +21,18 @@ useHead({ title: 'Diezmos · Sistema' })
 
 const PAGE_SIZE = 5
 const UNKNOWN_RECEIVER = 'Sin usuario'
+const CLOCK_TICK_MS = 60_000
+
+type TithePeriod = 'hoy' | 'mes' | 'todos'
+
+interface TitheRow extends TitheRecord {
+    receivedDay: string
+}
 
 const toast = useAppToast()
-const today = localIsoDate()
+const now = ref(Date.now())
+const today = computed(() => businessIsoDate(now.value))
+let clock: ReturnType<typeof setInterval> | undefined
 const { canCreateTithes, canUpdateTithes, canDeleteTithes } = useSupportCommitteeAccess()
 
 const tithesQuery = useTithesQuery()
@@ -43,10 +52,44 @@ function totalOf(items: TitheRecord[]) {
     return items.reduce((sum, tithe) => sum + toCents(tithe.amount), 0) / 100
 }
 
-const todayTithes = computed(() => tithes.value.filter((tithe) => tithe.date === today))
-const monthTithes = computed(() =>
-    tithes.value.filter((tithe) => tithe.date.slice(0, 7) === today.slice(0, 7)),
+const rows = computed<TitheRow[]>(() =>
+    tithes.value
+        .map((tithe) => ({ ...tithe, receivedDay: businessIsoDate(tithe.receivedAt) }))
+        .sort(
+            (left, right) => right.receivedAt.localeCompare(left.receivedAt) || right.id - left.id,
+        ),
 )
+
+const todayTithes = computed(() => rows.value.filter((row) => row.receivedDay === today.value))
+const monthTithes = computed(() =>
+    rows.value.filter((row) => row.receivedDay.slice(0, 7) === today.value.slice(0, 7)),
+)
+
+const period = ref<TithePeriod>('mes')
+const periodOptions = computed(() => [
+    { key: 'hoy' as const, label: 'Hoy', items: todayTithes.value },
+    { key: 'mes' as const, label: 'Este mes', items: monthTithes.value },
+    { key: 'todos' as const, label: 'Todos', items: rows.value },
+])
+const visibleTithes = computed(
+    () => periodOptions.value.find((option) => option.key === period.value)?.items ?? rows.value,
+)
+
+const emptyTitle = computed(() => {
+    if (tithes.value.length === 0) return 'Aún no hay diezmos'
+    if (visibleTithes.value.length > 0) return 'Sin resultados'
+    return period.value === 'hoy' ? 'Nada recibido hoy' : 'Nada recibido este mes'
+})
+
+const emptyMessage = computed(() => {
+    if (tithes.value.length === 0) {
+        return canCreateTithes.value
+            ? 'Registra el primer sobre con el formulario de arriba.'
+            : 'El comité todavía no ha registrado diezmos.'
+    }
+    if (visibleTithes.value.length > 0) return 'Ningún diezmo coincide con los filtros.'
+    return 'Toca «Todos» para ver los diezmos recibidos en otras fechas.'
+})
 
 const receiverOptions = computed(() =>
     [...new Set(tithes.value.map((tithe) => tithe.receivedByName ?? UNKNOWN_RECEIVER))]
@@ -54,14 +97,14 @@ const receiverOptions = computed(() =>
         .map((name) => ({ value: name, label: name })),
 )
 
-const columns = computed<DataTableColumn<TitheRecord>[]>(() => [
+const columns = computed<DataTableColumn<TitheRow>[]>(() => [
     {
-        key: 'date',
-        label: 'Fecha',
+        key: 'receivedDay',
+        label: 'Recibido',
         sortable: true,
         filterable: true,
         filterType: 'daterange',
-        accessor: (row) => row.date,
+        accessor: (row) => row.receivedDay,
         width: '170px',
     },
     {
@@ -111,6 +154,18 @@ function dateLabel(isoDate: string) {
     })
 }
 
+function dayMonthLabel(isoDate: string) {
+    return formatLocalIsoDate(isoDate, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+onMounted(() => {
+    clock = setInterval(() => {
+        now.value = Date.now()
+    }, CLOCK_TICK_MS)
+})
+
+onBeforeUnmount(() => clearInterval(clock))
+
 function startEditing(tithe: TitheRecord) {
     if (!canUpdateTithes.value) return
     editing.value = tithe
@@ -155,38 +210,47 @@ const iconButtonClass =
                 </p>
                 <h1 class="mt-1.5 font-display text-3xl font-semibold text-on-surface">Diezmos</h1>
             </div>
-            <dl
-                class="flex divide-x divide-outline-variant rounded-lg border border-outline-variant bg-surface-container-low"
-            >
-                <div class="px-4 py-2">
-                    <dt
-                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+            <div class="flex w-full flex-col items-start gap-1 sm:w-auto sm:items-end">
+                <div
+                    role="group"
+                    aria-label="Filtrar diezmos por día de recepción"
+                    class="grid w-full grid-cols-3 divide-x divide-outline-variant overflow-hidden rounded-lg border border-outline-variant bg-surface-container-low sm:flex sm:w-auto"
+                >
+                    <button
+                        v-for="option in periodOptions"
+                        :key="option.key"
+                        type="button"
+                        class="min-w-0 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4"
+                        :class="period === option.key ? 'bg-primary/10' : 'hover:bg-surface'"
+                        :aria-pressed="period === option.key"
+                        @click="period = option.key"
                     >
-                        Hoy
-                    </dt>
-                    <dd class="text-base font-semibold tabular-nums text-on-surface">
-                        {{ formatMoney(totalOf(todayTithes)) }}
-                        <span class="text-xs font-normal text-on-surface-variant">
-                            · {{ todayTithes.length }}
-                            {{ todayTithes.length === 1 ? 'sobre' : 'sobres' }}
+                        <span
+                            class="block text-[10px] font-semibold uppercase tracking-wider"
+                            :class="
+                                period === option.key ? 'text-primary' : 'text-on-surface-variant'
+                            "
+                        >
+                            {{ option.label }}
                         </span>
-                    </dd>
-                </div>
-                <div class="px-4 py-2">
-                    <dt
-                        class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
-                    >
-                        Este mes
-                    </dt>
-                    <dd class="text-base font-semibold tabular-nums text-on-surface">
-                        {{ formatMoney(totalOf(monthTithes)) }}
-                        <span class="text-xs font-normal text-on-surface-variant">
-                            · {{ monthTithes.length }}
-                            {{ monthTithes.length === 1 ? 'sobre' : 'sobres' }}
+                        <span
+                            class="block truncate text-sm font-semibold tabular-nums text-on-surface sm:whitespace-nowrap sm:text-base"
+                        >
+                            {{ formatMoney(totalOf(option.items)) }}
+                            <span
+                                class="block text-xs font-normal text-on-surface-variant sm:inline"
+                            >
+                                <span class="hidden sm:inline">·</span>
+                                {{ option.items.length }}
+                                {{ option.items.length === 1 ? 'sobre' : 'sobres' }}
+                            </span>
                         </span>
-                    </dd>
+                    </button>
                 </div>
-            </dl>
+                <p class="text-[11px] text-on-surface-variant">
+                    Según el día en que el comité recibió cada sobre
+                </p>
+            </div>
         </header>
 
         <SupportCommitteeTabs active="tithes" />
@@ -211,28 +275,28 @@ const iconButtonClass =
 
         <div v-else class="mt-4">
             <DataTable
-                :rows="tithes"
+                :rows="visibleTithes"
                 :columns="columns"
                 row-key="id"
                 :page-size="PAGE_SIZE"
                 :page-size-options="[5, 10, 25, 50]"
                 dense
                 :loading="tithesQuery.isPending.value"
-                :empty-title="tithes.length === 0 ? 'Aún no hay diezmos' : 'Sin resultados'"
-                :empty-message="
-                    tithes.length > 0
-                        ? 'Ningún diezmo coincide con los filtros.'
-                        : canCreateTithes
-                          ? 'Registra el primer sobre con el formulario de arriba.'
-                          : 'El comité todavía no ha registrado diezmos.'
-                "
+                :empty-title="emptyTitle"
+                :empty-message="emptyMessage"
             >
-                <template #cell-date="{ row }">
+                <template #cell-receivedDay="{ row }">
                     <p class="whitespace-nowrap text-sm text-on-surface">
-                        {{ dateLabel(row.date) }}
+                        {{ dateLabel(row.receivedDay) }}
                     </p>
                     <p class="text-[11px] tabular-nums text-on-surface-variant">
                         {{ timeLabel(row.receivedAt) }}
+                    </p>
+                    <p
+                        v-if="row.date !== row.receivedDay"
+                        class="whitespace-nowrap text-[11px] font-semibold text-primary"
+                    >
+                        Diezmo del {{ dayMonthLabel(row.date) }}
                     </p>
                 </template>
 

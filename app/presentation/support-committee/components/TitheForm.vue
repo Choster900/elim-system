@@ -39,6 +39,7 @@ let focusTimer: ReturnType<typeof setTimeout> | undefined
 
 const isEditing = computed(() => props.editing !== null)
 const isSaving = computed(() => saveMutation.isPending.value)
+const isPastDate = computed(() => !isEditing.value && date.value !== props.today)
 
 const tithers = computed(() => tithersQuery.data.value ?? [])
 const noTithers = computed(() => tithersQuery.isSuccess.value && tithers.value.length === 0)
@@ -144,6 +145,17 @@ watch(
         focusAmount()
     },
 )
+
+watch(
+    () => props.today,
+    (next, previous) => {
+        if (!isEditing.value && date.value === previous) date.value = next
+    },
+)
+
+function resetDateToToday() {
+    date.value = props.today
+}
 
 function sanitizeAmount(raw: string) {
     const [whole = '', ...fraction] = raw.replace(/[^\d.]/g, '').split('.')
@@ -292,7 +304,7 @@ const labelClass =
             </div>
 
             <div>
-                <span :class="labelClass">Fecha</span>
+                <span :class="labelClass">Fecha del diezmo</span>
                 <UiDatePicker v-model="dateModel" :clearable="false" :disabled="isSaving" />
             </div>
 
@@ -315,10 +327,29 @@ const labelClass =
         </form>
 
         <div
-            v-if="errors.length > 0 || noTithers || previousFromMember.length > 0"
+            v-if="errors.length > 0 || noTithers || previousFromMember.length > 0 || isPastDate"
             class="flex flex-col gap-1.5 px-4 pb-3 text-xs"
         >
             <p v-if="errors.length > 0" class="text-destructive">{{ errors.join(' ') }}</p>
+            <p
+                v-if="isPastDate"
+                class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-on-surface"
+            >
+                <Info class="size-3.5 shrink-0 text-primary" />
+                <span>
+                    Vas a registrar diezmos con fecha
+                    <strong>{{ shortDateLabel(date) }}</strong
+                    >, no de hoy.
+                </span>
+                <button
+                    type="button"
+                    class="font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    :disabled="isSaving"
+                    @click="resetDateToToday"
+                >
+                    Usar hoy
+                </button>
+            </p>
             <p v-if="noTithers" class="flex items-start gap-2 text-on-surface-variant">
                 <UserRoundX class="mt-px size-3.5 shrink-0 text-primary" />
                 Ningún miembro tiene el rol Diezmador. Asígnalo en Comunidad › Miembros (Editar →

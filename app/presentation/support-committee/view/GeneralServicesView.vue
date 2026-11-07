@@ -17,8 +17,14 @@ import SupportCommitteeTabs from '../components/SupportCommitteeTabs.vue'
 import { usePendingEnvelopesQuery, useReceptionsQuery } from '../composables/useReceptionQueries'
 import type { PendingEnvelopesParams, ReceptionFilters } from '../interfaces/reception.interface'
 import { useReceptionDraftStore } from '../stores/reception-draft.store'
-import { countPath, envelopePath, formatMoney, toCents } from '../utils/reception-format.util'
-import { localIsoDate, timeLabel } from '../utils/tithe-format.util'
+import {
+    countPath,
+    envelopePath,
+    formatDateTime,
+    formatMoney,
+    toCents,
+} from '../utils/reception-format.util'
+import { localIsoDate } from '../utils/tithe-format.util'
 
 defineOptions({ name: 'GeneralServicesView' })
 
@@ -526,8 +532,10 @@ onMounted(() => draftStore.ensureLoaded())
                                 </h3>
                                 <p class="mt-0.5 truncate text-xs text-on-surface-variant">
                                     {{ weekdayOf(reception.envelope.date) }} · Recibió
-                                    {{ reception.receivedByName ?? 'sin usuario' }} ·
-                                    {{ timeLabel(reception.receivedAt) }}
+                                    {{ reception.receivedByName ?? 'sin usuario' }}
+                                </p>
+                                <p class="mt-0.5 text-xs text-on-surface-variant">
+                                    Registrado el {{ formatDateTime(reception.receivedAt) }}
                                 </p>
                                 <p
                                     v-if="reception.closedAt"

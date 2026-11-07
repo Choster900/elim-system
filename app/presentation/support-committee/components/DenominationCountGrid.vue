@@ -3,6 +3,7 @@ import { Banknote, Coins } from '@lucide/vue'
 import type { Denomination } from '../interfaces/reception.interface'
 import {
     countedCents,
+    denominationKindLabel,
     denominationNickname,
     denominationValueLabel,
     formatMoney,
@@ -147,7 +148,7 @@ defineExpose({ focusFirst })
                         step="1"
                         placeholder="0"
                         autocomplete="off"
-                        :aria-label="`Cantidad de ${denomination.name} en ${categoryName}`"
+                        :aria-label="`Cantidad de ${denominationKindLabel(denomination).toLowerCase()} de ${denominationValueLabel(denomination)} en ${categoryName}`"
                         class="mt-1.5 h-9 w-full rounded-md border border-outline-variant bg-surface-container-low px-2 text-center text-base font-semibold tabular-nums text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/40 focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/40"
                         @input="onInput(denomination, $event)"
                         @keydown="onKeydown"

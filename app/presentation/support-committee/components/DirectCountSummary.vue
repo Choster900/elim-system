@@ -65,7 +65,7 @@ defineProps<{
                                 {{ denominationValueLabel(count.denomination) }}
                             </strong>
                             <span class="text-xs">
-                                {{ denominationKindLabel(count.denomination).toLowerCase() }}
+                                · {{ denominationKindLabel(count.denomination).toLowerCase() }}
                             </span>
                         </span>
                         <span class="font-semibold text-on-surface">

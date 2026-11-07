@@ -36,7 +36,7 @@ export function denominationValueLabel(denomination: Pick<Denomination, 'value'>
             ? `$${denomination.value}`
             : formatMoney(denomination.value)
     }
-    return `${Math.round(denomination.value * 100)}¢`
+    return `${Math.round(denomination.value * 100)} ctv`
 }
 
 export function denominationKindLabel(denomination: Pick<Denomination, 'name' | 'kind'>) {
