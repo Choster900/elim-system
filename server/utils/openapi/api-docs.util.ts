@@ -1045,14 +1045,15 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     tags: ['Reports'],
                     summary: 'Received offerings and tithes report',
                     description:
-                        'One row per offering envelope received by the support committee (source: reunion, cancelled receptions excluded) whose meeting date falls inside the range, plus one row per tithe (source: diezmo) whose tithe date falls inside the range. Rows are scoped by the caller: supervisors only receive meetings of their sectors and tithes of members assigned to their sectors. Amounts are the counted amounts, never what the leader recorded: each meeting row carries the received total, the received amount per category and the part not assigned to a category; tithe rows carry the tither and no meeting, category or reconciliation status.',
+                        'One row per offering envelope received by the support committee (source: reunion, cancelled receptions excluded), plus one row per tithe (source: diezmo), whose reception day (America/El_Salvador) falls inside the range; the meeting or tithe date does not matter. Each row carries date (meeting or tithe date), receivedAt and receivedDate (reception day). Rows are scoped by the caller: supervisors only receive meetings of their sectors and tithes of members assigned to their sectors. Amounts are the counted amounts, never what the leader recorded: each meeting row carries the received total, the received amount per category and the part not assigned to a category; tithe rows carry the tither and no meeting, category or reconciliation status.',
                     security: [{ BearerAuth: [] }],
                     parameters: [
                         {
                             name: 'from',
                             in: 'query',
                             required: true,
-                            description: 'Range start (inclusive), by meeting or tithe date.',
+                            description:
+                                'Range start (inclusive), by the day the support committee received the envelope or tithe.',
                             schema: { type: 'string', format: 'date', example: '2026-10-01' },
                         },
                         {

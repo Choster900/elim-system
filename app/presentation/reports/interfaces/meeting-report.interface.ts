@@ -44,6 +44,7 @@ export interface MeetingReportRow {
     directEntry: boolean
     receivedByName: string | null
     receivedAt: string
+    receivedDate: string
 }
 
 export interface ReportCategory {

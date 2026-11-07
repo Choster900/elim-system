@@ -183,7 +183,7 @@ function groupRows<K>(rows: MeetingReportRow[], keyOf: (row: MeetingReportRow) =
 const TITHES_GROUP_KEY = 'diezmos'
 
 function sortedDates(group: MeetingReportRow[]) {
-    const dates = group.map((row) => row.date).sort()
+    const dates = group.map((row) => row.receivedDate).sort()
     return { firstDate: dates[0]!, lastDate: dates.at(-1)! }
 }
 
@@ -429,7 +429,7 @@ export function buildReportTrend(rows: MeetingReportRow[], range: ReportDateRang
     }
 
     for (const row of rows) {
-        const bucket = buckets.get(bucketStart(row.date, granularity))
+        const bucket = buckets.get(bucketStart(row.receivedDate, granularity))
         if (!bucket) continue
         bucket.cents += toCents(row.receivedAmount)
         bucket.envelopes += 1

@@ -14,6 +14,7 @@ import {
     type MeetingReportTithe,
 } from '../repositories/report.repository'
 import { meetingFullCode } from '../utils/code/entity-code.util'
+import { businessIsoDate } from '../utils/date/business-time.util'
 
 const REPORT_CURRENCY = 'USD'
 
@@ -92,6 +93,7 @@ function toReportRow(reception: MeetingReportReception): MeetingReportRowDto {
         directEntry: reception.directEntry,
         receivedByName: personName(reception.receivedBy),
         receivedAt: reception.receivedAt.toISOString(),
+        receivedDate: businessIsoDate(reception.receivedAt),
     }
 }
 
@@ -134,6 +136,7 @@ function toTitheRow(tithe: MeetingReportTithe): MeetingReportRowDto {
         directEntry: false,
         receivedByName: personName(tithe.receivedBy),
         receivedAt: tithe.receivedAt.toISOString(),
+        receivedDate: businessIsoDate(tithe.receivedAt),
     }
 }
 

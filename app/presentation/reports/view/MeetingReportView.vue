@@ -422,7 +422,7 @@ const filteredRows = computed(() =>
         .slice()
         .sort(
             (left, right) =>
-                left.date.localeCompare(right.date) ||
+                left.receivedAt.localeCompare(right.receivedAt) ||
                 Number(isTitheRow(left)) - Number(isTitheRow(right)) ||
                 reportRowCode(left).localeCompare(reportRowCode(right), 'es'),
         ),
@@ -451,6 +451,11 @@ const subjectLabel = computed(() => {
     return hasMeetingRows.value ? 'Reunión o diezmador' : 'Diezmador'
 })
 
+const sourceDateLabel = computed(() => {
+    if (!hasTitheRows.value) return 'Fecha de la reunión'
+    return hasMeetingRows.value ? 'Fecha de reunión o diezmo' : 'Fecha del diezmo'
+})
+
 const trendTitle = computed(() => {
     if (trend.value.granularity === 'day') return 'Recibido por día'
     if (trend.value.granularity === 'week') return 'Recibido por semana'
@@ -458,9 +463,10 @@ const trendTitle = computed(() => {
 })
 
 const trendSubtitle = computed(() => {
-    if (!hasTitheRows.value) return 'Suma de los sobres recibidos, según la fecha de la reunión'
-    if (!hasMeetingRows.value) return 'Suma de los diezmos recibidos, según la fecha del diezmo'
-    return 'Sobres de reunión y diezmos, según la fecha de la reunión o del diezmo'
+    if (!hasTitheRows.value) return 'Suma de los sobres, según el día en que el comité los recibió'
+    if (!hasMeetingRows.value)
+        return 'Suma de los diezmos, según el día en que el comité los recibió'
+    return 'Sobres de reunión y diezmos, según el día en que el comité los recibió'
 })
 
 const kpiCards = computed<KpiCard[]>(() => {
@@ -870,7 +876,7 @@ const meetingColumns = computed<DataTableColumn<MeetingReportAggregate>[]>(() =>
     },
     {
         key: 'lastDate',
-        label: 'Última fecha',
+        label: 'Última recepción',
         sortable: true,
         cellClass: 'whitespace-nowrap',
     },
@@ -943,7 +949,7 @@ const titherColumns = computed<DataTableColumn<TitherReportAggregate>[]>(() => [
     },
     {
         key: 'lastDate',
-        label: 'Último diezmo',
+        label: 'Última recepción',
         sortable: true,
         cellClass: 'whitespace-nowrap',
     },
@@ -951,10 +957,16 @@ const titherColumns = computed<DataTableColumn<TitherReportAggregate>[]>(() => [
 
 const detailColumns = computed<DataTableColumn<MeetingReportRow>[]>(() => [
     {
-        key: 'date',
-        label: 'Fecha',
+        key: 'receivedDate',
+        label: 'Recibido',
         sortable: true,
         footer: () => 'Total general',
+        cellClass: 'whitespace-nowrap',
+    },
+    {
+        key: 'date',
+        label: sourceDateLabel.value,
+        sortable: true,
         cellClass: 'whitespace-nowrap',
     },
     {
@@ -1309,8 +1321,8 @@ const menuItemClass =
                     <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         <span id="report-period-label" :class="groupLabelClass">Período</span>
                         <span :class="groupHintClass">
-                            {{ rangeLength }} {{ rangeLength === 1 ? 'día' : 'días' }}, según la
-                            fecha de la reunión o del diezmo
+                            {{ rangeLength }} {{ rangeLength === 1 ? 'día' : 'días' }}, según el día
+                            en que el comité de apoyo recibió cada sobre o diezmo
                         </span>
                     </div>
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -2130,8 +2142,16 @@ const menuItemClass =
                             search-placeholder="Buscar fecha, reunión, diezmador, territorio o quién recibió..."
                             empty-message="Ningún sobre coincide con la búsqueda."
                         >
-                            <template #cell-date="{ row }">
+                            <template #cell-receivedDate="{ row }">
                                 <p class="font-semibold tabular-nums text-on-surface">
+                                    {{ formatReportDate(row.receivedDate) }}
+                                </p>
+                                <p class="mt-0.5 text-[11px] capitalize text-on-surface-variant">
+                                    {{ formatReportWeekday(row.receivedDate) }}
+                                </p>
+                            </template>
+                            <template #cell-date="{ row }">
+                                <p class="tabular-nums text-on-surface">
                                     {{ formatReportDate(row.date) }}
                                 </p>
                                 <p class="mt-0.5 text-[11px] capitalize text-on-surface-variant">

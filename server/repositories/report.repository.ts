@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../database/prisma'
 import type { OccurrenceScopeFilter } from '../dto/offering/occurrence.dto'
+import { businessDayStart, nextIsoDate } from '../utils/date/business-time.util'
 import { scopeWhere } from './occurrence.repository'
 
 const sectorPathSelect = {
@@ -83,8 +84,8 @@ export type MeetingReportTithe = Prisma.TitheGetPayload<{
     select: typeof meetingReportTitheSelect
 }>
 
-function dateOf(iso: string) {
-    return new Date(`${iso}T00:00:00.000Z`)
+function receivedBetween(from: string, to: string) {
+    return { gte: businessDayStart(from), lt: businessDayStart(nextIsoDate(to)) }
 }
 
 export function findMeetingReportReceptions(
@@ -95,23 +96,22 @@ export function findMeetingReportReceptions(
     return prisma.offeringReception.findMany({
         where: {
             status: { not: 'CANCELLED' },
-            occurrence: {
-                AND: [scopeWhere(scope), { date: { gte: dateOf(from), lte: dateOf(to) } }],
-            },
+            receivedAt: receivedBetween(from, to),
+            occurrence: scopeWhere(scope),
         },
         select: meetingReportReceptionSelect,
-        orderBy: [{ occurrence: { date: 'asc' } }, { occurrence: { meetingId: 'asc' } }],
+        orderBy: [{ receivedAt: 'asc' }, { id: 'asc' }],
     })
 }
 
 export function findMeetingReportTithes(scope: OccurrenceScopeFilter, from: string, to: string) {
     return prisma.tithe.findMany({
         where: {
-            date: { gte: dateOf(from), lte: dateOf(to) },
+            receivedAt: receivedBetween(from, to),
             ...(scope.seesAll ? {} : { member: { territorySectorId: { in: scope.sectorIds } } }),
         },
         select: meetingReportTitheSelect,
-        orderBy: [{ date: 'asc' }, { id: 'asc' }],
+        orderBy: [{ receivedAt: 'asc' }, { id: 'asc' }],
     })
 }
 

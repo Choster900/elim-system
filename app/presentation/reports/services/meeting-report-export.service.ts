@@ -139,6 +139,11 @@ function subjectHeader(context: MeetingReportExportContext) {
     return hasMeetings(context) ? 'Reunión o diezmador' : 'Diezmador'
 }
 
+function sourceDateHeader(context: MeetingReportExportContext) {
+    if (!hasTithes(context)) return 'Fecha de la reunión'
+    return hasMeetings(context) ? 'Fecha de reunión o diezmo' : 'Fecha del diezmo'
+}
+
 function meetingColumns(
     context: MeetingReportExportContext,
 ): ExportColumn<MeetingReportAggregate>[] {
@@ -213,13 +218,13 @@ function meetingColumns(
             total: summary.openDiscrepancyCount,
         },
         {
-            header: 'Primera fecha',
+            header: 'Primera recepción',
             width: 14,
             kind: 'date',
             value: (item) => item.firstDate,
         },
         {
-            header: 'Última fecha',
+            header: 'Última recepción',
             width: 14,
             kind: 'date',
             value: (item) => item.lastDate,
@@ -231,13 +236,24 @@ function detailColumns(context: MeetingReportExportContext): ExportColumn<Meetin
     const { summary } = context
     return [
         {
-            header: 'Fecha',
+            header: 'Fecha de recepción',
+            width: 13,
+            kind: 'date',
+            value: (row) => row.receivedDate,
+            total: TOTAL_LABEL,
+        },
+        {
+            header: 'Día',
+            width: 12,
+            kind: 'text',
+            value: (row) => formatReportWeekday(row.receivedDate),
+        },
+        {
+            header: sourceDateHeader(context),
             width: 13,
             kind: 'date',
             value: (row) => row.date,
-            total: TOTAL_LABEL,
         },
-        { header: 'Día', width: 12, kind: 'text', value: (row) => formatReportWeekday(row.date) },
         { header: 'Código', width: 20, kind: 'text', value: (row) => reportRowCode(row) },
         {
             header: subjectHeader(context),
@@ -285,7 +301,7 @@ function detailColumns(context: MeetingReportExportContext): ExportColumn<Meetin
             value: (row) => row.receivedByName ?? '',
         },
         {
-            header: 'Fecha de recepción',
+            header: 'Fecha y hora de recepción',
             width: 22,
             kind: 'text',
             value: (row) => formatReportDateTime(row.receivedAt),
@@ -353,13 +369,13 @@ function titherColumns(context: MeetingReportExportContext): ExportColumn<Tither
             total: summary.totalReceived > 0 ? summary.titheTotal / summary.totalReceived : 0,
         },
         {
-            header: 'Primera fecha',
+            header: 'Primera recepción',
             width: 14,
             kind: 'date',
             value: (item) => item.firstDate,
         },
         {
-            header: 'Última fecha',
+            header: 'Última recepción',
             width: 14,
             kind: 'date',
             value: (item) => item.lastDate,
@@ -611,7 +627,11 @@ function excelSummarySheet(context: MeetingReportExportContext) {
         padRow([{ value: context.subtitle, textColor: MUTED_TEXT }], width),
         padRow([{ value: context.appName, textColor: MUTED_TEXT }], width),
         blank(),
-        labelValue('Período', formatReportRange(context.range.from, context.range.to), 'text'),
+        labelValue(
+            'Período (fecha de recepción)',
+            formatReportRange(context.range.from, context.range.to),
+            'text',
+        ),
         labelValue('Generado', formatReportDateTime(context.generatedAt), 'text'),
         labelValue(
             'Filtros aplicados',
@@ -946,7 +966,7 @@ export async function exportMeetingReportPdf(context: MeetingReportExportContext
     doc.setFontSize(9)
     doc.setTextColor(...PDF_MUTED)
     doc.text(pdfText(context.subtitle), PDF_MARGIN, PDF_MARGIN + 38)
-    doc.text(`Período: ${rangeLabel}`, PDF_MARGIN, PDF_MARGIN + 51)
+    doc.text(`Período (fecha de recepción): ${rangeLabel}`, PDF_MARGIN, PDF_MARGIN + 51)
     doc.text(
         pdfText(`Generado: ${formatReportDateTime(context.generatedAt)}`),
         pageWidth - PDF_MARGIN,
@@ -1097,7 +1117,7 @@ export async function exportMeetingReportPdf(context: MeetingReportExportContext
                     'Total recibido',
                     'Promedio por sobre',
                     '% de los diezmos',
-                    'Última fecha',
+                    'Última recepción',
                 ]),
             ],
             context.tithers,
@@ -1114,7 +1134,12 @@ export async function exportMeetingReportPdf(context: MeetingReportExportContext
     const detailTable = detailColumns(context)
     drawTable(
         [
-            ...pdfColumnsFrom(detailTable, ['Fecha', 'Código', subjectHeader(context)]),
+            ...pdfColumnsFrom(detailTable, [
+                'Fecha de recepción',
+                sourceDateHeader(context),
+                'Código',
+                subjectHeader(context),
+            ]),
             {
                 header: 'Territorio',
                 kind: 'text',
@@ -1125,7 +1150,6 @@ export async function exportMeetingReportPdf(context: MeetingReportExportContext
                 'Total recibido',
                 'Estado del sobre',
                 'Recibido por',
-                'Fecha de recepción',
             ]),
         ],
         context.rows,
