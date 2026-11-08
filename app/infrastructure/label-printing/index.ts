@@ -4,6 +4,8 @@ export type {
     LabelBlock,
     LabelCodeBlock,
     LabelDocument,
+    LabelFieldBlock,
+    LabelLineBlock,
     LabelQrBlock,
     LabelSize,
     LabelTextAlign,

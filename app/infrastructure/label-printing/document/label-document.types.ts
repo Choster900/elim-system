@@ -15,6 +15,13 @@ export interface LabelTextBlock {
     align?: LabelTextAlign
 }
 
+export interface LabelFieldBlock {
+    kind: 'field'
+    label: string
+    value: string
+    size?: LabelTextSize
+}
+
 export interface LabelBarcodeBlock {
     kind: 'barcode'
     value: string
@@ -28,7 +35,8 @@ export interface LabelQrBlock {
 }
 
 export type LabelCodeBlock = LabelBarcodeBlock | LabelQrBlock
-export type LabelBlock = LabelTextBlock | LabelCodeBlock
+export type LabelLineBlock = LabelTextBlock | LabelFieldBlock
+export type LabelBlock = LabelLineBlock | LabelCodeBlock
 
 export interface LabelDocument {
     size: LabelSize

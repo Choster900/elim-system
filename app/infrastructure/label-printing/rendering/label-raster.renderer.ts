@@ -1,10 +1,12 @@
 import type {
     LabelBarcodeBlock,
     LabelBlock,
+    LabelCodeBlock,
     LabelDocument,
+    LabelFieldBlock,
+    LabelLineBlock,
     LabelQrBlock,
     LabelTextAlign,
-    LabelTextBlock,
 } from '../document/label-document.types'
 import { renderCodeSymbol } from './code-symbol.renderer'
 
@@ -48,7 +50,15 @@ function lineHeight(fontPx: number) {
     return Math.round(fontPx * LINE_HEIGHT_RATIO)
 }
 
-function textFontPx(block: LabelTextBlock, dpi: number) {
+function isLineBlock(block: LabelBlock): block is LabelLineBlock {
+    return block.kind === 'text' || block.kind === 'field'
+}
+
+function isCodeBlock(block: LabelBlock): block is LabelCodeBlock {
+    return !isLineBlock(block)
+}
+
+function textFontPx(block: LabelLineBlock, dpi: number) {
     return mmToPx(TEXT_SIZE_MM[block.size ?? 'md'], dpi)
 }
 
@@ -77,6 +87,25 @@ function drawTextLine(
         centered ? box.x + box.width / 2 : box.x,
         box.y + box.height / 2,
     )
+}
+
+function drawField(
+    context: CanvasRenderingContext2D,
+    block: LabelFieldBlock,
+    box: RenderBox,
+    fontPx: number,
+) {
+    const centerY = box.y + box.height / 2
+    context.textBaseline = 'middle'
+    context.textAlign = 'left'
+    context.font = `bold ${fontPx}px ${FONT_FAMILY}`
+    const labelText = fitText(context, `${block.label}: `, box.width)
+    context.fillText(labelText, box.x, centerY)
+    const labelWidth = Math.min(box.width, Math.ceil(context.measureText(labelText).width))
+    const valueWidth = box.width - labelWidth
+    if (valueWidth <= 0) return
+    context.font = `${fontPx}px ${FONT_FAMILY}`
+    context.fillText(fitText(context, block.value, valueWidth), box.x + labelWidth, centerY)
 }
 
 function moduleScale(available: number, size: number) {
@@ -131,9 +160,9 @@ async function drawQr(context: CanvasRenderingContext2D, block: LabelQrBlock, bo
 function layoutRows(label: LabelDocument, dpi: number, contentHeight: number, gap: number) {
     const rows: LayoutRow[] = label.blocks.map((block) => ({
         block,
-        height: block.kind === 'text' ? lineHeight(textFontPx(block, dpi)) : 0,
+        height: isLineBlock(block) ? lineHeight(textFontPx(block, dpi)) : 0,
     }))
-    const codeRows = rows.filter((row) => row.block.kind !== 'text')
+    const codeRows = rows.filter((row) => isCodeBlock(row.block))
     const fixedHeight = rows.reduce((total, row) => total + row.height, 0) + gap * (rows.length - 1)
     const codeHeight = codeRows.length
         ? Math.max(1, Math.floor((contentHeight - fixedHeight) / codeRows.length))
@@ -185,6 +214,8 @@ export async function renderLabelDocument(label: LabelDocument, { dpi }: LabelRe
         const box = { x: margin, y, width: contentWidth, height }
         if (block.kind === 'text') {
             drawTextLine(context, block.value, box, textFontPx(block, dpi), block)
+        } else if (block.kind === 'field') {
+            drawField(context, block, box, textFontPx(block, dpi))
         } else if (block.kind === 'barcode') {
             await drawBarcode(context, block, box, dpi)
         } else {

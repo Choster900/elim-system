@@ -37,6 +37,9 @@ function isWithinSizeLimits(valueMm: number) {
 function validateBlock(block: LabelBlock) {
     const value = block.value.trim()
     if (!value) invalid('Hay un campo vacío en la etiqueta.')
+    if (block.kind === 'field' && !block.label.trim()) {
+        invalid('Hay un campo sin título en la etiqueta.')
+    }
 
     if (block.kind === 'barcode' && block.symbology === 'code128') {
         if (!PRINTABLE_ASCII_PATTERN.test(value)) {

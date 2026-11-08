@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { LABEL_SIZE_LIMITS_MM } from '~/infrastructure/label-printing'
+import type { LabelSize } from '~/infrastructure/label-printing'
 import {
-    LABEL_SIZE_PRESETS,
     TEST_LABEL_CODE_SAMPLES,
     TEST_LABEL_CODE_TYPES,
 } from '../constants/label-printing.constants'
 import type { TestLabelCodeType, TestLabelForm } from '../interfaces/test-label-form.interface'
+import LabelSizeField from './LabelSizeField.vue'
 
 const form = defineModel<TestLabelForm>({ required: true })
 
@@ -23,14 +23,13 @@ function selectCodeType(codeType: TestLabelCodeType) {
     if (!keepsCustomValue) form.value.codeValue = TEST_LABEL_CODE_SAMPLES[codeType]
 }
 
-function selectSize(widthMm: number, heightMm: number) {
-    form.value.widthMm = widthMm
-    form.value.heightMm = heightMm
-}
-
-function isSelectedSize(widthMm: number, heightMm: number) {
-    return form.value.widthMm === widthMm && form.value.heightMm === heightMm
-}
+const size = computed<LabelSize>({
+    get: () => ({ widthMm: form.value.widthMm, heightMm: form.value.heightMm }),
+    set: (value) => {
+        form.value.widthMm = value.widthMm
+        form.value.heightMm = value.heightMm
+    },
+})
 </script>
 
 <template>
@@ -87,51 +86,6 @@ function isSelectedSize(widthMm: number, heightMm: number) {
             <p class="text-xs text-on-surface-variant">{{ codeHint }}</p>
         </div>
 
-        <div :class="fieldClass">
-            <span class="text-sm font-medium leading-none text-foreground">Tamaño (mm)</span>
-            <div class="grid grid-cols-4 gap-2">
-                <button
-                    v-for="preset in LABEL_SIZE_PRESETS"
-                    :key="`${preset.widthMm}x${preset.heightMm}`"
-                    type="button"
-                    :aria-pressed="isSelectedSize(preset.widthMm, preset.heightMm)"
-                    :class="[
-                        'rounded-full border px-1 py-1 font-mono text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                        isSelectedSize(preset.widthMm, preset.heightMm)
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-outline-variant text-on-surface-variant hover:border-primary/60',
-                    ]"
-                    @click="selectSize(preset.widthMm, preset.heightMm)"
-                >
-                    {{ preset.widthMm }} × {{ preset.heightMm }}
-                </button>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div :class="fieldClass">
-                    <UiLabel for="label-width" class="text-xs text-on-surface-variant">
-                        Ancho
-                    </UiLabel>
-                    <UiInput
-                        id="label-width"
-                        v-model.number="form.widthMm"
-                        type="number"
-                        :min="LABEL_SIZE_LIMITS_MM.min"
-                        :max="LABEL_SIZE_LIMITS_MM.max"
-                    />
-                </div>
-                <div :class="fieldClass">
-                    <UiLabel for="label-height" class="text-xs text-on-surface-variant">
-                        Alto
-                    </UiLabel>
-                    <UiInput
-                        id="label-height"
-                        v-model.number="form.heightMm"
-                        type="number"
-                        :min="LABEL_SIZE_LIMITS_MM.min"
-                        :max="LABEL_SIZE_LIMITS_MM.max"
-                    />
-                </div>
-            </div>
-        </div>
+        <LabelSizeField v-model="size" id-prefix="label" />
     </div>
 </template>

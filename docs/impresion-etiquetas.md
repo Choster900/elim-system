@@ -17,12 +17,12 @@ Pantalla ──► label-printer.store (Pinia) ──► LabelPrinterAdapter
 LabelDocument (datos) ──► label-raster.renderer (canvas + bwip-js) ──► adapter
 ```
 
-| Carpeta                              | Qué contiene                                                                        |
-| ------------------------------------ | ----------------------------------------------------------------------------------- |
-| `app/infrastructure/label-printing/` | Tecnología: contrato, adapters, renderer, validación, errores. No conoce pantallas. |
-| `app/presentation/label-printing/`   | Pantalla de prueba y el store que mantiene la conexión abierta entre pantallas.     |
+| Carpeta                              | Qué contiene                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `app/infrastructure/label-printing/` | Tecnología: contrato, adapters, renderer, validación, errores. No conoce pantallas.   |
+| `app/presentation/label-printing/`   | Store, modal de configuración, composable `useLabelPrintJob` y la pantalla de prueba. |
 
-- **`LabelDocument`** es solo datos: tamaño en mm y una lista de bloques (`text`, `barcode`,
+- **`LabelDocument`** es solo datos: tamaño en mm y una lista de bloques (`text`, `field`, `barcode`,
   `qr`). Las pantallas nunca tocan canvas ni librerías.
 - **El adapter** recibe el `LabelDocument` y decide cómo imprimirlo. Los de NIIMBOT lo dibujan al
   DPI real del modelo y recortan el margen sobrante si la etiqueta es un poco más ancha que el
@@ -31,33 +31,53 @@ LabelDocument (datos) ──► label-raster.renderer (canvas + bwip-js) ──�
   papel.
 - `@mmote/niimbluelib` y `bwip-js` se cargan con `import()` diferido, solo cuando hacen falta.
 
-## Imprimir una etiqueta nueva desde otra pantalla
+## Imprimir desde otra pantalla
 
-1. Crea una función que arme el documento, como `buildTestLabelDocument` en
-   `app/presentation/label-printing/utils/test-label.util.ts`:
+Ejemplo real: la viñeta de reunión en `/catalogos/distritos` (menú ⋯ de una reunión → «Imprimir
+viñeta»).
+
+1. Arma un `LabelPrintJob` (título, tipo y bloques). El tamaño lo pone el papel configurado por el
+   usuario. Ejemplo en `app/presentation/meetings/utils/meeting-label.util.ts`:
 
     ```ts
-    export function buildMeetingLabelDocument(meeting: Meeting): LabelDocument {
+    export function buildMeetingLabelJob(meeting: MeetingRecord): LabelPrintJob {
         return {
-            size: { widthMm: 50, heightMm: 30 },
+            title: meeting.title,
+            kindLabel: 'viñeta',
             blocks: [
-                { kind: 'text', value: meeting.name, size: 'lg', bold: true, align: 'center' },
-                { kind: 'barcode', value: meeting.code, symbology: 'code128' },
+                { kind: 'field', label: 'Líder', value: meeting.leaderName ?? 'Sin asignar' },
+                { kind: 'barcode', value: meeting.fullCode, symbology: 'code128' },
             ],
         }
     }
     ```
 
-2. Imprime con el store, que reutiliza la impresora ya conectada:
+    Bloques disponibles: `text` (una línea), `field` (`Etiqueta:` en negrita + valor), `barcode`
+    (`code128` o `ean13`) y `qr`. Las líneas tienen alto fijo y los códigos se reparten el espacio
+    que sobra.
+
+2. Usa `useLabelPrintJob()` y monta el modal reutilizable:
 
     ```ts
-    const printerStore = useLabelPrinterStore()
-    const printed = await printerStore.print(buildMeetingLabelDocument(meeting), 1)
-    if (!printed) toast.error(printerStore.printError ?? 'No se pudo imprimir')
+    const { setupOpen, pendingJob, isPrinterReady, openSetup, printNow } = useLabelPrintJob()
+
+    async function printMeetingLabel(meeting: MeetingRecord) {
+        const job = buildMeetingLabelJob(meeting)
+        if (isPrinterReady.value) await printNow(job)
+        else openSetup(job)
+    }
     ```
 
-    Si `printerStore.isConnected` es `false`, envía al usuario a la pantalla de la impresora para
-    conectarla.
+    ```vue
+    <LabelPrinterSetupDialog v-model:open="setupOpen" :job="pendingJob" />
+    ```
+
+    - `printNow` imprime una copia y muestra el resultado en un toast. Si falla, el toast trae
+      «Configurar», que abre el modal con el mismo trabajo.
+    - `LabelPrinterSetupDialog` guía en tres pasos (conectar, papel, imprimir) con vista previa.
+      Sin `job`, sirve solo para configurar la impresora.
+    - El controlador elegido y el papel cargado se guardan en este navegador
+      (`label-printer-preferences`). La conexión sigue abierta mientras no se recargue la página.
 
 ## Agregar otra tecnología (SDK oficial, agente local, otra marca)
 

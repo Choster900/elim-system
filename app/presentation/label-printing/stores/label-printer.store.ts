@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import {
     DEFAULT_LABEL_PRINTER_ADAPTER_ID,
+    LABEL_SIZE_LIMITS_MM,
     LabelPrinterError,
     createLabelPrinterAdapter,
     findLabelPrinterAdapterDefinition,
+    labelPrinterAdapters,
     resolveLabelPrinterErrorMessage,
     validateLabelPrintRequest,
     type LabelDocument,
@@ -13,7 +15,9 @@ import {
     type LabelPrinterInfo,
     type LabelPrintProgress,
     type LabelPrintRequest,
+    type LabelSize,
 } from '~/infrastructure/label-printing'
+import { readJsonStorage, writeJsonStorage } from '~/utils/storage/json-storage.util'
 
 export type LabelPrinterStatus = 'disconnected' | 'connecting' | 'connected' | 'printing'
 
@@ -26,9 +30,18 @@ interface LabelPrinterState {
     progress: LabelPrintProgress | null
     connectionError: string | null
     printError: string | null
+    paperSize: LabelSize
+    preferencesLoaded: boolean
+}
+
+interface LabelPrinterPreferences {
+    adapterId: LabelPrinterAdapterId
+    paperSize: LabelSize
 }
 
 const CONNECTION_LOST_MESSAGE = 'Se perdió la conexión con la impresora.'
+const PREFERENCES_STORAGE_KEY = 'label-printer-preferences'
+export const DEFAULT_PAPER_SIZE: LabelSize = { widthMm: 50, heightMm: 30 }
 
 const adapterInstances = new Map<LabelPrinterAdapterId, LabelPrinterAdapter>()
 let stopWatchingDisconnect: (() => void) | null = null
@@ -47,6 +60,21 @@ function releaseDisconnectWatcher() {
     stopWatchingDisconnect = null
 }
 
+function isKnownAdapterId(value: unknown): value is LabelPrinterAdapterId {
+    return labelPrinterAdapters.some((adapter) => adapter.id === value)
+}
+
+export function isValidPaperSize(value: unknown): value is LabelSize {
+    if (!value || typeof value !== 'object') return false
+    const { widthMm, heightMm } = value as Partial<LabelSize>
+    return [widthMm, heightMm].every(
+        (sizeMm) =>
+            typeof sizeMm === 'number' &&
+            sizeMm >= LABEL_SIZE_LIMITS_MM.min &&
+            sizeMm <= LABEL_SIZE_LIMITS_MM.max,
+    )
+}
+
 export function checkLabelPrinterAdapterSupport(id: LabelPrinterAdapterId) {
     return adapterFor(id).checkSupport()
 }
@@ -61,6 +89,8 @@ export const useLabelPrinterStore = defineStore('label-printer', {
         progress: null,
         connectionError: null,
         printError: null,
+        paperSize: { ...DEFAULT_PAPER_SIZE },
+        preferencesLoaded: false,
     }),
     getters: {
         selectedAdapter(state) {
@@ -72,12 +102,42 @@ export const useLabelPrinterStore = defineStore('label-printer', {
         isBusy(state): boolean {
             return state.status === 'connecting' || state.status === 'printing'
         },
+        isReady(state): boolean {
+            return state.status === 'connected'
+        },
     },
     actions: {
+        loadPreferences() {
+            if (this.preferencesLoaded || !import.meta.client) return
+            this.preferencesLoaded = true
+            const stored = readJsonStorage<Partial<LabelPrinterPreferences> | null>(
+                PREFERENCES_STORAGE_KEY,
+                null,
+            )
+            const adapterId = stored?.adapterId
+            const paperSize = stored?.paperSize
+            if (isKnownAdapterId(adapterId) && this.status === 'disconnected') {
+                this.adapterId = adapterId
+            }
+            if (isValidPaperSize(paperSize)) this.paperSize = { ...paperSize }
+        },
+        savePreferences() {
+            if (!isValidPaperSize(this.paperSize)) return
+            const preferences: LabelPrinterPreferences = {
+                adapterId: this.adapterId,
+                paperSize: this.paperSize,
+            }
+            writeJsonStorage(PREFERENCES_STORAGE_KEY, preferences)
+        },
+        setPaperSize(size: LabelSize) {
+            this.paperSize = { ...size }
+            this.savePreferences()
+        },
         async selectAdapter(id: LabelPrinterAdapterId) {
             if (id === this.adapterId || this.isBusy) return
             await this.disconnect()
             this.adapterId = id
+            this.savePreferences()
             this.devices = []
             this.connectionError = null
             this.printError = null

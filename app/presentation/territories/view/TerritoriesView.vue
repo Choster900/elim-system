@@ -15,6 +15,7 @@ import {
     MoreHorizontal,
     Move,
     Plus,
+    Printer,
     RefreshCw,
     Search,
     Upload,
@@ -34,10 +35,14 @@ import {
 import { nextTerritoryCode, territoryPathCode } from '#shared/utils/territory-code.util'
 import { districtAutoName, sectorAutoName, zoneAutoName } from '#shared/utils/territory-name.util'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import LabelPrinterSetupDialog from '~/presentation/label-printing/components/LabelPrinterSetupDialog.vue'
+import { useLabelPrintJob } from '~/presentation/label-printing/composables/useLabelPrintJob'
+import { useLabelPrinterStore } from '~/presentation/label-printing/stores/label-printer.store'
 import { useUpdateMeetingMutation } from '~/presentation/meetings/composables/useMeetingMutations'
 import { useMeetingsQuery } from '~/presentation/meetings/composables/useMeetingsQuery'
 import type { MeetingRecord } from '~/presentation/meetings/interfaces/meeting.interface'
 import { getMeetingFrequencyLabel } from '~/presentation/meetings/utils/meeting-format.util'
+import { buildMeetingLabelJob } from '~/presentation/meetings/utils/meeting-label.util'
 import ExcelImportDialog from '~/presentation/shared/components/excel-import/ExcelImportDialog.vue'
 import ImportNote from '~/presentation/shared/components/excel-import/ImportNote.vue'
 import ImportStatCard from '~/presentation/shared/components/excel-import/ImportStatCard.vue'
@@ -128,6 +133,14 @@ const updateTerritoryMutation = useUpdateTerritoryMutation()
 const deleteTerritoryMutation = useDeleteTerritoryMutation()
 const importTerritoriesMutation = useImportTerritoriesMutation()
 const updateMeetingMutation = useUpdateMeetingMutation()
+const labelPrinterStore = useLabelPrinterStore()
+const {
+    setupOpen: labelSetupOpen,
+    pendingJob: pendingLabelJob,
+    isPrinterReady: isLabelPrinterReady,
+    openSetup: openLabelSetup,
+    printNow: printLabelNow,
+} = useLabelPrintJob()
 
 const districts = computed(() => hierarchyQuery.data.value?.districts ?? [])
 const zones = computed(() => hierarchyQuery.data.value?.zones ?? [])
@@ -286,7 +299,7 @@ const query = ref('')
 const menuFor = ref<string | null>(null)
 const menuLevel = ref<Level | null>(null)
 const menuPos = reactive({ left: 0, top: 0 })
-const menuMode = ref<'normal' | 'confirm'>('normal')
+const menuMode = ref<'normal' | 'confirm' | 'print-setup'>('normal')
 
 const drawer = ref<{ level: Level; id: string } | null>(null)
 
@@ -1377,6 +1390,36 @@ function goToMeeting(id: string) {
     navigateTo(`/catalogos/reuniones/${id}/editar`)
 }
 
+function meetingLabelJob(id: string) {
+    const parent = meetingParent(id)
+    if (!parent?.meeting) return null
+    return buildMeetingLabelJob(parent.meeting, {
+        supervisorName: parent.sector?.supervisorName,
+        coordinatorName: parent.zone?.leaderName,
+    })
+}
+
+async function printMeetingLabel(id: string) {
+    const job = meetingLabelJob(id)
+    if (!job) {
+        closeMenu()
+        toast.error('La reunión seleccionada ya no está disponible.')
+        return
+    }
+    if (!isLabelPrinterReady.value) {
+        menuMode.value = 'print-setup'
+        return
+    }
+    closeMenu()
+    await printLabelNow(job)
+}
+
+function setupMeetingLabelPrinter(id: string) {
+    const job = meetingLabelJob(id)
+    closeMenu()
+    openLabelSetup(job)
+}
+
 function goToOfferingRegistration(id: string) {
     closeMenu()
     closeDrawer()
@@ -2318,6 +2361,23 @@ onBeforeUnmount(() => {
                         <ExternalLink class="size-3.5 text-on-surface-variant" />
                     </button>
                     <button
+                        v-if="menuLevel === 'reunion'"
+                        type="button"
+                        class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
+                        @click="printMeetingLabel(menuFor!)"
+                    >
+                        <span class="min-w-0">
+                            <span class="block">Imprimir viñeta</span>
+                            <span
+                                v-if="isLabelPrinterReady && labelPrinterStore.printer"
+                                class="block truncate text-[11px] text-on-surface-variant"
+                            >
+                                en {{ labelPrinterStore.printer.deviceName }}
+                            </span>
+                        </span>
+                        <Printer class="size-3.5 shrink-0 text-on-surface-variant" />
+                    </button>
+                    <button
                         v-if="canMove"
                         type="button"
                         class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
@@ -2336,7 +2396,7 @@ onBeforeUnmount(() => {
                     </button>
                 </template>
 
-                <template v-else>
+                <template v-else-if="menuMode === 'confirm'">
                     <p class="px-3 py-2 text-sm leading-snug text-on-surface-variant">
                         ¿Eliminar <strong class="text-on-surface">{{ menuName }}</strong
                         >?
@@ -2353,6 +2413,41 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             class="flex-1 rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high"
+                            @click="menuMode = 'normal'"
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                </template>
+
+                <template v-else>
+                    <div class="flex items-start gap-2.5 px-2.5 pb-2 pt-2.5">
+                        <span
+                            class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                        >
+                            <Printer class="size-4" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-on-surface">
+                                Impresora sin configurar
+                            </p>
+                            <p class="mt-0.5 text-xs leading-snug text-on-surface-variant">
+                                Conéctala una vez y podrás imprimir viñetas desde aquí.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="grid gap-1.5 p-1">
+                        <button
+                            type="button"
+                            class="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                            @click="setupMeetingLabelPrinter(menuFor!)"
+                        >
+                            <Printer class="size-4" />
+                            Configurar e imprimir
+                        </button>
+                        <button
+                            type="button"
+                            class="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high"
                             @click="menuMode = 'normal'"
                         >
                             Cancelar
@@ -2675,6 +2770,8 @@ onBeforeUnmount(() => {
             @close="assignOpen = false"
             @go="goToMeeting"
         />
+
+        <LabelPrinterSetupDialog v-model:open="labelSetupOpen" :job="pendingLabelJob" />
 
         <AppTour :open="isTourOpen" :steps="tourSteps" @close="endTour" @complete="endTour" />
     </div>
