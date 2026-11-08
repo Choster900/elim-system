@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, ChevronDown, ChevronRight, LogOut, Menu, Settings, X } from '@lucide/vue'
+import { Bell, ChevronDown, ChevronRight, LogOut, Menu, Printer, Settings, X } from '@lucide/vue'
 import {
     DropdownMenuContent,
     DropdownMenuItem,
@@ -9,8 +9,12 @@ import {
     DropdownMenuTrigger,
 } from 'radix-vue'
 import { useLogoutMutation } from '~/presentation/auth/composables/useLogoutMutation'
-import { routePermissionCodes } from '~/presentation/auth/constants/permission.constants'
+import {
+    SYSTEM_PERMISSION_CODE,
+    routePermissionCodes,
+} from '~/presentation/auth/constants/permission.constants'
 import { useAuthStore } from '~/presentation/auth/stores/auth.store'
+import { LABEL_PRINTER_ROUTE } from '~/presentation/label-printing/constants/label-printing.constants'
 import { useAppToast } from '~/presentation/shared/composables/useAppToast'
 import { SUPPORT_COMMITTEE_HOME } from '~/presentation/support-committee/utils/reception-format.util'
 import {
@@ -41,6 +45,7 @@ const userDisplayName = computed(() => authStore.displayName)
 const userEmail = computed(() => authStore.user?.email ?? '')
 const userTerritory = computed(() => authStore.user?.territoryAssignment)
 const userCommunityRoles = computed(() => authStore.user?.communityRoles ?? [])
+const canUseLabelPrinter = computed(() => authStore.hasPermission(SYSTEM_PERMISSION_CODE))
 
 async function handleLogout() {
     try {
@@ -351,6 +356,15 @@ function isActiveModule(item: DashboardMenuItem): boolean {
                                 Configuración
                             </DropdownMenuItem>
 
+                            <DropdownMenuItem
+                                v-if="canUseLabelPrinter"
+                                class="flex cursor-pointer items-center gap-3 px-4 py-3 text-xs font-semibold uppercase text-on-surface-variant outline-none transition-colors data-[highlighted]:bg-surface-container-high data-[highlighted]:text-primary"
+                                @select="navigateTo(LABEL_PRINTER_ROUTE)"
+                            >
+                                <Printer class="size-4" />
+                                Impresora de etiquetas
+                            </DropdownMenuItem>
+
                             <DropdownMenuSeparator class="my-1 h-px bg-outline-variant" />
 
                             <DropdownMenuItem
@@ -458,6 +472,15 @@ function isActiveModule(item: DashboardMenuItem): boolean {
                     >
                         <Settings class="size-4" />
                         Configuración
+                    </NuxtLink>
+                    <NuxtLink
+                        v-if="canUseLabelPrinter"
+                        :to="LABEL_PRINTER_ROUTE"
+                        class="flex items-center gap-2 text-sm font-semibold uppercase text-on-surface-variant"
+                        @click="isOpen = false"
+                    >
+                        <Printer class="size-4" />
+                        Impresora de etiquetas
                     </NuxtLink>
                     <button
                         type="button"

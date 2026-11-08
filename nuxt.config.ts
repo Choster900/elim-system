@@ -60,6 +60,11 @@ export default defineNuxtConfig({
     },
     devServer,
     compatibilityDate: '2025-07-15',
+    vite: {
+        optimizeDeps: {
+            include: ['@mmote/niimbluelib', 'bwip-js/browser'],
+        },
+    },
     tailwindcss: {
         configPath: 'tailwind.config.ts',
         cssPath: '~/assets/styles/tailwind/main.css',

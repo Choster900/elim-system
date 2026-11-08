@@ -3,6 +3,7 @@ import accessControlRoutes from '~/presentation/access-control/router.index'
 import authRoutes from '~/presentation/auth/router.index'
 import dashboardRoutes from '~/presentation/dashboard/router.index'
 import financeRoutes from '~/presentation/finance/router.index'
+import labelPrintingRoutes from '~/presentation/label-printing/router.index'
 import landingRoutes from '~/presentation/landing/router.index'
 import memberRoutes from '~/presentation/members/router.index'
 import offeringReconciliationRoutes from '~/presentation/offering-reconciliation/router.index'
@@ -30,5 +31,6 @@ export default <RouterConfig>{
         ...territoriesRoutes,
         ...userRoutes,
         ...accessControlRoutes,
+        ...labelPrintingRoutes,
     ],
 }
