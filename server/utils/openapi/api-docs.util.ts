@@ -1225,7 +1225,7 @@ export function createOpenApiSpec({ appName, appUrl }: OpenApiOptions) {
                     security: [{ BearerAuth: [] }],
                     responses: {
                         200: { description: 'All meetings with type, sector and leader' },
-                        403: { description: 'Requires meetings.view' },
+                        403: { description: 'Requires meetings.view or territories.view' },
                     },
                 },
                 post: {

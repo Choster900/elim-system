@@ -118,7 +118,9 @@ const { provider: mapProvider } = useMapProvider()
 const authStore = useAuthStore()
 const canManage = computed(() => authStore.hasPermission('territories.manage'))
 const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
-const canViewMeetings = computed(() => authStore.hasPermission('meetings.view'))
+const canViewMeetings = computed(
+    () => authStore.hasPermission('meetings.view') || authStore.hasPermission('territories.view'),
+)
 const canManageOfferings = computed(() => authStore.hasPermission('finance.manage'))
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
@@ -2375,7 +2377,7 @@ onBeforeUnmount(() => {
                         Editar
                     </button>
                     <button
-                        v-if="menuLevel === 'reunion'"
+                        v-if="menuLevel === 'reunion' && canManageMeetings"
                         type="button"
                         class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-high"
                         @click="goToMeeting(menuFor!)"
@@ -2595,7 +2597,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div
-                    v-if="drawer.level === 'reunion'"
+                    v-if="drawer.level === 'reunion' && (canManageOfferings || canManageMeetings)"
                     class="flex flex-none flex-col gap-2 border-t border-outline-variant px-6 py-4 sm:flex-row lg:px-8 [&>button]:flex-1"
                 >
                     <button
@@ -2607,6 +2609,7 @@ onBeforeUnmount(() => {
                         <HandCoins class="size-4" /> Registrar asistencia y ofrendas
                     </button>
                     <button
+                        v-if="canManageMeetings"
                         type="button"
                         class="flex w-full items-center justify-center gap-2 rounded-lg border border-outline-variant bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container"
                         @click="goToMeeting(drawer.id)"
