@@ -34,7 +34,7 @@ function formatUsbId(value?: number) {
 
 const TRANSPORT_API_NAMES: Record<NiimbotTransport, string> = {
     bluetooth: 'Bluetooth',
-    serial: 'USB (Web Serial)',
+    serial: 'USB',
 }
 
 function isAppleMobileDevice() {
@@ -50,18 +50,18 @@ export function checkTransportSupport(transport: NiimbotTransport): LabelPrinter
     if (isAppleMobileDevice()) {
         return {
             supported: false,
-            reason: 'En iPhone y iPad ningún navegador puede conectar impresoras desde una página web: Chrome, Edge y Safari usan ahí el mismo motor de Apple, que no incluye Bluetooth ni USB. Usa una computadora con Chrome o Edge, o un teléfono Android con Chrome.',
+            reason: 'iPhone y iPad no pueden conectarse a la impresora. Usa una computadora o un Android con Chrome.',
         }
     }
     if (!window.isSecureContext) {
         return {
             supported: false,
-            reason: `El navegador bloquea Bluetooth y USB porque abriste el sistema por HTTP (${window.location.host}). Ábrelo con HTTPS, o desde localhost en la misma computadora donde corre el sistema.`,
+            reason: 'Abre el sistema con HTTPS para conectar la impresora.',
         }
     }
     return {
         supported: false,
-        reason: `Este navegador no admite ${TRANSPORT_API_NAMES[transport]}. Usa Chrome o Edge actualizados.`,
+        reason: `Este navegador no permite ${TRANSPORT_API_NAMES[transport]}. Usa Chrome o Edge.`,
     }
 }
 

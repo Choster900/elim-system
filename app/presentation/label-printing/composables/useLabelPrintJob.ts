@@ -20,7 +20,7 @@ export function useLabelPrintJob() {
     async function printNow(job: LabelPrintJob) {
         printerStore.loadPreferences()
         const toastId = toast.loading(`Imprimiendo ${job.kindLabel}…`, { description: job.title })
-        const printed = await printerStore.print(buildJobDocument(job, printerStore.paperSize), 1)
+        const printed = await printerStore.print(buildJobDocument(job), 1)
         if (printed) {
             toast.success(printedJobMessage(job, 1), { id: toastId, description: job.title })
             return true

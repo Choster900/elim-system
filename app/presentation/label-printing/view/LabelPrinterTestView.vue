@@ -41,12 +41,6 @@ watch(labelDocument, () => {
     printerStore.printError = null
 })
 
-onMounted(() => {
-    printerStore.loadPreferences()
-    form.value.widthMm = printerStore.paperSize.widthMm
-    form.value.heightMm = printerStore.paperSize.heightMm
-})
-
 async function printLabel() {
     const copies = Number(form.value.copies)
     const printed = await printerStore.print(labelDocument.value, copies)

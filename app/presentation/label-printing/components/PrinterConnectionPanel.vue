@@ -10,15 +10,8 @@ import {
     Unplug,
     Usb,
 } from '@lucide/vue'
-import {
-    labelPrinterAdapters,
-    type LabelPrinterAdapterId,
-    type LabelPrinterSupport,
-} from '~/infrastructure/label-printing'
-import {
-    checkLabelPrinterAdapterSupport,
-    useLabelPrinterStore,
-} from '../stores/label-printer.store'
+import { labelPrinterAdapters, type LabelPrinterAdapterId } from '~/infrastructure/label-printing'
+import { usePrinterConnection } from '../composables/usePrinterConnection'
 
 const ADAPTER_ICONS: Record<LabelPrinterAdapterId, Component> = {
     'niimbot-bluetooth': Bluetooth,
@@ -26,23 +19,22 @@ const ADAPTER_ICONS: Record<LabelPrinterAdapterId, Component> = {
     simulator: FlaskConical,
 }
 
-withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
-
-const printerStore = useLabelPrinterStore()
-const supportByAdapter = ref<Partial<Record<LabelPrinterAdapterId, LabelPrinterSupport>>>({})
-const connectingDeviceId = ref<string | null>(null)
+const {
+    printerStore,
+    connectingDeviceId,
+    unsupportedReason,
+    isSearching,
+    isAdapterSupported,
+    connectTo,
+} = usePrinterConnection()
 
 const adapterOptions = computed(() =>
     labelPrinterAdapters.map((adapter) => ({
         ...adapter,
         icon: ADAPTER_ICONS[adapter.id],
-        supported: supportByAdapter.value[adapter.id]?.supported ?? true,
+        supported: isAdapterSupported(adapter.id),
     })),
 )
-const unsupportedReason = computed(() => {
-    const support = supportByAdapter.value[printerStore.adapterId]
-    return support && !support.supported ? support.reason : null
-})
 const printerDetails = computed(() => {
     const printer = printerStore.printer
     if (!printer) return []
@@ -62,30 +54,10 @@ const printerDetails = computed(() => {
         { label: 'Firmware', value: printer.firmware || '—' },
     ]
 })
-
-async function connectTo(deviceId?: string) {
-    connectingDeviceId.value = deviceId ?? null
-    try {
-        await printerStore.connect(deviceId)
-    } finally {
-        connectingDeviceId.value = null
-    }
-}
-
-onMounted(() => {
-    printerStore.loadPreferences()
-    supportByAdapter.value = Object.fromEntries(
-        labelPrinterAdapters.map((adapter) => [
-            adapter.id,
-            checkLabelPrinterAdapterSupport(adapter.id),
-        ]),
-    )
-    void printerStore.refreshDevices()
-})
 </script>
 
 <template>
-    <div :class="['flex flex-col', compact ? 'gap-4' : 'gap-6']">
+    <div class="flex flex-col gap-6">
         <div class="grid gap-2" role="radiogroup" aria-label="Controlador de impresora">
             <button
                 v-for="adapter in adapterOptions"
@@ -156,12 +128,7 @@ onMounted(() => {
                     </p>
                 </div>
             </div>
-            <dl
-                :class="[
-                    'grid',
-                    compact ? 'grid-cols-3 gap-2' : 'grid-cols-2 gap-3 sm:grid-cols-3',
-                ]"
-            >
+            <dl class="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div
                     v-for="detail in printerDetails"
                     :key="detail.label"
@@ -248,7 +215,7 @@ onMounted(() => {
                 </p>
                 <UiButton
                     :disabled="printerStore.isBusy"
-                    :loading="printerStore.status === 'connecting' && connectingDeviceId === null"
+                    :loading="isSearching"
                     @click="connectTo()"
                 >
                     <Search v-if="printerStore.status !== 'connecting'" /> Buscar impresora

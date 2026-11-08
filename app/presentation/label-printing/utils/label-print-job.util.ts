@@ -1,8 +1,8 @@
-import type { LabelDocument, LabelSize } from '~/infrastructure/label-printing'
+import type { LabelDocument } from '~/infrastructure/label-printing'
 import type { LabelPrintJob } from '../interfaces/label-print-job.interface'
 
-export function buildJobDocument(job: LabelPrintJob, paperSize: LabelSize): LabelDocument {
-    return { size: { ...paperSize }, blocks: job.blocks }
+export function buildJobDocument(job: LabelPrintJob): LabelDocument {
+    return { size: { ...job.size }, blocks: job.blocks }
 }
 
 export function printedJobMessage(job: LabelPrintJob, copies: number) {

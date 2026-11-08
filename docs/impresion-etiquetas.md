@@ -36,14 +36,15 @@ LabelDocument (datos) ──► label-raster.renderer (canvas + bwip-js) ──�
 Ejemplo real: la viñeta de reunión en `/catalogos/distritos` (menú ⋯ de una reunión → «Imprimir
 viñeta»).
 
-1. Arma un `LabelPrintJob` (título, tipo y bloques). El tamaño lo pone el papel configurado por el
-   usuario. Ejemplo en `app/presentation/meetings/utils/meeting-label.util.ts`:
+1. Arma un `LabelPrintJob` (título, tipo, tamaño y bloques). El tamaño es fijo para cada tipo de
+   etiqueta: el usuario no lo cambia al imprimir. Ejemplo en `app/presentation/meetings/utils/meeting-label.util.ts`:
 
     ```ts
     export function buildMeetingLabelJob(meeting: MeetingRecord): LabelPrintJob {
         return {
             title: meeting.title,
             kindLabel: 'viñeta',
+            size: { widthMm: 50, heightMm: 30 },
             blocks: [
                 { kind: 'field', label: 'Líder', value: meeting.leaderName ?? 'Sin asignar' },
                 { kind: 'barcode', value: meeting.fullCode, symbology: 'code128' },
@@ -75,10 +76,10 @@ viñeta»).
 
     - `printNow` imprime una copia y muestra el resultado en un toast. Si falla, el toast trae
       «Configurar», que abre el modal con el mismo trabajo.
-    - `LabelPrinterSetupDialog` guía en tres pasos (conectar, papel, imprimir) con vista previa.
-      Sin `job`, sirve solo para configurar la impresora.
-    - El controlador elegido y el papel cargado se guardan en este navegador
-      (`label-printer-preferences`). La conexión sigue abierta mientras no se recargue la página.
+    - `LabelPrinterSetupDialog` solo sirve para conectar la impresora. Con `job`, al conectarse
+      habilita «Imprimir …» para ese trabajo; sin `job`, muestra «Listo».
+    - El controlador elegido se guarda en este navegador (`label-printer-preferences`). La conexión
+      sigue abierta mientras no se recargue la página.
 
 ## Agregar otra tecnología (SDK oficial, agente local, otra marca)
 
