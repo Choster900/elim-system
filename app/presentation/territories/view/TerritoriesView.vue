@@ -118,6 +118,7 @@ const { provider: mapProvider } = useMapProvider()
 const authStore = useAuthStore()
 const canManage = computed(() => authStore.hasPermission('territories.manage'))
 const canManageMeetings = computed(() => authStore.hasPermission('meetings.manage'))
+const canViewMeetings = computed(() => authStore.hasPermission('meetings.view'))
 const canManageOfferings = computed(() => authStore.hasPermission('finance.manage'))
 const isTourOpen = ref(false)
 const isClientReady = ref(false)
@@ -127,7 +128,7 @@ const hierarchyQuery = useTerritoryHierarchyQuery()
 const leadersQuery = useTerritoryLeadersQuery()
 const coordinatorsQuery = useZoneCoordinatorsQuery()
 const supervisorsQuery = useTerritorySupervisorsQuery()
-const meetingsQuery = useMeetingsQuery()
+const meetingsQuery = useMeetingsQuery({ enabled: canViewMeetings })
 const createTerritoryMutation = useCreateTerritoryMutation()
 const updateTerritoryMutation = useUpdateTerritoryMutation()
 const deleteTerritoryMutation = useDeleteTerritoryMutation()
@@ -146,7 +147,9 @@ const districts = computed(() => hierarchyQuery.data.value?.districts ?? [])
 const zones = computed(() => hierarchyQuery.data.value?.zones ?? [])
 const sectors = computed(() => hierarchyQuery.data.value?.sectors ?? [])
 const meetings = computed(() =>
-    (meetingsQuery.data.value ?? []).filter((meeting) => meeting.isActive),
+    canViewMeetings.value
+        ? (meetingsQuery.data.value ?? []).filter((meeting) => meeting.isActive)
+        : [],
 )
 const leaders = computed(() => leadersQuery.data.value ?? [])
 const coordinators = computed(() => coordinatorsQuery.data.value ?? [])
@@ -157,7 +160,8 @@ const territoryRoleCatalogs = computed(() => ({
     supervisors: supervisors.value,
 }))
 const catalogLoading = computed(
-    () => hierarchyQuery.isPending.value || meetingsQuery.isPending.value,
+    () =>
+        hierarchyQuery.isPending.value || (canViewMeetings.value && meetingsQuery.isPending.value),
 )
 const hierarchySaving = computed(
     () =>
@@ -170,12 +174,6 @@ const catalogError = computed(() => {
         return requestErrorMessage(
             hierarchyQuery.error.value,
             'No fue posible cargar el mantenimiento territorial.',
-        )
-    }
-    if (meetingsQuery.error.value) {
-        return requestErrorMessage(
-            meetingsQuery.error.value,
-            'No fue posible cargar las reuniones del catálogo.',
         )
     }
     return ''
@@ -270,6 +268,14 @@ const supervisorCatalogError = computed(() =>
         ? requestErrorMessage(
               supervisorsQuery.error.value,
               'No fue posible cargar el catálogo de supervisores.',
+          )
+        : '',
+)
+const meetingCatalogError = computed(() =>
+    meetingsQuery.error.value
+        ? requestErrorMessage(
+              meetingsQuery.error.value,
+              'No fue posible cargar las reuniones del catálogo.',
           )
         : '',
 )
@@ -368,7 +374,7 @@ watch(
 onServerPrefetch(async () => {
     await Promise.allSettled([
         hierarchyQuery.suspense(),
-        meetingsQuery.suspense(),
+        canViewMeetings.value ? meetingsQuery.suspense() : Promise.resolve(),
         leadersQuery.suspense(),
         coordinatorsQuery.suspense(),
         supervisorsQuery.suspense(),
@@ -380,6 +386,13 @@ onServerPrefetch(async () => {
 if (import.meta.client) {
     watch(
         catalogError,
+        (errorMessage) => {
+            if (errorMessage) toast.error(errorMessage)
+        },
+        { immediate: true },
+    )
+    watch(
+        meetingCatalogError,
         (errorMessage) => {
             if (errorMessage) toast.error(errorMessage)
         },
@@ -410,7 +423,7 @@ if (import.meta.client) {
 
 function retryCatalog() {
     hierarchyQuery.refetch()
-    meetingsQuery.refetch()
+    if (canViewMeetings.value) meetingsQuery.refetch()
     leadersQuery.refetch()
     coordinatorsQuery.refetch()
     supervisorsQuery.refetch()
@@ -645,6 +658,13 @@ const selSector = computed(() =>
         : null,
 )
 
+function sectorSummary(sector: TerritorySector) {
+    if (canViewMeetings.value) return plural(meetingsOf(sector.id).length, 'reunión', 'reuniones')
+    return sector.supervisorName ? `Supervisor: ${sector.supervisorName}` : 'Sin supervisor'
+}
+function meetingCountFields(count: number): DetailField[] {
+    return canViewMeetings.value ? [{ label: 'Reuniones', value: String(count) }] : []
+}
 function plural(n: number, singular: string, pluralWord: string) {
     return `${n} ${n === 1 ? singular : pluralWord}`
 }
@@ -723,7 +743,7 @@ const columns = computed<Column[]>(() => {
             code: d.code,
             color: d.color,
             sub: `${plural(zonesOf(d.id).length, 'zona', 'zonas')}${d.isActive ? '' : ' · Inactivo'}`,
-            badge: String(districtMeetings(d)),
+            badge: canViewMeetings.value ? String(districtMeetings(d)) : '',
             selected: selD.value === d.id,
         })),
     })
@@ -751,7 +771,7 @@ const columns = computed<Column[]>(() => {
             code: z.code,
             color: z.color,
             sub: `${plural(sectorsOf(z.id).length, 'sector', 'sectores')}${z.isActive ? '' : ' · Inactivo'}`,
-            badge: String(zoneMeetings(z)),
+            badge: canViewMeetings.value ? String(zoneMeetings(z)) : '',
             selected: selZ.value === z.id,
         })),
     })
@@ -778,11 +798,13 @@ const columns = computed<Column[]>(() => {
             name: s.name,
             code: s.code,
             color: s.color,
-            sub: `${plural(meetingsOf(s.id).length, 'reunión', 'reuniones')}${s.isActive ? '' : ' · Inactivo'}`,
-            badge: String(meetingsOf(s.id).length),
+            sub: `${sectorSummary(s)}${s.isActive ? '' : ' · Inactivo'}`,
+            badge: canViewMeetings.value ? String(meetingsOf(s.id).length) : '',
             selected: selS.value === s.id,
         })),
     })
+
+    if (!canViewMeetings.value) return cols
 
     const sector = selSector.value
     const mItems = sector
@@ -852,6 +874,9 @@ const crumbs = computed(() => {
 })
 
 const LEVEL_ORDER: Level[] = ['distrito', 'zona', 'sector', 'reunion']
+const visibleLevels = computed(() =>
+    canViewMeetings.value ? LEVEL_ORDER : LEVEL_ORDER.filter((level) => level !== 'reunion'),
+)
 const mobileLevel = ref<Level>('distrito')
 const mobileSteps = computed(() =>
     columns.value.map((col) => ({
@@ -874,7 +899,7 @@ watch(mobileSteps, (steps) => {
 function select(level: Level, id: string) {
     closeMenu()
     if (level !== 'reunion') {
-        mobileLevel.value = LEVEL_ORDER[LEVEL_ORDER.indexOf(level) + 1] ?? level
+        mobileLevel.value = visibleLevels.value[visibleLevels.value.indexOf(level) + 1] ?? level
     }
     if (level === 'distrito') {
         selD.value = id
@@ -1172,7 +1197,7 @@ const detail = computed(() => {
             { label: 'Código', value: d.code },
             { label: 'Zonas', value: String(zonesOf(d.id).length) },
             { label: 'Sectores', value: String(districtSectors(d)) },
-            { label: 'Reuniones', value: String(districtMeetings(d)) },
+            ...meetingCountFields(districtMeetings(d)),
             { label: 'Creado', value: new Date(d.createdAt).getFullYear().toString() },
         ]
         if (d.description) fields.push({ label: 'Descripción', value: d.description, wide: true })
@@ -1197,7 +1222,7 @@ const detail = computed(() => {
             { label: 'Distrito', value: parent?.name ?? '—' },
             { label: 'Código', value: z.code },
             { label: 'Sectores', value: String(sectorsOf(z.id).length) },
-            { label: 'Reuniones', value: String(zoneMeetings(z)) },
+            ...meetingCountFields(zoneMeetings(z)),
         ]
         return {
             level,
@@ -1220,7 +1245,7 @@ const detail = computed(() => {
             { label: 'Zona', value: parent.zone?.name ?? '—' },
             { label: 'Distrito', value: parent.district?.name ?? '—' },
             { label: 'Código', value: s.code },
-            { label: 'Reuniones', value: String(meetingsOf(s.id).length) },
+            ...meetingCountFields(meetingsOf(s.id).length),
         ]
         return {
             level,
@@ -1862,7 +1887,7 @@ onBeforeUnmount(() => {
                         ><strong class="font-semibold text-on-surface">{{ totals.s }}</strong>
                         sectores</span
                     >
-                    <span
+                    <span v-if="canViewMeetings"
                         ><strong class="font-semibold text-on-surface">{{ totals.m }}</strong>
                         reuniones</span
                     >
@@ -1955,7 +1980,7 @@ onBeforeUnmount(() => {
             aria-label="Cargando distritos, zonas, sectores y reuniones"
         >
             <section
-                v-for="(level, index) in LEVEL_ORDER"
+                v-for="(level, index) in visibleLevels"
                 :key="level"
                 :class="[
                     'min-w-0 flex-1 flex-col border-r border-outline-variant last:border-r-0 md:min-w-[240px]',
@@ -2303,6 +2328,7 @@ onBeforeUnmount(() => {
                             </span>
                             <template v-else>
                                 <span
+                                    v-if="it.badge"
                                     class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant"
                                     :title="it.badgeTitle"
                                 >
