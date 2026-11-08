@@ -54,7 +54,8 @@ viñeta»).
 
     Bloques disponibles: `text` (una línea), `field` (`Etiqueta:` en negrita + valor), `barcode`
     (`code128` o `ean13`) y `qr`. Las líneas tienen alto fijo y los códigos se reparten el espacio
-    que sobra.
+    que sobra. Si una línea no cabe a lo ancho, su letra se reduce hasta un 60 % antes de cortarse
+    con «…».
 
 2. Usa `useLabelPrintJob()` y monta el modal reutilizable:
 

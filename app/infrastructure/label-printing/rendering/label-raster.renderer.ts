@@ -34,6 +34,7 @@ const TEXT_SIZE_MM = { sm: 2.4, md: 3.2, lg: 4.4 } as const
 const BARCODE_VALUE_SIZE_MM = 2.6
 const BARCODE_VALUE_GAP_MM = 0.6
 const FONT_FAMILY = 'Arial, Helvetica, sans-serif'
+const MIN_TEXT_SCALE = 0.6
 const INK_LUMINANCE_THRESHOLD = 160
 const INK_COLOR = '#000000'
 const PAPER_COLOR = '#ffffff'
@@ -71,6 +72,17 @@ function fitText(context: CanvasRenderingContext2D, value: string, maxWidth: num
     return `${value.slice(0, end).trimEnd()}…`
 }
 
+function fontFor(fontPx: number, bold = false) {
+    return `${bold ? 'bold ' : ''}${fontPx}px ${FONT_FAMILY}`
+}
+
+function shrinkToFit(measure: (fontPx: number) => number, maxWidth: number, fontPx: number) {
+    const minFontPx = Math.max(1, Math.floor(fontPx * MIN_TEXT_SCALE))
+    let fittedPx = fontPx
+    while (fittedPx > minFontPx && measure(fittedPx) > maxWidth) fittedPx -= 1
+    return fittedPx
+}
+
 function drawTextLine(
     context: CanvasRenderingContext2D,
     value: string,
@@ -79,7 +91,15 @@ function drawTextLine(
     style: { bold?: boolean; align?: LabelTextAlign } = {},
 ) {
     const centered = style.align === 'center'
-    context.font = `${style.bold ? 'bold ' : ''}${fontPx}px ${FONT_FAMILY}`
+    const fittedPx = shrinkToFit(
+        (size) => {
+            context.font = fontFor(size, style.bold)
+            return context.measureText(value).width
+        },
+        box.width,
+        fontPx,
+    )
+    context.font = fontFor(fittedPx, style.bold)
     context.textBaseline = 'middle'
     context.textAlign = centered ? 'center' : 'left'
     context.fillText(
@@ -96,15 +116,26 @@ function drawField(
     fontPx: number,
 ) {
     const centerY = box.y + box.height / 2
+    const label = `${block.label}: `
+    const fittedPx = shrinkToFit(
+        (size) => {
+            context.font = fontFor(size, true)
+            const labelWidth = context.measureText(label).width
+            context.font = fontFor(size)
+            return labelWidth + context.measureText(block.value).width
+        },
+        box.width,
+        fontPx,
+    )
     context.textBaseline = 'middle'
     context.textAlign = 'left'
-    context.font = `bold ${fontPx}px ${FONT_FAMILY}`
-    const labelText = fitText(context, `${block.label}: `, box.width)
+    context.font = fontFor(fittedPx, true)
+    const labelText = fitText(context, label, box.width)
     context.fillText(labelText, box.x, centerY)
     const labelWidth = Math.min(box.width, Math.ceil(context.measureText(labelText).width))
     const valueWidth = box.width - labelWidth
     if (valueWidth <= 0) return
-    context.font = `${fontPx}px ${FONT_FAMILY}`
+    context.font = fontFor(fittedPx)
     context.fillText(fitText(context, block.value, valueWidth), box.x + labelWidth, centerY)
 }
 

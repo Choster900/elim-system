@@ -1393,10 +1393,7 @@ function goToMeeting(id: string) {
 function meetingLabelJob(id: string) {
     const parent = meetingParent(id)
     if (!parent?.meeting) return null
-    return buildMeetingLabelJob(parent.meeting, {
-        supervisorName: parent.sector?.supervisorName,
-        coordinatorName: parent.zone?.leaderName,
-    })
+    return buildMeetingLabelJob(parent.meeting)
 }
 
 async function printMeetingLabel(id: string) {
