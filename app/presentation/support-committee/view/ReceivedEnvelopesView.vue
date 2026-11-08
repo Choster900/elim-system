@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronRight, Inbox, MapPin, Search, ShieldCheck, X } from '@lucide/vue'
+import {
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    Inbox,
+    Info,
+    MapPin,
+    Search,
+    ShieldCheck,
+    X,
+} from '@lucide/vue'
 import type { DatePickerRange } from '~/components/ui/DatePicker.vue'
 import { getMeetingScopeLabel } from '~/presentation/meetings/utils/meeting-format.util'
 import { formatLocalIsoDate } from '~/utils/date/date-format.util'
@@ -259,14 +269,65 @@ function totalsOf(items: ReceptionRecord[]) {
     }
 }
 
-const groups = computed(() => {
+function groupByDay(items: ReceptionRecord[]) {
     const byDay = new Map<string, ReceptionRecord[]>()
-    for (const reception of receptions.value) {
+    for (const reception of items) {
         const key = receivedDay(reception)
         byDay.set(key, [...(byDay.get(key) ?? []), reception])
     }
-    return [...byDay.entries()].map(([date, items]) => ({ date, items, totals: totalsOf(items) }))
+    return byDay
+}
+
+const PAGE_SIZE = 20
+const page = ref(1)
+const listRef = ref<HTMLElement | null>(null)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(receptions.value.length / PAGE_SIZE)))
+const pagedReceptions = computed(() =>
+    receptions.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+)
+const rangeText = computed(() => {
+    const first = (page.value - 1) * PAGE_SIZE + 1
+    const last = Math.min(page.value * PAGE_SIZE, receptions.value.length)
+    return `${first}–${last}`
 })
+
+const dayTotals = computed(
+    () =>
+        new Map(
+            [...groupByDay(receptions.value).entries()].map(([date, items]) => [
+                date,
+                totalsOf(items),
+            ]),
+        ),
+)
+
+const groups = computed(() =>
+    [...groupByDay(pagedReceptions.value).entries()].map(([date, items]) => ({
+        date,
+        items,
+        totals: dayTotals.value.get(date) ?? totalsOf(items),
+    })),
+)
+
+watch([filters, search, selectedDistrict, selectedZone, selectedSector], () => {
+    page.value = 1
+})
+
+watch(totalPages, (total) => {
+    if (page.value > total) page.value = total
+})
+
+function goToPage(next: number) {
+    page.value = next
+    nextTick(() => {
+        const top = listRef.value?.getBoundingClientRect().top ?? 0
+        if (top < 0) listRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+}
+
+const pageButtonClass =
+    'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant bg-surface px-3 text-sm font-semibold text-on-surface transition-colors hover:border-primary disabled:pointer-events-none disabled:opacity-40'
 
 const resultSummary = computed<ResultSummary>(() => {
     const summary: ResultSummary = {
@@ -322,11 +383,20 @@ function capitalizeFirst(text: string) {
 }
 
 function groupTitle(isoDate: string) {
-    if (isoDate === todayIso) return 'Hoy'
-    return capitalizeFirst(
-        formatLocalIsoDate(isoDate, { weekday: 'long', day: 'numeric', month: 'long' }),
-    )
+    if (isoDate === todayIso) return 'Recibidos hoy'
+    return `Recibidos el ${formatLocalIsoDate(isoDate, { weekday: 'long', day: 'numeric', month: 'long' })}`
 }
+
+const rangeStartLabel = computed(() =>
+    dateRange.value.start ? dayLabel(dateRange.value.start) : '',
+)
+
+const olderMeetingsCount = computed(() => {
+    const start = dateRange.value.start
+    if (!start) return 0
+    return receptions.value.filter((reception) => reception.envelope.date.slice(0, 10) < start)
+        .length
+})
 
 function timeOf(value: string) {
     return new Date(value).toLocaleTimeString('es-SV', { hour: 'numeric', minute: '2-digit' })
@@ -503,11 +573,25 @@ const loadError = computed(() =>
                 </button>
             </div>
             <p class="text-xs text-on-surface-variant">
-                Recibidos {{ periodLabel }} · por fecha de conteo del comité
+                Sobres que el comité recibió {{ periodLabel }}
             </p>
         </div>
 
-        <section class="mt-4">
+        <div
+            v-if="olderMeetingsCount > 0 && !receptionsQuery.isPending.value"
+            class="mt-3 flex items-start gap-2 rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant"
+            role="note"
+        >
+            <Info class="mt-px size-4 shrink-0 text-primary" aria-hidden="true" />
+            <p>
+                <strong class="text-on-surface">{{ olderMeetingsCount }}</strong>
+                {{ olderMeetingsCount === 1 ? 'sobre es' : 'sobres son' }} de reuniones anteriores
+                al {{ rangeStartLabel }}, pero se
+                {{ olderMeetingsCount === 1 ? 'recibió' : 'recibieron' }} en las fechas elegidas.
+            </p>
+        </div>
+
+        <section ref="listRef" class="mt-4 scroll-mt-24">
             <EnvelopeListSkeleton v-if="receptionsQuery.isPending.value" />
 
             <div
@@ -655,6 +739,42 @@ const loadError = computed(() =>
                         </ul>
                     </section>
                 </div>
+
+                <nav
+                    class="mt-6 flex flex-col items-center justify-between gap-3 border-t border-outline-variant pt-4 sm:flex-row"
+                    aria-label="Paginación de sobres recibidos"
+                >
+                    <p class="text-xs text-on-surface-variant">
+                        Mostrando
+                        <strong class="text-on-surface">{{ rangeText }}</strong>
+                        de
+                        <strong class="text-on-surface">{{ receptions.length }}</strong>
+                        {{ receptions.length === 1 ? 'sobre' : 'sobres' }}
+                    </p>
+                    <div v-if="totalPages > 1" class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            :class="pageButtonClass"
+                            :disabled="page <= 1"
+                            @click="goToPage(page - 1)"
+                        >
+                            <ChevronLeft class="size-4" />
+                            Anterior
+                        </button>
+                        <span class="px-2 text-xs tabular-nums text-on-surface-variant">
+                            Página {{ page }} de {{ totalPages }}
+                        </span>
+                        <button
+                            type="button"
+                            :class="pageButtonClass"
+                            :disabled="page >= totalPages"
+                            @click="goToPage(page + 1)"
+                        >
+                            Siguiente
+                            <ChevronRight class="size-4" />
+                        </button>
+                    </div>
+                </nav>
             </div>
         </section>
     </main>

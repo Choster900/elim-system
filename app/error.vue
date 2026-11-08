@@ -7,6 +7,7 @@ const props = defineProps<{
     error: NuxtError
 }>()
 
+const currentYear = new Date().getFullYear()
 const isNotFound = computed(() => props.error?.statusCode === 404)
 const statusCode = computed(() => props.error?.statusCode ?? 500)
 
@@ -115,7 +116,7 @@ function goBack() {
 
         <footer class="relative z-10 px-6 py-4 text-center">
             <p class="text-xs font-medium uppercase text-on-surface-variant">
-                © 2024 Sistema Moderno. Un espacio de paz y conexión.
+                © {{ currentYear }} Sistema Moderno. Un espacio de paz y conexión.
             </p>
         </footer>
     </div>

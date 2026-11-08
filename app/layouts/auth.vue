@@ -2,6 +2,8 @@
 import { ArrowLeft } from '@lucide/vue'
 import loginMainImage from '~/assets/images/system/login-main.png'
 import AppBrand from '~/presentation/shared/components/AppBrand.vue'
+
+const currentYear = new Date().getFullYear()
 </script>
 
 <template>
@@ -36,7 +38,7 @@ import AppBrand from '~/presentation/shared/components/AppBrand.vue'
 
         <footer class="relative z-10 px-6 py-4 text-center">
             <p class="text-xs font-medium uppercase text-on-surface-variant">
-                © 2024 Sistema Moderno. Un espacio de paz y conexión.
+                © {{ currentYear }} Sistema Moderno. Un espacio de paz y conexión.
             </p>
         </footer>
     </div>
